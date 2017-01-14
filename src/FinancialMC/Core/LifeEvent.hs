@@ -1,8 +1,8 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module FinancialMC.Core.LifeEvent
        (
          LifeEventName,
@@ -12,57 +12,63 @@ module FinancialMC.Core.LifeEvent
        , LifeEventApp
        ) where
 
-import Data.Aeson (ToJSON(..))
-import FinancialMC.Core.Asset (Account,AccountGetter)
-import FinancialMC.Core.Flow (Flow)
-import FinancialMC.Core.FinancialStates (FinState,FinEnv)
-import FinancialMC.Core.Result (ResultT)
-import FinancialMC.Core.Utilities (Year)
+import           Data.Aeson                       (ToJSON (..))
+import           FinancialMC.Core.Asset           (Account, AccountGetter,
+                                                   IsAsset)
+import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
+import           FinancialMC.Core.Flow            (Flow)
+import           FinancialMC.Core.Result          (ResultT)
+import           FinancialMC.Core.Utilities       (Year)
 
-import Data.Aeson.Existential (TypeNamed(..),JSON_Existential(..),existentialToJSON,parseJSON_Existential,HasParsers)
-import Data.Aeson.Existential.EnvParser (EnvFromJSON(..))
+import           Data.Aeson.Existential           (HasParsers,
+                                                   JSON_Existential (..),
+                                                   TypeNamed (..),
+                                                   existentialToJSON,
+                                                   parseJSON_Existential)
+import           Data.Aeson.Existential.EnvParser (EnvFromJSON (..))
 
-import Control.Exception (SomeException)
-import Control.Monad.Reader (ReaderT)
-import Data.Monoid ((<>))
-import qualified Data.Text as T
+import           Control.Exception                (SomeException)
+import           Control.Monad.Reader             (ReaderT)
+import           Data.Monoid                      ((<>))
+import qualified Data.Text                        as T
 
-data LifeEventOutput = LifeEventOutput ![Account] ![Flow]
-instance Monoid LifeEventOutput where
+data LifeEventOutput a = LifeEventOutput ![Account a] ![Flow]
+instance Monoid (LifeEventOutput a) where
   mempty = LifeEventOutput mempty mempty
   mappend (LifeEventOutput a1 f1) (LifeEventOutput a2 f2) = LifeEventOutput (a1<>a2) (f1<>f2)
-  
-type LifeEventApp = ResultT LifeEventOutput (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
+
+type LifeEventApp a = ResultT (LifeEventOutput a) (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
 
 type LifeEventName = T.Text
 
-class TypeNamed e=> IsLifeEvent e where
-  lifeEventName::e->LifeEventName
-  lifeEventYear::e->Year
-  doLifeEvent::e->AccountGetter->LifeEventApp ()
-  
-data LifeEvent where
-  MkLifeEvent::(IsLifeEvent e, Show e, ToJSON e)=>e->LifeEvent
-  
-instance Show LifeEvent where
-  show (MkLifeEvent e) = show e
-  
-instance TypeNamed LifeEvent where
+
+class (IsAsset a,TypeNamed (e a)) => IsLifeEvent e a where
+  lifeEventName::e a->LifeEventName
+  lifeEventYear::e a->Year
+  doLifeEvent::e a->AccountGetter a->LifeEventApp a ()
+
+data LifeEvent a where
+  MkLifeEvent::(IsLifeEvent e a, Show (e a), ToJSON (e a))=>(e a)->LifeEvent a
+
+instance Show a=>Show (LifeEvent a) where
+  show (MkLifeEvent le) = show le
+
+instance TypeNamed (LifeEvent a) where
   typeName (MkLifeEvent e) = typeName e
-  
-instance IsLifeEvent LifeEvent where 
+
+instance IsAsset a=>IsLifeEvent LifeEvent a where
   lifeEventName (MkLifeEvent e) = lifeEventName e
   lifeEventYear (MkLifeEvent e) = lifeEventYear e
   doLifeEvent (MkLifeEvent e) = doLifeEvent e
-  
 
-instance JSON_Existential LifeEvent where
-  containedName (MkLifeEvent a) = typeName a
-  containedJSON (MkLifeEvent a) = toJSON a
 
-instance ToJSON LifeEvent where
-  toJSON = existentialToJSON 
+instance JSON_Existential (LifeEvent a) where
+  containedName (MkLifeEvent le) = typeName le
+  containedJSON (MkLifeEvent le) = toJSON le
 
-instance HasParsers e LifeEvent => EnvFromJSON e LifeEvent where
+instance ToJSON (LifeEvent a) where
+  toJSON = existentialToJSON
+
+instance HasParsers e (LifeEvent a) => EnvFromJSON e (LifeEvent a) where
   envParseJSON = parseJSON_Existential
 

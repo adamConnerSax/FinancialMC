@@ -1,4 +1,4 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE UndecidableInstances, FunctionalDependencies #-}
 {-# LANGUAGE TemplateHaskell,BangPatterns, GADTs, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, OverloadedStrings #-}
 module FinancialMC.Core.MCState 
@@ -22,7 +22,7 @@ module FinancialMC.Core.MCState
 
 
 import           FinancialMC.Core.LifeEvent (LifeEvent)
-import           FinancialMC.Core.Asset (AccountName,Account(Account),HasAccount(..),accountValueCV)
+import           FinancialMC.Core.Asset (IsAsset,AccountName,Account(Account),HasAccount(..),accountValueCV)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
 import           FinancialMC.Core.FinApp (LoggableStepApp,zoomStep)
 import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,HasFinState(..))
@@ -59,25 +59,25 @@ import           Data.Aeson.Existential.Generic (genericEnvParseJSON)
 type MyMap k v = M.Map k v
 
 
-type AccountMap = MyMap AccountName Account
+type AccountMap a = MyMap AccountName (Account a)
 type FlowMap = MyMap FlowName Flow
 
-data BalanceSheet = BalanceSheet {_bsAccountMap:: !AccountMap } deriving (Generic)
+data BalanceSheet a = BalanceSheet {_bsAccountMap:: !(AccountMap a) } deriving (Generic)
 makeClassy ''BalanceSheet
 
-instance Evolvable BalanceSheet where
+instance Evolvable a=>Evolvable (BalanceSheet a) where
   evolve bs  = evolveWithin bs bsAccountMap    
     
-instance Show BalanceSheet where    
+instance Show a=>Show (BalanceSheet a) where    
   show (BalanceSheet as) = "Balance Sheet:" ++ mShow as 
 
-instance ToJSON BalanceSheet where
+instance ToJSON a=>ToJSON (BalanceSheet a) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance EnvFromJSON e AccountMap => EnvFromJSON e BalanceSheet where
+instance EnvFromJSON e (AccountMap a)=> EnvFromJSON e (BalanceSheet a) where
   envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-getAccountNames::BalanceSheet->[AccountName]                           
+getAccountNames::BalanceSheet a->[AccountName]                           
 getAccountNames bs = mKeys (bs ^. bsAccountMap)
                            
 data CashFlows = CashFlows { _cfdFlowMap:: !FlowMap } deriving (Generic)
@@ -97,23 +97,23 @@ instance EnvFromJSON e FlowMap => EnvFromJSON e CashFlows where
 
 -- NB: These are unsafe adds and could overwrite if the names are the same 
     
-makeNewBalanceSheet::BalanceSheet
+makeNewBalanceSheet::BalanceSheet a
 makeNewBalanceSheet = BalanceSheet mEmpty
 
 makeNewCashFlows::CashFlows
 makeNewCashFlows = CashFlows mEmpty
                       
-insertAccount::MonadState BalanceSheet m=>Account->m ()
+insertAccount::MonadState (BalanceSheet a) m=>Account a->m ()
 insertAccount acct@(Account name _ _ _) = bsAccountMap %=  mInsert name acct
   
 
 addFlow::Flow->State CashFlows ()
 addFlow f = cfdFlowMap %= mInsert (flowName f) f
 
-getAccount::AccountName->BalanceSheet->Either SomeException Account
+getAccount::AccountName->BalanceSheet a->Either SomeException (Account a)
 getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" ++ show name ++ "\"")) $ mLookup name am 
 
-putAccount::Account->AccountName->BalanceSheet->BalanceSheet
+putAccount::Account a->AccountName->BalanceSheet a->BalanceSheet a
 putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am) 
 
 data PathSummary = FinalNW !MoneyValue | ZeroNW !Year
@@ -156,21 +156,21 @@ instance Show FSSummary where
                                  ++ "; out=" ++ show o ++ "; tax=" ++ show t 
                                  ++ "; tax rate=" ++ show (100*tr) ++ "%"  
 
-data MCState = MCState { _mcsBalanceSheet:: !BalanceSheet, _mcsCashFlows:: !CashFlows, 
-                         _mcsLifeEvents:: ![LifeEvent], _mcsRules:: ![Rule], _mcsSweep:: !Rule, _mcsTaxTrade:: !Rule, 
-                         _mcsPathSummary:: !PathSummary, _mcsNWHistory:: ![(Year,MoneyValue)], _mcsHistory:: ![(Year,FSSummary)]}
+data MCState a = MCState { _mcsBalanceSheet:: !(BalanceSheet a), _mcsCashFlows:: !CashFlows, 
+                           _mcsLifeEvents:: ![LifeEvent a], _mcsRules:: ![Rule a], _mcsSweep:: !(Rule a), _mcsTaxTrade:: !(Rule a), 
+                           _mcsPathSummary:: !PathSummary, _mcsNWHistory:: ![(Year,MoneyValue)], _mcsHistory:: ![(Year,FSSummary)]}
 
 
 makeClassy ''MCState
 
-instance Evolvable MCState where
+instance Evolvable a=>Evolvable (MCState a) where
   evolve (MCState bs cfd les rs sr ttr ps nws hist) = do 
     newBS <- evolve bs
     newCFD <- evolve cfd
     let newMCS = MCState newBS newCFD les rs sr ttr ps nws hist 
     return $! newMCS 
       
-instance Show MCState where
+instance Show a=>Show (MCState a) where
   show (MCState bs cfd les rs sr ttr ps nws history) = 
     show bs ++ "\n" ++ show cfd ++ "\n" ++ 
     "LifeEvents:\n " ++ foldl (\s e->s++ show e ++ "\n") "" les ++ 
@@ -182,26 +182,26 @@ instance Show MCState where
     "\nHistory: " ++ show history
                                                          
     
-addRule::Rule->State MCState ()
+addRule::Rule a->State (MCState a) ()
 addRule r = do
   rs <- use mcsRules
   mcsRules .= rs++[r] -- NB this is append so do I need to think about ordering?
   
-addLifeEvent::LifeEvent->State MCState ()
+addLifeEvent::LifeEvent a->State (MCState a) ()
 addLifeEvent le = do
   les <- use mcsLifeEvents
   mcsLifeEvents .= les++[le] -- NB this is append so do I need to think about ordering?
 
 
-data CombinedState = CombinedState { _csFinancial:: !FinState, _csMC:: !MCState, _csNeedHistory:: !Bool } 
+data CombinedState a = CombinedState { _csFinancial:: !FinState, _csMC:: !(MCState a), _csNeedHistory:: !Bool } 
 makeClassy ''CombinedState
 
 
-instance Show CombinedState where
+instance Show a=>Show (CombinedState a) where
   show cs = "Financial:\n" ++ show (cs ^. csFinancial) ++ "\nMonteCarlo:\n" ++ show (cs ^. csMC)
 
 
-netWorth::CombinedState->FinEnv->MoneyValue
+netWorth::IsAsset a=>CombinedState a->FinEnv->MoneyValue
 netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValueCV acct) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -209,11 +209,11 @@ netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValue
   initial' = CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow
 
 
-byLT::LiquidityType->Account->Bool
+byLT::LiquidityType->Account a->Bool
 byLT lt acct = acctLT == lt where 
   acctLT = liquidityType (acct ^. acType)
 
-netWorthByLiquidityType::CombinedState->FinEnv->LiquidityType->MoneyValue
+netWorthByLiquidityType::IsAsset a=>CombinedState a->FinEnv->LiquidityType->MoneyValue
 netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s CV.|+|  (value' acct)) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -223,10 +223,10 @@ netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s
   initial' = if lt == NearCash then (CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow) else z'
 
 
-netWorthBreakout::CombinedState->FinEnv->NetWorthMap
+netWorthBreakout::IsAsset a=>CombinedState a->FinEnv->NetWorthMap
 netWorthBreakout cs fe = M.fromList (zip lts nws) where
   lts = [(minBound::LiquidityType) ..]
-  nws = map (netWorthByLiquidityType cs fe) lts
+  nws = fmap (netWorthByLiquidityType cs fe) lts
 
 
 data FlowAccum' = FlowAccum' !CV.CVD !CV.CVD
@@ -244,12 +244,12 @@ grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy
   FlowAccum' inF outF = F.foldr g (FlowAccum' z z) flows
 
 
-makeMCState::BalanceSheet->CashFlows->FinEnv->[LifeEvent]->[Rule]->Rule->Rule->MCState
+makeMCState::BalanceSheet a->CashFlows->FinEnv->[LifeEvent a]->[Rule a]->Rule a->Rule a->MCState a
 makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] [] where
   z = MV.zero  (fe ^. feDefaultCCY)
 
 --NB: this is where all the evolution flows and accums finally get applied
-evolveMCS::LoggableStepApp CombinedState FinEnv app=>app ()
+evolveMCS::Evolvable a=>LoggableStepApp (CombinedState a) FinEnv app=>app ()
 evolveMCS = do
   mcs <- use csMC
   mcs' <- zoomStep csFinancial $ evolveAndApply mcs
@@ -269,7 +269,7 @@ addPathSummary (FinalNW _) (FinalNW y) = FinalNW y
 addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day 
 
 
-summarize::LoggableStepApp CombinedState FinEnv app=>MoneyValue->MoneyValue->MoneyValue->Double->app ()
+summarize::IsAsset a=>LoggableStepApp (CombinedState a) FinEnv app=>MoneyValue->MoneyValue->MoneyValue->Double->app ()
 summarize  inF outF tax taxRate = do
   cs <- get
   fe <- ask  
@@ -289,7 +289,7 @@ computeFlows = do
   fe <- ask  
   return $ grossFlows cs fe
 
-addHistory::LoggableStepApp CombinedState FinEnv app=>MoneyValue->MoneyValue->MoneyValue->Double->app ()
+addHistory::IsAsset a=>LoggableStepApp (CombinedState a) FinEnv app=>MoneyValue->MoneyValue->MoneyValue->Double->app ()
 addHistory inF outF tax effRate  = do
   cs <- get
   fe <- ask  

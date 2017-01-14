@@ -1,5 +1,7 @@
-{-# LANGUAGE ConstraintKinds,FlexibleContexts, RankNTypes #-}
-module FinancialMC.Core.AssetTrading 
+{-# LANGUAGE ConstraintKinds  #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes       #-}
+module FinancialMC.Core.AssetTrading
        (
          nullAssetTradeF,
          defaultAssetBuySellF,
@@ -8,22 +10,32 @@ module FinancialMC.Core.AssetTrading
          tradeAccount,
        ) where
 
-import           Prelude hiding ((*>),(<*))
-import           FinancialMC.Core.Asset (IsAsset,Account(..),acAssets,accountValueCV,
-                                         assetCurrency,assetValue,assetCostBasis,revalueAsset,tradeAsset,AssetRevaluation(..))
-import           FinancialMC.Core.MoneyValue (MoneyValue(..),mCurrency,Currency(..))
+import           FinancialMC.Core.Asset         (Account (..),
+                                                 AssetRevaluation (..), IsAsset,
+                                                 acAssets, accountValueCV,
+                                                 assetCostBasis, assetCurrency,
+                                                 assetValue, revalueAsset,
+                                                 tradeAsset)
+import           FinancialMC.Core.CValued       ((|*|), (|+|), (|-|), (|/|),
+                                                 (|<|), (|>|))
+import qualified FinancialMC.Core.CValued       as CV
+import           FinancialMC.Core.Evolve        (FlowResult (..),
+                                                 TaxAmount (..))
+import           FinancialMC.Core.MoneyValue    (Currency (..), MoneyValue (..),
+                                                 mCurrency)
 import qualified FinancialMC.Core.MoneyValueOps as MV
-import           FinancialMC.Core.Evolve (TaxAmount(..),FlowResult(..))
-import           FinancialMC.Core.Result (adjust,returnOnly,appendAndReturn)
-import           FinancialMC.Core.Tax (TaxType(CapitalGain,OrdinaryIncome))
-import           FinancialMC.Core.TradingTypes (AccountType(..),TradeType(..),TradeApp,TradeFunction,LiquidateFunction)
-import qualified FinancialMC.Core.CValued as CV
-import           FinancialMC.Core.CValued ((|+|),(|-|),(|*|),(|/|),(|>|),(|<|))
+import           FinancialMC.Core.Result        (adjust, appendAndReturn,
+                                                 returnOnly)
+import           FinancialMC.Core.Tax           (TaxType (CapitalGain, OrdinaryIncome))
+import           FinancialMC.Core.TradingTypes  (AccountType (..),
+                                                 LiquidateFunction, TradeApp,
+                                                 TradeFunction, TradeType (..))
+import           Prelude                        hiding ((*>), (<*))
 
 
-import           Data.Monoid ((<>))
-import           Control.Monad.Reader (ask)
-import           Control.Lens (set,(^.))
+import           Control.Lens                   (set, (^.))
+import           Control.Monad.Reader           (ask)
+import           Data.Monoid                    ((<>))
 --import           Control.Monad.Catch (SomeException)
 
 --refuses all trades, current default for liabilities
@@ -33,15 +45,15 @@ noTrade = return
 
 type AssetTrader a = IsAsset a=>TradeFunction a
 type AssetLiquidator a = IsAsset a=>LiquidateFunction a
-type AccountTrader = Account->TradeType->MoneyValue->TradeApp Account
+type AccountTrader a = Account a->TradeType->MoneyValue->TradeApp (Account a)
 
 --useful default for most assets
 defaultAssetBuySellF::AssetTrader a
-defaultAssetBuySellF = buySellAssetHelper 
+defaultAssetBuySellF = buySellAssetHelper
 
 
 buySellAssetHelper::AssetTrader a
-buySellAssetHelper target aTp tTp am = do    
+buySellAssetHelper target aTp tTp am = do
   e <- ask
   let am' = CV.fromMoneyValue am
       target'  = CV.fromMoneyValue (assetValue target)
@@ -52,19 +64,19 @@ buySellAssetHelper target aTp tTp am = do
 
 
 nullAssetTradeF::AssetTrader a
-nullAssetTradeF a _ _ _ = return a 
+nullAssetTradeF a _ _ _ = return a
 
 nonCapital::[FlowResult]->[FlowResult]
 nonCapital flows = flows' where
-  flows' = map noCapGain flows
-  noCapGain (AllTaxed (TaxAmount CapitalGain x)) = UnTaxed x 
+  flows' = fmap noCapGain flows
+  noCapGain (AllTaxed (TaxAmount CapitalGain x)) = UnTaxed x
   noCapGain (OnlyTaxed (TaxAmount CapitalGain x)) = UnTaxed (MV.zero (x^.mCurrency))
   noCapGain (PartiallyTaxed x (TaxAmount CapitalGain _)) = UnTaxed x
   noCapGain x = x
 
 defaultNonCapitalAssetBuySellF::AssetTrader a
-defaultNonCapitalAssetBuySellF a aTp tTp am = adjust (return . nonCapital) $ defaultAssetBuySellF a aTp tTp am 
-    
+defaultNonCapitalAssetBuySellF a aTp tTp am = adjust (return . nonCapital) $ defaultAssetBuySellF a aTp tTp am
+
 
 getCapGain::Currency->[FlowResult]->CV.CVD
 getCapGain ccy flows = foldl (|+|) (CV.mvZero ccy) cgs where
@@ -72,7 +84,7 @@ getCapGain ccy flows = foldl (|+|) (CV.mvZero ccy) cgs where
   getCG (OnlyTaxed (TaxAmount CapitalGain x)) = x
   getCG (PartiallyTaxed _ (TaxAmount CapitalGain y)) = y
   getCG _ = MV.zero ccy
-  cgs = map (CV.fromMoneyValue . getCG) flows
+  cgs = fmap (CV.fromMoneyValue . getCG) flows
 
 
 liquidateOnlyBuySellF::AssetTrader a
@@ -93,7 +105,7 @@ liquidateOnlyBuySellF a aTp tTp am = do
          else noTrade a
 
   returnOnly a'
-      
+
 
 deductibleBuy::TradeType->AccountType->Bool
 deductibleBuy OverFund _ = False
@@ -144,14 +156,14 @@ untaxed RothIRA = True
 untaxed _ = False
 
 proceedsF::AccountType->TradeType->CV.CVD->CV.CVD->CV.CVD
-proceedsF aTp tTp amount capGain 
+proceedsF aTp tTp amount capGain
   | earlyRetirement aTp tTp = amount |*| (0.9 :: Double)
   | early529 aTp tTp = amount |-| (capGain |*| (0.1 :: Double))
   | otherwise = amount
 
 
 sellAsset::AssetTrader a
-sellAsset a aTp tTp am = do 
+sellAsset a aTp tTp am = do
   let ccy = assetCurrency a
       av' = CV.fromMoneyValue (assetValue a)
       ab' = CV.fromMoneyValue (assetCostBasis a)
@@ -161,29 +173,29 @@ sellAsset a aTp tTp am = do
 
   newBasis <- CV.asERMV ccy $ CV.cvIf (av' |>| (CV.mvZero ccy)) (r' |*| (av' |-| am')) (CV.mvZero ccy)
   newValue <- CV.asERMV ccy $ av' |-| am'
-  proceeds <- CV.asERMV ccy $ proceedsF aTp tTp am' capGainCV          
+  proceeds <- CV.asERMV ccy $ proceedsF aTp tTp am' capGainCV
   capGain  <- CV.asERMV ccy capGainCV
 
-  let a' = revalueAsset a (NewValueAndBasis newValue newBasis)   
-      flow 
+  let a' = revalueAsset a (NewValueAndBasis newValue newBasis)
+      flow
         | taxedRetirement aTp        = AllTaxed (TaxAmount OrdinaryIncome proceeds)
         | early529 aTp tTp           = PartiallyTaxed proceeds (TaxAmount OrdinaryIncome (MV.multiply capGain 0.9))
-        | untaxed aTp                = UnTaxed proceeds                             
-        | otherwise                  = PartiallyTaxed proceeds (TaxAmount CapitalGain capGain)        
-       
+        | untaxed aTp                = UnTaxed proceeds
+        | otherwise                  = PartiallyTaxed proceeds (TaxAmount CapitalGain capGain)
+
   appendAndReturn [flow] a'
 
 
-tradeAccount::AccountTrader
-tradeAccount acct@(Account _ aTp ccy as) tTp am = do 
+tradeAccount::IsAsset a=>AccountTrader a
+tradeAccount acct@(Account _ aTp ccy as) tTp am = do
   e <- ask
   let av' = accountValueCV acct
       am' = CV.fromMoneyValue am
       recipN = 1.0/fromIntegral (length as)
       ratio a = CV.cvIf (av' |>| CV.mvZero ccy) ((CV.fromMoneyValue $ assetValue a) |/| av') (CV.toSVD recipN)
       bsAmt a = CV.toMoneyValue ccy e $ (ratio a) |*| am'
-      amts = map bsAmt as 
-      trades =  zip as amts 
+      amts = fmap bsAmt as
+      trades =  zip as amts
   newAssets <- mapM (\(a,amt')->tradeAsset a aTp tTp amt') trades -- flows get added here
-  returnOnly $ set acAssets newAssets acct 
+  returnOnly $ set acAssets newAssets acct
 

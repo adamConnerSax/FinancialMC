@@ -1,14 +1,15 @@
-{-# LANGUAGE DeriveGeneric, OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable     #-}
+{-# LANGUAGE DeriveGeneric          #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE Rank2Types #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DeriveDataTypeable #-}
-module FinancialMC.Core.Asset 
+{-# LANGUAGE GADTs                  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE Rank2Types             #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeSynonymInstances   #-}
+{-# LANGUAGE UndecidableInstances   #-}
+module FinancialMC.Core.Asset
        (
          TradeType,TradeFunction,
          TradeResult,TradeApp,
@@ -16,7 +17,7 @@ module FinancialMC.Core.Asset
          AssetName,
          AssetCore(..),
          revalueAssetCore,
-         IsAsset(..),Asset(..),
+         IsAsset(..),
          assetName,assetValue,assetCostBasis,assetCurrency,
          AccountName,
          Account(Account),HasAccount(..),
@@ -27,29 +28,42 @@ module FinancialMC.Core.Asset
        ) where
 
 
-import           FinancialMC.Core.MoneyValue (MoneyValue(..),mCurrency,Currency(..),ExchangeRateFunction)
+import           FinancialMC.Core.MoneyValue    (Currency (..),
+                                                 ExchangeRateFunction,
+                                                 MoneyValue (..), mCurrency)
 --import           FinancialMC.Core.MoneyValueOps (AGroup(..))
+import           FinancialMC.Core.CValued       ((|+|))
+import qualified FinancialMC.Core.CValued       as CV
+import           FinancialMC.Core.Evolve        (Evolvable (..), evolveWithin)
 import qualified FinancialMC.Core.MoneyValueOps as MV
-import qualified FinancialMC.Core.CValued as CV
-import           FinancialMC.Core.CValued ((|+|))
-import           FinancialMC.Core.TradingTypes (AccountType,TradeFunction,TradeApp,TradeType,TradeResult)
-import           FinancialMC.Core.Evolve (Evolvable(..),evolveWithin)
-import           FinancialMC.Core.Result ()
+import           FinancialMC.Core.Result        ()
+import           FinancialMC.Core.TradingTypes  (AccountType, TradeApp,
+                                                 TradeFunction, TradeResult,
+                                                 TradeType)
 
-import           Control.Monad (liftM)
-import           Control.Lens ((^.),makeClassy)
+import           Control.Lens                   (makeClassy, (^.))
+--import           Control.Monad                  (liftM)
 
-import           Data.Aeson (ToJSON(..),genericToJSON)
-import           Data.Aeson.Existential (TypeNamed(..),JSON_Existential(..),EnvFromJSON(..),HasParsers,
-                                         existentialToJSON,parseJSON_Existential,genericEnvParseJSON)
-import           Data.Aeson.TH (deriveJSON)
-import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions)
-import qualified Data.Text as T
+import           Data.Aeson                     (FromJSON (..), ToJSON (..),
+                                                 genericParseJSON,
+                                                 genericToJSON)
+{-
+import           Data.Aeson.Existential         (EnvFromJSON (..), HasParsers,
+                                                 JSON_Existential (..),
+                                                 TypeNamed (..),
+                                                 existentialToJSON,
+                                                 genericEnvParseJSON,
+                                                 parseJSON_Existential)
+-}
+import           Data.Aeson.TH                  (deriveJSON)
+import           Data.Aeson.Types               (Options (fieldLabelModifier),
+                                                 defaultOptions)
+import qualified Data.Text                      as T
 
-import           Control.Exception (SomeException)
-import           GHC.Generics (Generic)
-import           Data.Typeable (Typeable)
-import           Data.Dynamic (Dynamic, toDyn, fromDynamic)
+import           Control.Exception              (SomeException)
+--import           Data.Dynamic                   (Dynamic, fromDynamic, toDyn)
+--import           Data.Typeable                  (Typeable)
+import           GHC.Generics                   (Generic)
 
 data AssetRevaluation = NewValue !MoneyValue | NewBasis !MoneyValue | NewValueAndBasis !MoneyValue !MoneyValue
 
@@ -61,12 +75,12 @@ instance Show AssetCore where
 
 $(deriveJSON defaultOptions{fieldLabelModifier= drop 1} ''AssetCore)
 
-revalueAssetCore::AssetCore->AssetRevaluation->AssetCore                            
+revalueAssetCore::AssetCore->AssetRevaluation->AssetCore
 revalueAssetCore (AssetCore n _ cb) (NewValue v') = AssetCore n v' cb
 revalueAssetCore (AssetCore n v _) (NewBasis cb') = AssetCore n v cb'
 revalueAssetCore (AssetCore n _ _) (NewValueAndBasis v' cb') = AssetCore n v' cb'
 
-class (TypeNamed a, Evolvable a)=>IsAsset a where
+class Evolvable a=>IsAsset a where
   assetCore::a->AssetCore
   revalueAsset::a->AssetRevaluation->a
   tradeAsset::TradeFunction a
@@ -83,6 +97,7 @@ assetCostBasis a = aCostBasis $ assetCore a
 assetCurrency::IsAsset a=>a->Currency
 assetCurrency a = assetValue a ^. mCurrency
 
+{-
 data Asset where
   MkAsset::(IsAsset a, Show a, ToJSON a, Typeable a) => a->Asset
 
@@ -98,56 +113,56 @@ instance TypeNamed Asset where
 instance IsAsset Asset where
   assetCore (MkAsset a) = assetCore a
   revalueAsset (MkAsset a) rv = MkAsset (revalueAsset a rv)
-  tradeAsset (MkAsset a) aType tt mv = liftM MkAsset (tradeAsset a aType tt mv)    
+  tradeAsset (MkAsset a) aType tt mv = liftM MkAsset (tradeAsset a aType tt mv)
 
 instance JSON_Existential Asset where
   containedName (MkAsset a) = typeName a
   containedJSON (MkAsset a) = toJSON a
 
 instance ToJSON Asset where
-  toJSON = existentialToJSON 
+  toJSON = existentialToJSON
 
 instance HasParsers e Asset => EnvFromJSON e Asset where
   envParseJSON = parseJSON_Existential
 
 safeCastAsset::Typeable a=>Asset->Maybe a
 safeCastAsset (MkAsset a) = fromDynamic $ toDyn a
-
+-}
 
 type AccountName = T.Text
 
-data Account = Account { _acName:: !AccountName, _acType:: !AccountType, _acCurrency:: !Currency, _acAssets:: ![Asset] } deriving (Generic)
+data Account a = Account { _acName:: !AccountName, _acType:: !AccountType, _acCurrency:: !Currency, _acAssets:: ![a] } deriving (Generic)
 makeClassy ''Account
 
-instance ToJSON Account where
+instance ToJSON a=>ToJSON (Account a) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance EnvFromJSON e Asset=>EnvFromJSON e Account where
-  envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 3}
+instance FromJSON a=>FromJSON (Account a) where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
 
-instance Show Account where
-  show (Account n aType ccy as) = show n ++ "(" ++ show aType ++ " in " ++ show ccy ++ ")" 
+instance Show a=>Show (Account a) where
+  show (Account n aType ccy as) = show n ++ "(" ++ show aType ++ " in " ++ show ccy ++ ")"
                                ++ foldr (\a s->s ++ "\n\t" ++ show a) " " as
 
-instance Evolvable Account where
-  evolve a = evolveWithin a acAssets
-         
+instance Evolvable a=>Evolvable (Account a) where
+  evolve act = evolveWithin act acAssets
 
-accountValue::Account->ExchangeRateFunction->MoneyValue
-accountValue acct e = foldr f (MV.zero ccy) assets where 
+
+accountValue::IsAsset a=>Account a->ExchangeRateFunction->MoneyValue
+accountValue acct e = foldr f (MV.zero ccy) assets where
   f a s = MV.inFirst e (+) s (assetValue a)
   ccy = acct ^. acCurrency
   assets = acct ^. acAssets
-  
+
 
 --accountValueCEMV::(Applicative m,Monad m)=>Account->MV.CER m MoneyValue
---accountValueCEMV acct = foldr f MV.cer0 (acct ^. acAssets) where 
+--accountValueCEMV acct = foldr f MV.cer0 (acct ^. acAssets) where
 --  f a s = s |+| (MV.mv2cer $ assetValue a)
 
-accountValueCV::Account->CV.CVD
-accountValueCV acct = foldr f (CV.mvZero (acct ^. acCurrency))  (acct ^. acAssets) where 
+accountValueCV::IsAsset a=>Account a->CV.CVD
+accountValueCV acct = foldr f (CV.mvZero (acct ^. acCurrency))  (acct ^. acAssets) where
   f a s = s |+| (CV.fromMoneyValue $ assetValue a)
 
 
-type AccountGetter = AccountName -> Either SomeException Account
+type AccountGetter a = AccountName -> Either SomeException (Account a)

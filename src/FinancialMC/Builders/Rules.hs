@@ -22,7 +22,7 @@ import qualified FinancialMC.Core.MoneyValueOps as MV
 import qualified FinancialMC.Core.CValued as CV
 import           FinancialMC.Core.CValued ((|-|),(|/|),(|*|),(|/=|),(|<|),(|<=|),cvIf,cvOr)
 import           FinancialMC.Core.Evolve (AccumResult(AddTo,Zero))
-import           FinancialMC.Core.Asset (HasAccount(..),accountValueCV,AccountGetter,AccountName,Account)
+import           FinancialMC.Core.Asset (IsAsset,HasAccount(..),accountValueCV,AccountGetter,AccountName,Account)
 import           FinancialMC.Core.TradingTypes (TradeType(..),Transaction(..))
 import           FinancialMC.Core.FinancialStates (AccumName,FinEnv,HasFinEnv(..),FinState,HasFinState(..),getAccumulatedValue)
 
@@ -56,11 +56,11 @@ laERMV::Monad m=>Currency->CV.CVD->ReaderT FinState (ReaderT FinEnv m) MoneyValu
 laERMV c = mvLift . CV.asERMV c
 
 
-liftGetA::AccountGetter->AccountName->ReaderT FinState (ReaderT FinEnv (Either SomeException)) Account
+liftGetA::AccountGetter a->AccountName->ReaderT FinState (ReaderT FinEnv (Either SomeException)) (Account a)
 liftGetA getA name = lift . lift $ getA name
 
 --If there is spending (in "accumName"), sell assets from acctName if available to cover with tax treatment from tt
-payFrom::PayFrom->AccountGetter->RuleApp ()
+payFrom::IsAsset a=>PayFrom->AccountGetter a->RuleApp ()
 payFrom (PayFrom _ acctName accum) getA = do
   output <- lift $ do
     acct <- liftGetA getA acctName
@@ -88,7 +88,7 @@ instance IsRule PayFrom where
 
 $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''PayFrom)  
 
-transfer::Transfer->AccountGetter->RuleApp ()
+transfer::Transfer->AccountGetter a->RuleApp ()
 transfer (Transfer _ aFrom ttFrom aTo ttTo amt dateRange) _ = do
     curDate <- liftFS . liftFE $ view feCurrentDate
     let tFrom = [Transaction aFrom ttFrom (MV.negate amt) | between curDate dateRange]
@@ -118,7 +118,7 @@ instance IsRule Transfer where
 
 $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''Transfer)  
 
-contribute::Contribution->AccountGetter->RuleApp ()
+contribute::Contribution->AccountGetter a->RuleApp ()
 contribute (Contribution _ acctName amount tradeType dateRange) _ = do
     curDate <- liftFS . liftFE $ view feCurrentDate
     let trades = [Transaction acctName tradeType amount | between curDate dateRange]
@@ -170,7 +170,7 @@ distributionF exps yearsOver70
   | otherwise                 = 1
   
 
-requiredDistribution::RequiredDistribution->AccountGetter->RuleApp ()
+requiredDistribution::IsAsset a => RequiredDistribution->AccountGetter a->RuleApp ()
 requiredDistribution (RequiredDistribution _ acctName yearTurning70) getA = do
   trades <- lift $ do
     curDate <- liftFE $ view feCurrentDate
@@ -194,7 +194,7 @@ instance TypeNamed RequiredDistribution
   
 instance IsRule RequiredDistribution where
   ruleName = rdName
-  ruleAccounts (RequiredDistribution _ a _) = [a]
+  ruleAccounts (RequiredDistribution _ an _) = [an]
   doRule = requiredDistribution 
   ruleWhen = const BeforeTax
 
@@ -204,7 +204,7 @@ $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''RequiredDistribution)
 
 
 --rule to keep one account balance between limits by transferring to another.  E.g., keep cash position bounded by buying/selling investments
-cashToInvestmentSweep::CashToInvestmentSweep->AccountGetter->RuleApp ()
+cashToInvestmentSweep::IsAsset a=>CashToInvestmentSweep->AccountGetter a->RuleApp ()
 cashToInvestmentSweep (CashToInvestmentSweep cashAcctName invAcctName minCash maxCash) getA = do
   (cashTrade',invTrade') <- lift $ do
     cashAcct <- liftGetA getA cashAcctName
@@ -244,7 +244,7 @@ $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''CashToInvestmentSweep)
 
 --rule to sell retirement or educational assets instead of bankrupting
 --input is list of accounts with penalty rates    
-sellAsNeeded::SellAsNeeded->AccountGetter->RuleApp ()
+sellAsNeeded::IsAsset a=>SellAsNeeded->AccountGetter a->RuleApp ()
 sellAsNeeded (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip accts) AfterSweep where
   trds <- lift $ do
     cashPos <- view fsCashFlow
@@ -281,7 +281,7 @@ instance IsRule SellAsNeeded where
 
 $(deriveJSON defaultOptions{fieldLabelModifier= drop 3} ''SellAsNeeded)  
 
-taxTrade::TaxTrade->AccountGetter->RuleApp ()
+taxTrade::TaxTrade->AccountGetter a->RuleApp ()
 taxTrade (TaxTrade acctName) _ = do
   trades <- lift $ do
     tr <- liftFE $ view feTaxRules
@@ -308,13 +308,13 @@ instance TypeNamed TaxTrade
   
 instance IsRule TaxTrade where
   ruleName = const $ T.pack "TaxTrade"
-  ruleAccounts (TaxTrade a) = [a]
+  ruleAccounts (TaxTrade an) = [an]
   doRule = taxTrade
   ruleWhen = const Special
 $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''TaxTrade)  
 
 --rule to sweep remaining cashPos into given account.  Last rule executed    
-sweep::Sweep->AccountGetter->RuleApp ()
+sweep::Sweep->AccountGetter a->RuleApp ()
 sweep (Sweep acctName) _ = do
     cashPos <- liftFS $ view fsCashFlow
     let trade = Transaction acctName Normal cashPos
@@ -329,7 +329,7 @@ instance TypeNamed Sweep
   
 instance IsRule Sweep where
   ruleName = const $ T.pack "Sweep"
-  ruleAccounts (Sweep a) = [a]
+  ruleAccounts (Sweep an) = [an]
   doRule = sweep
   ruleWhen = const Special
   
