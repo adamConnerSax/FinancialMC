@@ -98,7 +98,7 @@ library
                 , unordered-containers
                 , vector
                 , aeson-existential
-  ghc-options: -O2 -threaded -Wall -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-matches -funbox-small-strict-fields
+  ghc-options: -O2 -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-matches -funbox-small-strict-fields
   ghc-prof-options: -fprof-auto -auto-all -fprof-cafs 
 
 executable FinancialMC-cl
