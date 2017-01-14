@@ -1,0 +1,53 @@
+<RateModels>
+  <RateModel name="AllZero">
+    <TypeGroup type="IsInterest"><Fixed rate="0"/></TypeGroup>
+    <TypeGroup type="IsReturn"><Fixed rate="0"/></TypeGroup>
+    <TypeGroup type="IsInflation"><Fixed rate="0"/></TypeGroup>
+    <TypeGroup type="IsExchange"><Fixed rate="1"/></TypeGroup>
+  </RateModel>
+
+
+  <RateModel name="FX">
+    <Simple rateType="Exchange EUR"><Fixed rate="1.2"/></Simple>
+  </RateModel>
+
+  <RateModel name="Fixed Savings Interest">
+    <Simple rateType="Interest Savings"><Fixed rate="1.0"/></Simple>
+  </RateModel>
+
+  <RateModel name="Fixed Stock Return">
+    <Simple rateType="Return Stock"><Fixed rate="5.0"/></Simple>
+  </RateModel>
+
+  <RateModel name="Fixed Bond Return">
+    <Simple rateType="Return Bond"><Fixed rate="3.0"/></Simple>
+  </RateModel>
+
+  <RateModel name="Fixed Stock/Bond Return">
+    <Simple rateType="Return Stock"><Fixed rate="5.0"/></Simple>
+    <Simple rateType="Return Bond"><Fixed rate="3.0"/></Simple>
+  </RateModel>
+
+
+  <RateModel name="Fixed Price Inflation">
+    <Simple rateType="Inflation Price"><Fixed rate="1.0"/></Simple>
+  </RateModel>
+
+  <RateModel name="Fixed Wage Inflation">
+    <Simple rateType="Inflation Wage"><Fixed rate="1.0"/></Simple>
+  </RateModel>
+
+
+  <RateModel name="Fixed Interest">
+      <TypeGroup type="IsInterest"><Fixed rate="1"/></TypeGroup>
+  </RateModel>
+
+  <RateModel name="Fixed Return">
+      <TypeGroup type="IsReturn"><Fixed rate="1"/></TypeGroup>
+  </RateModel>
+
+  <RateModel name="Fixed Inflation">
+      <TypeGroup type="IsInflation"><Fixed rate="1"/></TypeGroup>
+  </RateModel>
+
+</RateModels>

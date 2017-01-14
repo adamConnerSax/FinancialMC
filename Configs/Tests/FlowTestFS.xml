@@ -1,0 +1,75 @@
+<FinancialStates>
+  <PersonalFinances name="Salary">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Salary name="Test" amount="10000 USD" when="Ending 2033"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="Expense">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Expense name="Utilities" amount="1000 USD" frequency="Monthly" when="Always"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="Recurring Payment">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Payment name="Recurring Payment" amount="1000 USD" frequency="Annually" when="Starting 2015" growth_rate="5"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+
+  <PersonalFinances name="Recurring Payment (EUR)">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Payment name="Recurring Payment" amount="1000 EUR" frequency="Annually" when="Starting 2015" growth_rate="0"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+  
+
+  <PersonalFinances name="Rental">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <RentalIncome name="Rental" amount="2500 USD" frequency="Monthly" when="Always" max_annual_deduction="1000 USD"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+</FinancialStates>
+

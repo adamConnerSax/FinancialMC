@@ -1,0 +1,58 @@
+Buy House:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 200000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 200000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents:
+  - contents:
+      AnnualMaintenance:
+        Amount: 0.0
+        Currency: USD
+      CostsInMortgage:
+        Amount: 3000
+        Currency: USD
+      MortgageRate: 5.0e-2
+      DownPayment:
+        Amount: 100000
+        Currency: USD
+      PropertyValue:
+        Amount: 500000
+        Currency: USD
+      AnnualTax:
+        Amount: 0.0
+        Currency: USD
+      Name: home_account
+      Year: 2015
+      PropertyName: house
+      AnnualInsurance:
+        Amount: 1000
+        Currency: USD
+      MortgageTerm: 30
+      CostsInCash:
+        Amount: 5000
+        Currency: USD
+    type: BuyProperty

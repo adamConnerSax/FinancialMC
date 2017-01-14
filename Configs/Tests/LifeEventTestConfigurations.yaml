@@ -1,0 +1,33 @@
+Configurations:
+  BuyHouseTest:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Buy House
+DataSources:
+- Contents: TaxStructureS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/ZeroTax.yaml
+    - YAML
+- Contents: RateModelS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/RateModelTest.yaml
+    - YAML
+- Contents: FinancialStateS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/LifeEventTestFS.yaml
+    - YAML

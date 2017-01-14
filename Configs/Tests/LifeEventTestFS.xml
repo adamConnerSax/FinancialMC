@@ -1,0 +1,26 @@
+<FinancialStates>
+  <PersonalFinances name="Buy House">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="200000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+    </Flows>
+    <SweepAccount>Citibank</SweepAccount>
+    <TaxTradeAccount>Citibank</TaxTradeAccount>
+    <LifeEvents>
+      <BuyProperty year="2015" 
+		   account_name="home_account"
+		   property_name="house"
+		   property_value="500000 USD"
+		   down_payment="100000 USD"
+		   costs_in_cash="5000 USD"
+		   costs_in_mortgage="3000 USD"
+		   mortgage_rate="5"
+		   mortgage_term="30"
+		   property_insurance="1000 USD"/>
+    </LifeEvents>
+  </PersonalFinances>
+</FinancialStates>
+

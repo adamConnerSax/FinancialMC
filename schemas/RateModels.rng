@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar ns="" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element name="RateModels">
+      <oneOrMore>
+        <element name="RateModel">
+          <attribute name="name"/>
+          <choice>
+            <oneOrMore>
+	      <ref name="RateModel"/>
+            </oneOrMore>
+          </choice>
+        </element>
+      </oneOrMore>
+    </element>
+  </start>
+
+  <define name="RateModel">
+    <choice>
+      <element name="Simple">
+	<attribute name="type"/>
+	<attribute name="description"/>
+	<ref name="SingleFactorModel"/>
+      </element>
+      <element name="TypeGroup">
+	<attribute name="type"/>
+	<ref name="SingleFactorModel"/>
+      </element>
+    </choice>
+  </define>
+
+  <define name="SingleFactorModel">
+    <oneOrMore>
+      <choice>
+        <element name="Fixed">
+          <attribute name="rate"/>
+        </element>
+        <element name="LogNormal">
+	  <attribute name="mean"/>
+	  <attribute name="vol"/>
+	</element>
+	<element name="Normal">
+	  <attribute name="mean"/>
+	  <attribute name="vol"/>
+	</element>
+      </choice>
+    </oneOrMore>
+  </define>
+
+</grammar>

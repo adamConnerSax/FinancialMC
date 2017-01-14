@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar ns="" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element name="TaxStructures">
+      <element name="PayrollTaxStructure">
+	<ref name="Brackets"/>
+      </element>
+      <element name="EstateTaxStructure">
+	<ref name="Brackets"/>
+      </element>
+      <oneOrMore>          
+        <element name="IncomeTaxStructure">
+          <optional>
+            <attribute name="cap_gain_rate">
+              <data type="decimal"/>
+            </attribute>
+          </optional>
+          <attribute name="jurisdiction"/>
+          <attribute name="status"/>
+	  <ref name="Brackets"/>
+        </element>
+      </oneOrMore>
+    </element>
+  </start>
+
+  <define name="Brackets">
+    <choice>
+      <ref name="SimpleBrackets"/>
+      <ref name="FullBrackets"/>
+    </choice>
+  </define>
+
+
+  <define name="SimpleBrackets">
+    <element name="SimpleBrackets">
+      <attribute name="currency"/>
+      <attribute name="top_rate"/>
+      <oneOrMore>
+	<element name="BracketTop">
+	  <attribute name="top"/>
+	  <attribute name="rate"/>
+	</element>
+      </oneOrMore>
+    </element>
+  </define>
+
+  <define name="FullBrackets">
+    <element name="Brackets">
+      <zeroOrMore>
+        <element name="Bracket">
+          <attribute name="bottom"/>
+          <attribute name="rate">
+            <data type="decimal"/>
+          </attribute>
+          <attribute name="top"/>
+        </element>
+      </zeroOrMore>
+      <optional>
+	<element name="TopBracket">
+          <attribute name="bottom"/>
+          <attribute name="rate">
+            <data type="decimal"/>
+          </attribute>
+	</element>
+      </optional>
+    </element>
+  </define>
+</grammar>

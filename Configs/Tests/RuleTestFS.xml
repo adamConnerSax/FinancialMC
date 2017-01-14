@@ -1,0 +1,90 @@
+<FinancialStates>
+
+  <PersonalFinances name="SweepTest">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+      <Account name="Vanguard" currency="USD" type="Brokerage">
+	<MixedFund name="Stock" pct_stock="100" balance="200000 USD" paid="200000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Salary name="salary" amount="10000 USD" when="Starting 2015"/>
+    </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules>
+    <CashToInvestmentSweep cash_account="Citibank" inv_account="Vanguard" min_cash="50000 USD" max_cash="200000 USD"/>
+  </Rules>
+  </PersonalFinances>
+
+  <PersonalFinances name="PayFrom Test">
+    <BalanceSheet>
+      <Account name="bank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="50000 USD"/>
+      </Account>
+      <Account name="529" currency="USD" type="A529">
+	<Cash name="529" balance="150000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <CollegeBill name="College Bill" amount="50000 USD" when="Between 2015  2019" amount_to="collegeA"/>
+    </Flows>
+  <SweepAccount>bank</SweepAccount>
+  <TaxTradeAccount>bank</TaxTradeAccount>
+  <Rules>
+    <PayFrom account="529" amount_from="collegeA"/>
+  </Rules>
+  </PersonalFinances>
+
+
+  <PersonalFinances name="RequiredDistributionTest">
+    <BalanceSheet>
+      <Account name="bank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="50000 USD"/>
+      </Account>
+      <Account name="IRA" currency="USD" type="IRA">
+	<Cash name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows/>
+  <SweepAccount>bank</SweepAccount>
+  <TaxTradeAccount>bank</TaxTradeAccount>
+  <Rules>
+    <RequiredDistribution name="IRA Distribution" account="IRA" year_turning_70="2016"/>
+  </Rules>
+  </PersonalFinances>
+
+
+  <PersonalFinances name="EmergencySellTest">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+      <Account name="Citibank2" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+      <Account name="Retirement" currency="USD" type="A401k">
+	<MixedFund name="Stock" pct_stock="100" balance="200000 USD" paid="200000 USD"/>
+      </Account>
+      <Account name="529" currency="USD" type="A529">
+	<MixedFund name="Stock" pct_stock="100" balance="100000 USD" paid="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Expense name="Generic" amount="100000 USD" frequency="Annually" when="Always"/>
+    </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules>
+    <SellAsNeeded>
+      <SellFrom account="Citibank2" allowed="Always"/>
+      <SellFrom account="529" allowed="Never"/>
+      <SellFrom account="Retirement" allowed="Starting 2040"/>
+    </SellAsNeeded>
+  </Rules>
+  </PersonalFinances>
+
+
+</FinancialStates>

@@ -1,0 +1,71 @@
+<RateModels>
+  <RateModel name="All Zero">
+    <Simple rateType="Interest Savings"><Fixed rate="0"/></Simple>
+    <Simple rateType="Interest CreditCard"><Fixed rate="0"/></Simple>
+    <Simple rateType="Return Stock"><Fixed rate="0"/></Simple>
+    <Simple rateType="Return Bond"><Fixed rate="0"/></Simple>
+    <Simple rateType="Return RealEstate"><Fixed rate="0"/></Simple>
+    <Simple rateType="Inflation Price"><Fixed rate="0"/></Simple>
+    <Simple rateType="Inflation Education"><Fixed rate="0"/></Simple>
+    <Simple rateType="Inflation HealthCare"><Fixed rate="0"/></Simple>
+    <Simple rateType="Inflation Wage"><Fixed rate="0"/></Simple>
+    <Simple rateType="Inflation TaxBracket"><Fixed rate="0"/></Simple>
+  </RateModel>
+
+  <RateModel name="Begin Simple">
+    <TypeGroup type="IsInterest"><Fixed rate="1"/></TypeGroup>
+    <TypeGroup type="IsReturn"><Fixed rate="3"/></TypeGroup>
+    <TypeGroup type="IsInflation"><Fixed rate="2"/></TypeGroup>
+    <Simple rateType="Exchange EUR"><Fixed rate="120"/></Simple>
+  </RateModel>
+  
+  <RateModel name="Begin Detailed">
+    <Simple rateType="Interest Savings"><Fixed rate="1"/></Simple>
+    <Simple rateType="Interest CreditCard"><Fixed rate="15"/></Simple>
+    <Simple rateType="Return Stock"><Fixed rate="5"/></Simple>
+    <Simple rateType="Return Bond"><Fixed rate="3"/></Simple>
+    <Simple rateType="Return RealEstate"><Fixed rate="2"/></Simple>
+    <Simple rateType="Inflation Price"><Fixed rate="2"/></Simple>
+    <Simple rateType="Inflation Education"><Fixed rate="7"/></Simple>
+    <Simple rateType="Inflation HealthCare"><Fixed rate="5"/></Simple>
+    <Simple rateType="Inflation Wage"><Fixed rate="1"/></Simple>
+    <Simple rateType="Inflation TaxBracket"><Fixed rate="2"/></Simple>
+  </RateModel>
+
+  <RateModel name="Evolve Optimistic">
+    <Simple rateType="Inflation Price"><LogNormal mean="2.0" vol="2"/></Simple>
+    <Simple rateType="Inflation Education"><LogNormal mean="5" vol="3"/></Simple>
+    <Simple rateType="Inflation Wage"><LogNormal mean="2" vol="1"/></Simple>
+    <Simple rateType="Inflation HealthCare"><LogNormal mean="5" vol="2"/></Simple>
+    <Simple rateType="Return Stock"><Normal mean="9" vol="15"/></Simple>
+    <Simple rateType="Return Bond"><Normal mean="5" vol="8"/></Simple>
+  </RateModel>
+
+  <RateModel name="Evolve Moderate">
+    <Simple rateType="Inflation Price"><LogNormal mean="2.5" vol="3"/></Simple>
+    <Simple rateType="Inflation Education"><LogNormal mean="7" vol="3"/></Simple>
+    <Simple rateType="Inflation Wage"><LogNormal mean="1.5" vol="1"/></Simple>
+    <Simple rateType="Inflation HealthCare"><LogNormal mean="7" vol="2"/></Simple>
+    <Simple rateType="Return Stock"><Normal mean="6" vol="15"/></Simple>
+    <Simple rateType="Return Bond"><Normal mean="3" vol="6"/></Simple>
+  </RateModel>
+
+
+  <RateModel name="Evolve Yikes!">
+    <Simple rateType="Inflation Price"><LogNormal mean="3.5" vol="4"/></Simple>
+    <Simple rateType="Inflation Education"><LogNormal mean="8" vol="3"/></Simple>
+    <Simple rateType="Inflation Wage"><LogNormal mean="1" vol="1"/></Simple>
+    <Simple rateType="Inflation HealthCare"><LogNormal mean="9" vol="2"/></Simple>
+    <Simple rateType="Return Stock"><Normal mean="3" vol="15"/></Simple>
+    <Simple rateType="Return Bond"><Normal mean="2" vol="8"/></Simple>
+  </RateModel>
+
+  <RateModel name="Evolve Apocalypse">
+    <Simple rateType="Inflation Price"><LogNormal mean="7" vol="3"/></Simple>
+    <Simple rateType="Inflation Education"><LogNormal mean="10" vol="3"/></Simple>
+    <Simple rateType="Inflation Wage"><Fixed rate="0"/></Simple>
+    <Simple rateType="Inflation HealthCare"><LogNormal mean="11" vol="3"/></Simple>
+    <Simple rateType="Return Stock"><Fixed rate="0"/></Simple>
+    <Simple rateType="Return Bond"><Fixed rate="0"/></Simple>
+  </RateModel>
+</RateModels>

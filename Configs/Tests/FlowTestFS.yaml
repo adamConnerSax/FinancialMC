@@ -1,0 +1,215 @@
+Salary:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 10000
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Ending
+              contents: 2033
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+Expense:
+  Rules: []
+  CF:
+    FlowMap:
+      Utilities:
+        contents:
+          FlowCore:
+            Amount:
+              Amount: 1000
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Utilities
+        type: Expense
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+Recurring Payment (EUR):
+  Rules: []
+  CF:
+    FlowMap:
+      Recurring Payment:
+        contents:
+          GrowthRate: 0.0
+          FlowCore:
+            Amount:
+              Amount: 1000
+              Currency: EUR
+            Frequency: Annually
+            DateRange:
+              tag: Starting
+              contents: 2015
+            Name: Recurring Payment
+        type: Payment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+Recurring Payment:
+  Rules: []
+  CF:
+    FlowMap:
+      Recurring Payment:
+        contents:
+          GrowthRate: 5.0e-2
+          FlowCore:
+            Amount:
+              Amount: 1000
+              Currency: USD
+            Frequency: Annually
+            DateRange:
+              tag: Starting
+              contents: 2015
+            Name: Recurring Payment
+        type: Payment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+Rental:
+  Rules: []
+  CF:
+    FlowMap:
+      Rental:
+        contents:
+          MaxAnnualDeduction:
+            Amount: 1000
+            Currency: USD
+          FlowCore:
+            Amount:
+              Amount: 2500
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Rental
+        type: RentalIncome
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []

@@ -1,0 +1,37 @@
+<TaxStructures>
+  <FederalTaxStructure name="Zero">
+    <PayrollTaxStructure>
+      <Brackets/>
+    </PayrollTaxStructure>
+
+    <EstateTaxStructure>
+      <Brackets/>
+    </EstateTaxStructure>
+
+    <IncomeTaxStructure status="MarriedFilingJointly">
+      <SimpleBrackets currency="USD" top_rate="0"/>
+    </IncomeTaxStructure>
+
+    <CapitalGains>
+      <RateBands topRate="0"/>
+    </CapitalGains>
+    
+    <MedicareSurtax rate="0">
+      <Threshold status="MarriedFilingJointly" amount="0 USD"/>
+      <Threshold status="Single" amount="0 USD"/>
+    </MedicareSurtax>
+  </FederalTaxStructure>
+  
+  <StateTaxStructure state="Zero" name="Zero">
+    <CapitalGains rate="0"/>
+    <IncomeTaxStructure status="MarriedFilingJointly" cap_gain_rate="0">
+      <SimpleBrackets currency="USD" top_rate="0"/>
+    </IncomeTaxStructure>
+  </StateTaxStructure>
+  
+  <CityTaxStructure city="Zero" name="Zero">
+    <IncomeTaxStructure status="MarriedFilingJointly">
+      <SimpleBrackets currency="USD" top_rate="0"/>
+    </IncomeTaxStructure>
+  </CityTaxStructure>
+</TaxStructures>

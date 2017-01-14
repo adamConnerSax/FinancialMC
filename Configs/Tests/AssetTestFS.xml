@@ -1,0 +1,97 @@
+<FinancialStates>
+  <PersonalFinances name="Bank">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows/>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="StockFund">
+    <BalanceSheet>
+      <Account name="MixedFund" currency="USD" type="Brokerage">
+	<MixedFund type="Balanced"  pct_stock="100" name="Adam and Pauline" balance="100000 USD" paid="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows/>
+  <SweepAccount>MixedFund</SweepAccount>
+  <TaxTradeAccount>MixedFund</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+  
+  <PersonalFinances name="MixedFund">
+    <BalanceSheet>
+      <Account name="MixedFund" currency="USD" type="Brokerage">
+	<MixedFund pct_stock="50" name="Adam and Pauline" balance="100000 USD" paid="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows/>
+    <SweepAccount>MixedFund</SweepAccount>
+    <TaxTradeAccount>MixedFund</TaxTradeAccount>
+    <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="GuaranteedFund">
+    <BalanceSheet>
+      <Account name="GuaranteedFund" currency="USD" type="Brokerage">
+	<GuaranteedFund rate="5" name="TestGF" balance="100000 USD" paid="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows/>
+    <SweepAccount>GuaranteedFund</SweepAccount>
+    <TaxTradeAccount>GuaranteedFund</TaxTradeAccount>
+    <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="MortgageFail1">
+    <BalanceSheet>
+      <Account name="Bank" currency="USD" type="Brokerage">
+	<Cash type="Checking" name="Adam and Pauline" balance="50000 USD"/>
+      </Account>
+      <Account name="house" currency="USD" type="PrimaryHome">
+	<ResidentialRealEstate name="house" value="100000 USD" paid="100000 USD"/>
+      </Account>
+      <Account name="MortgageAccount" currency="USD" type="Debt">
+	<FixedRateMortgage name="30yr Fixed at 5%" rate="5" years="30" borrowed="100000 USD" remaining="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows/>
+    <SweepAccount>Bank</SweepAccount>
+    <TaxTradeAccount>Bank</TaxTradeAccount>
+    <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="MortgageFail2">
+    <BalanceSheet>
+      <Account name="Bank" currency="USD" type="Brokerage">
+	<Cash type="Checking" name="Adam and Pauline" balance="150000 USD"/>
+      </Account>
+      <Account name="MortgageAccount" currency="USD" type="Debt">
+	<FixedRateMortgage name="30yr Fixed at 5%" rate="5" years="30" borrowed="100000 USD" remaining="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows/>
+    <SweepAccount>Bank</SweepAccount>
+    <TaxTradeAccount>Bank</TaxTradeAccount>
+    <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="MortgageSucceed">
+    <BalanceSheet>
+      <Account name="Bank" currency="USD" type="Brokerage">
+	<Cash type="Checking" name="Adam and Pauline" balance="200000 USD"/>
+      </Account>
+      <Account name="MortgageAccount" currency="USD" type="Debt">
+	<FixedRateMortgage name="30yr Fixed at 5%" rate="5" years="30" borrowed="100000 USD" remaining="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows/>
+    <SweepAccount>Bank</SweepAccount>
+    <TaxTradeAccount>Bank</TaxTradeAccount>
+    <Rules/>
+  </PersonalFinances>
+</FinancialStates>

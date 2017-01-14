@@ -1,0 +1,290 @@
+SweepTest:
+  Rules:
+  - contents:
+      Max:
+        Amount: 200000
+        Currency: USD
+      Inv: Vanguard
+      Min:
+        Amount: 50000
+        Currency: USD
+      Cash: Citibank
+    type: CashToInvestmentSweep
+  CF:
+    FlowMap:
+      salary:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 10000
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Starting
+              contents: 2015
+            Name: salary
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Vanguard:
+        Currency: USD
+        Name: Vanguard
+        Type: Brokerage
+        Assets:
+        - contents:
+            StockPct: 1
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 200000
+                Currency: USD
+              Name: Stock
+              CostBasis:
+                Amount: 200000
+                Currency: USD
+          type: MixedFund
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+PayFrom Test:
+  Rules:
+  - contents:
+      Account: '529'
+      Name: collegeA
+      AccumName: collegeA
+    type: PayFrom
+  CF:
+    FlowMap:
+      College Bill:
+        contents:
+          PaidFrom: collegeA
+          FlowCore:
+            Amount:
+              Amount: 50000
+              Currency: USD
+            Frequency: Annually
+            DateRange:
+              tag: Between
+              contents:
+              - 2015
+              - 2019
+            Name: College Bill
+        type: EducationalExpense
+  TaxTrade:
+    contents:
+      Acct: bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      529:
+        Currency: USD
+        Name: '529'
+        Type: A529
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 150000
+                Currency: USD
+              Name: '529'
+              CostBasis:
+                Amount: 150000
+                Currency: USD
+          type: CashAsset
+      bank:
+        Currency: USD
+        Name: bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 50000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: bank
+    type: Sweep
+  LifeEvents: []
+EmergencySellTest:
+  Rules:
+  - contents:
+      Accts:
+      - - Citibank2
+        - tag: Always
+          contents: []
+      - - '529'
+        - tag: Never
+          contents: []
+      - - Retirement
+        - tag: Starting
+          contents: 2040
+    type: SellAsNeeded
+  CF:
+    FlowMap:
+      Generic:
+        contents:
+          FlowCore:
+            Amount:
+              Amount: 100000
+              Currency: USD
+            Frequency: Annually
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Generic
+        type: Expense
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Retirement:
+        Currency: USD
+        Name: Retirement
+        Type: A401k
+        Assets:
+        - contents:
+            StockPct: 1
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 200000
+                Currency: USD
+              Name: Stock
+              CostBasis:
+                Amount: 200000
+                Currency: USD
+          type: MixedFund
+      529:
+        Currency: USD
+        Name: '529'
+        Type: A529
+        Assets:
+        - contents:
+            StockPct: 1
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Stock
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: MixedFund
+      Citibank2:
+        Currency: USD
+        Name: Citibank2
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+RequiredDistributionTest:
+  Rules:
+  - contents:
+      YearTurning70: 2016
+      Name: IRA Distribution
+      Acct: IRA
+    type: RequiredDistribution
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      IRA:
+        Currency: USD
+        Name: IRA
+        Type: IRA
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+      bank:
+        Currency: USD
+        Name: bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 50000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: bank
+    type: Sweep
+  LifeEvents: []

@@ -1,0 +1,50 @@
+<FinancialMC_Configuration>
+  <DataSources>
+    <TaxData>
+      <XML>Configs/Tests/ZeroTax.xml</XML>
+    </TaxData>
+    <RateModels>
+      <XML>Configs/Tests/RateModelTest.xml</XML>
+    </RateModels>
+    <FinancialStates>
+      <XML>Configs/Tests/AssetTestFS.xml</XML>
+    </FinancialStates>
+  </DataSources>
+  
+  <Configurations>
+    <Configuration name="BankTest" financial_state="Bank"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="Fixed Savings Interest"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+
+    <Configuration name="StockFundTest" financial_state="StockFund"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="Fixed Stock Return"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+
+    <Configuration name="MixedFundTest" financial_state="MixedFund"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="Fixed Stock/Bond Return"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+
+    <Configuration name="GuaranteedFundTest" financial_state="GuaranteedFund"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="Fixed Return"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+
+    <Configuration name="MortgageFailTest1" financial_state="MortgageFail1"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+
+    <Configuration name="MortgageFailTest2" financial_state="MortgageFail2"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+
+    <Configuration name="MortgageTest" financial_state="MortgageSucceed"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration> 
+  </Configurations>
+</FinancialMC_Configuration>

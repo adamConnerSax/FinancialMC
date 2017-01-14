@@ -1,0 +1,98 @@
+Configurations:
+  FX PaymentTest:
+    Rates:
+    - AllZero
+    - FX
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Recurring Payment (EUR)
+  ExpenseTest:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Expense
+  PaymentTest:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Recurring Payment
+  SalaryTest:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary
+  InflationTest:
+    Rates:
+    - AllZero
+    - Fixed Price Inflation
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Expense
+  RentalTest:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - Zero
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Rental
+DataSources:
+- Contents: TaxStructureS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/ZeroTax.yaml
+    - YAML
+- Contents: RateModelS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/RateModelTest.yaml
+    - YAML
+- Contents: FinancialStateS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/FlowTestFS.yaml
+    - YAML

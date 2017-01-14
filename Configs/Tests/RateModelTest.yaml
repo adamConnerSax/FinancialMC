@@ -1,0 +1,165 @@
+Fixed Return:
+  contents:
+    Models:
+    - contents:
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+        Type: IsReturn
+      type: GroupedFactorModel
+  type: ListModel
+Fixed Stock/Bond Return:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Return
+          contents: Stock
+        Factor:
+          contents:
+            fRate: 5.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+    - contents:
+        Tag:
+          tag: Return
+          contents: Bond
+        Factor:
+          contents:
+            fRate: 3.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+Fixed Savings Interest:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Interest
+          contents: Savings
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+Fixed Wage Inflation:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Inflation
+          contents: Wage
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+Fixed Interest:
+  contents:
+    Models:
+    - contents:
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+        Type: IsInterest
+      type: GroupedFactorModel
+  type: ListModel
+Fixed Price Inflation:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Inflation
+          contents: Price
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+Fixed Inflation:
+  contents:
+    Models:
+    - contents:
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+        Type: IsInflation
+      type: GroupedFactorModel
+  type: ListModel
+FX:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Exchange
+          contents: EUR
+        Factor:
+          contents:
+            fRate: 1.2e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+Fixed Stock Return:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Return
+          contents: Stock
+        Factor:
+          contents:
+            fRate: 5.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+Fixed Bond Return:
+  contents:
+    Models:
+    - contents:
+        Tag:
+          tag: Return
+          contents: Bond
+        Factor:
+          contents:
+            fRate: 3.0e-2
+          type: FixedRateModelFactor
+      type: SingleFactorModel
+  type: ListModel
+AllZero:
+  contents:
+    Models:
+    - contents:
+        Factor:
+          contents:
+            fRate: 0.0
+          type: FixedRateModelFactor
+        Type: IsInterest
+      type: GroupedFactorModel
+    - contents:
+        Factor:
+          contents:
+            fRate: 0.0
+          type: FixedRateModelFactor
+        Type: IsReturn
+      type: GroupedFactorModel
+    - contents:
+        Factor:
+          contents:
+            fRate: 0.0
+          type: FixedRateModelFactor
+        Type: IsInflation
+      type: GroupedFactorModel
+    - contents:
+        Factor:
+          contents:
+            fRate: 1.0e-2
+          type: FixedRateModelFactor
+        Type: IsExchange
+      type: GroupedFactorModel
+  type: ListModel

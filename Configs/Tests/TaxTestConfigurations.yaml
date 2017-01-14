@@ -1,0 +1,241 @@
+Configurations:
+  1MMTest_NYC:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: Salary1MM
+  1MMTest_NYS:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary1MM
+  CapitalGainFed+NYS+NYC:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: CapitalGain_1MM
+  40kTest_NYC:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: Salary40k
+  40kTest_NYS:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary40k
+  DeductibleExpense:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: DeductibleExpense
+  CapitalGainFedOnly:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: CapitalGain
+  10kTest_FedOnly:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary10k
+  TaxTrade:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: TaxTrade
+  10kTest_NYS:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary10k
+  MortgageDeduction:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: MortgageDeduction
+  10kTest_NYC:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: Salary10k
+  40kTest_FedOnly:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary40k
+  Rental:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: Rental
+  1MMTest_FedOnly:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'Zero: Zero'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: Salary1MM
+  CapitalGainFed+NYS:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'Zero: Zero'
+    CurDate: 2014
+    FinState: CapitalGain
+  CapitalGain_FundEarnings:
+    Rates:
+    - AllZero
+    - AllZero
+    OutputPrefix: null
+    Currency: USD
+    Tax:
+    - MarriedFilingJointly
+    - US Simple
+    - ! 'New York: Simple'
+    - ! 'New York City: Simple'
+    CurDate: 2014
+    FinState: CapitalGain_FundEarnings
+DataSources:
+- Contents: TaxStructureS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/SimpleTax.yaml
+    - YAML
+- Contents: RateModelS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/RateModelTest.yaml
+    - YAML
+- Contents: FinancialStateS
+  Structure:
+    tag: Parseable
+    contents:
+    - filePath: Configs/Tests/TaxTestFS.yaml
+    - YAML

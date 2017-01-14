@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar ns="" xmlns="http://relaxng.org/ns/structure/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <start>
+    <element name="FinancialStates">
+      <oneOrMore>
+	<ref name="PersonalFinances"/>
+      </oneOrMore>
+    </element>
+  </start>
+
+  <define name="PersonalFinances"> 
+    <element name="PersonalFinances">
+      <attribute name="name">
+        <data type="NCName"/>
+      </attribute>
+      <element name="BalanceSheet">
+        <oneOrMore>
+          <element name="Account">
+            <attribute name="currency"/>
+            <attribute name="name"/>
+            <attribute name="type"/>
+	    <oneOrMore>
+	     <ref name="Asset"/>
+	    </oneOrMore>
+          </element>
+        </oneOrMore>
+      </element>
+      <element name="Flows">
+        <oneOrMore> 
+          <ref name="Flow"/>
+        </oneOrMore>
+      </element>
+      <element name="SweepAccount">
+        <data type="NCName"/>
+      </element>
+      <element name="TaxTradeAccount">
+        <data type="NCName"/>
+      </element>
+      <element name="Rules">
+        <zeroOrMore>
+          <ref name="Rule"/>
+        </oneOrMore>
+      </element>
+      <element name="LifeEvents">
+	<zeroOrMore>
+	  <ref name="LifeEvent"/>
+	</zeroOrMore>
+      </element>
+    </element>
+  </define>
+
+  <define name="Asset">
+    <choice>
+      <element name="MixedFund">
+        <attribute name="balance"/>
+        <attribute name="name"/>
+        <attribute name="paid"/>
+        <attribute name="pct_stock"/>
+      </element>
+      <element name="GuaranteedFund">
+        <attribute name="balance"/>
+        <attribute name="name"/>
+        <attribute name="paid"/>
+        <attribute name="rate"/>
+      </element>
+      <element name="ResidentialRealEstate">
+        <attribute name="name"/>
+        <attribute name="paid"/>
+        <attribute name="value"/>
+      </element>
+      <element name="Cash">
+        <attribute name="balance"/>
+        <attribute name="name"/>
+      </element>
+      <element name="FixedRateMortgage">
+        <attribute name="name"/>
+        <attribute name="rate"/>
+        <attribute name="years"/>
+        <attribute name="borrowed"/>
+        <attribute name="remaining"/>
+      </element>
+    </choice>
+  </define>
+
+  <define name="Flow">
+    <choice>
+      <element name="Payment">
+        <attribute name="amount"/>
+        <attribute name="growth_rate"/>
+        <attribute name="name"/>
+        <attribute name="when"/>
+      </element>
+      <element name="RentalIncome">
+        <attribute name="amount"/>
+        <attribute name="max_annual_deduction"/>
+        <attribute name="name"/>
+        <attribute name="when"/>
+      </element>
+      <element name="Salary">
+        <attribute name="amount"/>
+        <attribute name="name"/>
+        <attribute name="when"/>
+      </element>
+      <element name="CollegeBill">
+        <attribute name="amount"/>
+        <attribute name="amount_to"/>
+        <attribute name="name"/>
+        <attribute name="when"/>
+      </element>
+      <element name="DeductibleExpense">
+        <attribute name="amount"/>
+        <attribute name="frequency"/>
+        <attribute name="name"/>
+        <attribute name="when"/>
+      </element>
+      <element name="Expense">
+        <attribute name="amount"/>
+        <attribute name="frequency"/>
+        <attribute name="name"/>
+        <attribute name="when"/>
+      </element>
+    </choice>
+  </define>   
+
+  <define name="LifeEvent">
+  </define>
+
+
+  <define name="Rule">
+    <choice>
+      <element name="SellAsNeeded">
+        <oneOrMore>
+          <element name="SellFrom">
+            <attribute name="account"/>
+              <optional>
+                <attribute name="allowed"/> 
+              </optional>
+          </element>
+        </oneOrMore>
+      </element>
+      <element name="Transfer">
+        <attribute name="amount"/>
+        <attribute name="from"/>
+        <attribute name="name"/>
+        <attribute name="to"/>
+        <attribute name="when"/>
+      </element>
+      <element name="PayFrom">
+        <attribute name="amount_from"/>
+        <attribute name="account"/>
+      </element>
+      <element name="Contribution">
+        <attribute name="amount"/>
+        <attribute name="account"/>
+        <attribute name="trade_type"/>
+        <attribute name="when"/>
+        <attribute name="name"/>
+      </element>
+      <element name="RequiredDistribution">
+        <attribute name="account"/>
+        <attribute name="year_turning_70"/>
+        <attribute name="name"/>
+      </element>
+      <element name="PreTaxContribution">
+        <attribute name="amount"/>
+        <attribute name="account"/>
+        <attribute name="when"/>
+        <attribute name="name"/>
+      </element>
+      <element name="CashToInvestmentSweep">
+        <attribute name="cash_acct"/>
+        <attribute name="inv_acct"/>
+        <attribute name="min_cash"/>
+        <attribute name="max_acct"/>
+      </element>
+    </choice>
+  </define>
+
+</grammar>

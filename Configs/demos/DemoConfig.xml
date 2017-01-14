@@ -1,0 +1,47 @@
+<FinancialMC_Configuration>
+  <DataSources>
+    <TaxData>
+      <XML>/Users/Adam/Documents/Planning/FMC/APTax.xml</XML>
+      <!--<XML>/Users/Adam/Development/haskell/FinancialMC/Configs/Tax.xml</XML>-->
+    </TaxData>
+    <RateModels>
+      <XML>/Users/Adam/Documents/Planning/FMC/APRM.xml</XML>
+      <!--<XML>/Users/Adam/Development/haskell/FinancialMC/Configs/RateModels.xml</XML>-->
+    </RateModels>
+    <FinancialStates>
+      <XML>/Users/Adam/Documents/Planning/FMC/APFS.xml</XML>
+    </FinancialStates>
+  </DataSources>
+
+  <Configurations>  
+    <Configuration name="AllZero" financial_state="AP" output_prefix="AP_All0" current_date="2015" currency="USD">
+      <RateSetup defaults="Base" model="Base"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
+    </Configuration> 
+   
+    <Configuration name="Conservative" 
+		   financial_state="AP" output_prefix="AP_Conservative" current_date="2015" currency="USD">
+      <RateSetup defaults="Base" model="Moderate"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
+    </Configuration> 
+
+    <Configuration name="Optimistic" 
+		   financial_state="AP" output_prefix="AP_Optimistic" current_date="2015" currency="USD">
+      <RateSetup defaults="Base" model="Optimistic"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
+    </Configuration> 
+
+    <Configuration name="Yikes!" 
+		   financial_state="AP" output_prefix="AP_Yikes" current_date="2015" currency="USD">
+      <RateSetup defaults="Base" model="Yikes!"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
+    </Configuration> 
+
+    <Configuration name="Apocalypse" 
+		   financial_state="AP" output_prefix="AP_Apocalypse" current_date="2015" currency="USD">
+      <RateSetup defaults="Base" model="Apocalypse"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
+    </Configuration> 
+
+  </Configurations>
+</FinancialMC_Configuration>

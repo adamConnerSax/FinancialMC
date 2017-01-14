@@ -1,0 +1,23 @@
+<FinancialMC_Configuration>
+
+  <DataSources>
+    <TaxData>
+      <XML>Configs/Tests/ZeroTax.xml</XML>
+    </TaxData>
+    <RateModels>
+      <XML>Configs/Tests/RateModelTest.xml</XML>
+    </RateModels>
+    <FinancialStates>
+      <XML>Configs/Tests/LifeEventTestFS.xml</XML>
+    </FinancialStates>
+  </DataSources>
+  
+  <Configurations>
+
+    <Configuration name="BuyHouseTest" financial_state="Buy House"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+    
+  </Configurations> 
+</FinancialMC_Configuration>

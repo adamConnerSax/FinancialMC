@@ -1,0 +1,175 @@
+<FinancialStates>
+  <PersonalFinances name="Salary10k">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Salary name="Test" amount="833.33 USD" when="Always"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="Salary40k">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Salary name="Test" amount="3333.33 USD" when="Always"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="Salary1MM">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Salary name="Test" amount="83333.33 USD" when="Always"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="DeductibleExpense">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Salary name="Test" amount="83333.33 USD" when="Always"/>
+    <DeductibleExpense name="PropertyTax" amount="10000 USD" frequency="Annually" when="Always"/>
+  </Flows>
+  <SweepAccount>Citibank</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="TaxTrade">
+    <BalanceSheet>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash type="Savings"  name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+      <Account name="Sweep" currency="USD" type="Bank">
+	<Cash type="Checking" name="SweepCash" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+  <Flows>
+    <Salary name="Test" amount="10000 USD" when="Always"/>
+    <Expense name="TotalExpenses" amount="100000 USD" frequency="Annually" when="Always"/>
+  </Flows>
+  <SweepAccount>Sweep</SweepAccount>
+  <TaxTradeAccount>Citibank</TaxTradeAccount>
+  <Rules/>
+  </PersonalFinances>
+
+  <PersonalFinances name="CapitalGain">
+    <BalanceSheet>
+      <Account name="Vanguard" currency="USD" type="Brokerage">
+	<MixedFund name="Investment" pct_stock="100" stock_div_yield="0" balance="100000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="Bank" currency="USD" type="Bank">
+	<Cash type="Savings" name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+      <Account name="Sweep" currency="USD" type="Bank">
+	<Cash type="Checking" name="SweepCash" balance="50000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+    </Flows>
+  <Rules>
+    <Transfer name="Single 50k transfer" from="Vanguard" to="Bank" amount="50000 USD" when="Between 2014 2014"/>
+  </Rules>
+  <SweepAccount>Sweep</SweepAccount>
+  <TaxTradeAccount>Sweep</TaxTradeAccount>
+  </PersonalFinances>
+
+  <PersonalFinances name="CapitalGain_1MM">
+    <BalanceSheet>
+      <Account name="Vanguard" currency="USD" type="Brokerage">
+	<MixedFund name="Investment" pct_stock="100" stock_div_yield="0" balance="100000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="Bank" currency="USD" type="Bank">
+	<Cash type="Savings" name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+      <Account name="Sweep" currency="USD" type="Bank">
+	<Cash type="Checking" name="SweepCash" balance="50000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Salary name="Test" amount="83333.33 USD" when="Always"/>
+    </Flows>
+  <Rules>
+    <Transfer name="Single 50k transfer" from="Vanguard" to="Bank" amount="50000 USD" when="Between 2014 2014"/>
+  </Rules>
+  <SweepAccount>Sweep</SweepAccount>
+  <TaxTradeAccount>Sweep</TaxTradeAccount>
+  </PersonalFinances>
+
+
+  <PersonalFinances name="CapitalGain_FundEarnings">
+    <BalanceSheet>
+      <Account name="Vanguard" currency="USD" type="Brokerage">
+	<MixedFund name="Investment" pct_stock="50" stock_div_yield="1" bond_int="2" balance="100000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="Bank" currency="USD" type="Bank">
+	<Cash type="Savings" name="Adam and Pauline" balance="0 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Salary name="Test" amount="83333.33 USD" when="Always"/>
+    </Flows>
+  <Rules>
+  </Rules>
+  <SweepAccount>Bank</SweepAccount>
+  <TaxTradeAccount>Bank</TaxTradeAccount>
+  </PersonalFinances>
+
+
+  <PersonalFinances name="Rental">
+    <BalanceSheet>
+      <Account name="Bank" currency="USD" type="Bank">
+	<Cash type="Savings" name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <RentalIncome name="RentalTest" amount="2500 USD" frequency="Monthly" when="Always" max_annual_deduction="2000 USD"/>
+    </Flows>
+  <Rules></Rules>
+  <SweepAccount>Bank</SweepAccount>
+  <TaxTradeAccount>Bank</TaxTradeAccount>
+  </PersonalFinances>
+
+  <PersonalFinances name="MortgageDeduction">
+    <BalanceSheet>
+      <Account name="Bank" currency="USD" type="Bank">
+	<Cash type="Savings" name="Adam and Pauline" balance="100000 USD"/>
+      </Account>
+      <Account name="MortgageAccount" currency="USD" type="Debt">
+	<FixedRateMortgage name="30 yr Fixed at 5%" rate="5" years="30" borrowed="100000 USD" remaining="100000 USD"/>
+      </Account>
+      <Account name="house" currency="USD" type="PrimaryHome">
+	<ResidentialRealEstate name="house" value="200000 USD" paid="200000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Salary name="Test" amount="10000 USD" when="Always"/>
+    </Flows>
+  <Rules></Rules>
+  <SweepAccount>Bank</SweepAccount>
+  <TaxTradeAccount>Bank</TaxTradeAccount>
+  </PersonalFinances>
+
+
+</FinancialStates>

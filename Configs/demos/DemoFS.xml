@@ -1,0 +1,163 @@
+<FinancialStates>
+  <PersonalFinances name="Scenario 1">
+    <BalanceSheet>
+      <Account name="Citibank_Sweep" currency="USD" type="Bank">
+	<Cash name="Checking" balance="10000 USD"/>
+      </Account>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash name="Savings" balance="20000 USD"/>
+      </Account>
+      <Account name="Vanguard" currency="USD" type="Brokerage">
+	<MixedFund name="Amalgam" pct_stock="50" stk_div_yield="1.8" bond_int="1.8" balance="100000 USD" paid="50000 USD"/>
+      </Account> 
+      <Account name="A Retirement" type="A401k" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="75" balance="75000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="B Retirement" type="A401k" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="50" balance="75000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="K1 529" type="A529" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="50" balance="25000 USD" paid="20000 USD"/>
+      </Account>
+      <Account name="K2 529" type="A529" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="50" balance="5000 USD" paid="5000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Salary name="A Salary" amount="8000 USD" when="Ending 2051"/>
+      <Salary name="A SocSec" amount="2500 USD" when="Starting 2051"/>
+      <Salary name="B Salary" amount="10000 USD" when="Ending 2051"/>
+      <Salary name="B SocSec" amount="2500 USD" when="Starting 2051"/>
+      <DeductibleExpense name="Property Taxes" amount="5000 USD" frequency="Annually" when="Always"/>
+      <HealthCareExpense name="Insurance (ACA)" amount="8000 USD" deductible="False" frequency="Annually" when="Always"/>
+      <CollegeBill name="K1 College" amount="45000 USD" amount_to="K1529" when="Between 2030 2033"/>
+      <CollegeBill name="K2 College" amount="45000 USD" amount_to="K2529" when="Between 2032 2035"/>
+      <Expense name="Rent" amount="2000 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Childcare (preschool)" amount="20000 USD" frequency="Annually" when="Ending 2020"/>
+      <Expense name="Childcare (after-school)" amount="5000 USD" frequency="Annually" when="Between 2021 2028"/>
+      <Expense name="K1 Summer" amount="2000 USD" frequency="Annually" when="Ending 2028"/>
+      <Expense name="K2 Summer" amount="2000 USD" frequency="Annually" when="Ending 2032"/>
+      <Expense name="K1 Activities" amount="500 USD" frequency="Annually" when="Ending 2019"/>
+      <Expense name="K2 Activities" amount="500 USD" frequency="Annually" when="Ending 2032"/>
+      <Expense name="Dog" amount="200 USD" frequency="Annually" when="Always"/>
+      <Expense name="Homeowners Ins." amount="1000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Home Maintenance" amount="1000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Car Ins." amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Car Repair/Lease" amount="3000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Clothes" amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Books,Music,Etc." amount="1000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Gifts" amount="1000 USD" frequency="Annually" when="Always"/>
+      <DeductibleExpense name="Charity" amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Misc" amount="500 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Groceries" amount="500 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Gym" amount="1000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Housecleaning" amount="200 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Entertainment/Restaurants" amount="200 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Utilities" amount="500 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Travel" amount="2000 USD" frequency="Annually" when="Always"/>
+    </Flows> 
+    <SweepAccount>Citibank_Sweep</SweepAccount>
+    <TaxTradeAccount>Citibank_Sweep</TaxTradeAccount>
+    <Rules>
+      <CashToInvestmentSweep cash_account="Citibank_Sweep" inv_account="Vanguard" min_cash="10000 USD" max_cash="30000 USD"/>
+      <SellAsNeeded>
+	<SellFrom account="Vanguard" allowed="Always"/>
+	<SellFrom account="Citibank" allowed="Always"/>
+	<SellFrom account="K1 529" allowed="Never"/>
+	<SellFrom account="A Retirement" allowed="Starting 2043"/>
+      </SellAsNeeded>
+      <Transfer name="fund K1 529" from="Citibank_Sweep" to="K1 529" amount="2000 USD" when="Ending 2030"/>
+      <PayFrom account="K1 529" amount_from="K1529"/>
+      <Transfer name="fund K2 529" from="Citibank_Sweep" to="K2 529" amount="2000 USD" when="Between 2015 2033"/>
+      <PayFrom account="K2 529" amount_from="K2529"/>
+      <Transfer name="fund A 401k" from="Vanguard" to="A Retirement" amount="3000 USD" when="Ending 2051"/>
+      <Transfer name="fund B 401k" from="Vanguard" to="B Retirement" amount="3000 USD" when="Ending 2051"/>
+      <RequiredDistribution name="From A 401k" account="A Retirement" year_turning_70="2056"/>
+      <RequiredDistribution name="From B 401k" account="B Retirement" year_turning_70="2056"/>
+    </Rules>
+  </PersonalFinances>
+
+  <PersonalFinances name="Scenario 2">
+    <BalanceSheet>
+      <Account name="Citibank_Sweep" currency="USD" type="Bank">
+	<Cash name="Checking" balance="10000 USD"/>
+      </Account>
+      <Account name="Citibank" currency="USD" type="Bank">
+	<Cash name="Savings" balance="20000 USD"/>
+      </Account>
+      <Account name="Vanguard" currency="USD" type="Brokerage">
+	<MixedFund name="Amalgam" pct_stock="75" stk_div_yield="1.8" bond_int="1.8" balance="100000 USD" paid="50000 USD"/>
+      </Account> 
+      <Account name="A Retirement" type="A401k" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="75" balance="75000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="B Retirement" type="A401k" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="75" balance="75000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="K1 529" type="A529" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="50" balance="25000 USD" paid="20000 USD"/>
+      </Account>
+      <Account name="K2 529" type="A529" currency="USD">
+	<MixedFund name="Amalgam" pct_stock="50" balance="5000 USD" paid="5000 USD"/>
+      </Account>
+      <Account name="RealEstate" currency="USD" type="PrimaryHome">
+	<ResidentialRealEstate name="1 Main St" value="325000 USD" paid="300000 USD"/>
+      </Account>
+      <Account name="MortgageAccount" currency="USD" type="Debt">
+	<FixedRateMortgage name="30yr Fixed at 3.75%" rate="3.75" years="30" borrowed="250000 USD" remaining="240000 USD"/>
+      </Account>
+    </BalanceSheet>
+    <Flows>
+      <Salary name="A Salary" amount="8000 USD" when="Ending 2056"/>
+      <Salary name="A SocSec" amount="2750 USD" when="Starting 2056"/>
+      <Salary name="B Salary" amount="10000 USD" when="Ending 2056"/>
+      <Salary name="B SocSec" amount="2750 USD" when="Starting 2056"/>
+      <DeductibleExpense name="Property Taxes" amount="5000 USD" frequency="Annually" when="Always"/>
+      <HealthCareExpense name="Insurance (ACA)" amount="8000 USD" deductible="False" frequency="Annually" when="Always"/>
+      <CollegeBill name="K1 College" amount="45000 USD" amount_to="K1529" when="Between 2030 2033"/>
+      <CollegeBill name="K2 College" amount="45000 USD" amount_to="K2529" when="Between 2032 2035"/>
+      <Expense name="Childcare (preschool)" amount="20000 USD" frequency="Annually" when="Ending 2020"/>
+      <Expense name="Childcare (after-school)" amount="5000 USD" frequency="Annually" when="Between 2021 2028"/>
+      <Expense name="K1 Summer" amount="2000 USD" frequency="Annually" when="Ending 2028"/>
+      <Expense name="K2 Summer" amount="2000 USD" frequency="Annually" when="Ending 2032"/>
+      <Expense name="K1 Activities" amount="500 USD" frequency="Annually" when="Ending 2019"/>
+      <Expense name="K2 Activities" amount="500 USD" frequency="Annually" when="Ending 2032"/>
+      <Expense name="Dog" amount="500 USD" frequency="Annually" when="Always"/>
+      <Expense name="Homeowners Ins." amount="1000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Home Maintenance" amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Car Ins." amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Car Repair/Lease" amount="3000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Clothes" amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Books,Music,Etc." amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Gifts" amount="1000 USD" frequency="Annually" when="Always"/>
+      <DeductibleExpense name="Charity" amount="2000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Misc" amount="500 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Groceries" amount="500 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Gym" amount="1000 USD" frequency="Annually" when="Always"/>
+      <Expense name="Housecleaning" amount="300 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Entertainment/Restaurants" amount="200 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Utilities" amount="500 USD" frequency="Monthly" when="Always"/>
+      <Expense name="Travel" amount="2000 USD" frequency="Annually" when="Always"/>
+    </Flows> 
+    <SweepAccount>Citibank_Sweep</SweepAccount>
+    <TaxTradeAccount>Citibank_Sweep</TaxTradeAccount>
+    <Rules>
+      <CashToInvestmentSweep cash_account="Citibank_Sweep" inv_account="Vanguard" min_cash="10000 USD" max_cash="30000 USD"/>
+      <SellAsNeeded>
+	<SellFrom account="Vanguard" allowed="Always"/>
+	<SellFrom account="Citibank" allowed="Always"/>
+	<SellFrom account="K1 529" allowed="Never"/>
+	<SellFrom account="A Retirement" allowed="Starting 2043"/>
+      </SellAsNeeded>
+      <Transfer name="fund K1 529" from="Citibank_Sweep" to="K1 529" amount="3000 USD" when="Ending 2030"/>
+      <PayFrom account="K1 529" amount_from="K1529"/>
+      <Transfer name="fund K2 529" from="Citibank_Sweep" to="K2 529" amount="3000 USD" when="Between 2015 2033"/>
+      <PayFrom account="K2 529" amount_from="K2529"/>
+      <Transfer name="fund A 401k" from="Vanguard" to="A Retirement" amount="4000 USD" when="Ending 2051"/>
+      <Transfer name="fund B 401k" from="Vanguard" to="B Retirement" amount="4000 USD" when="Ending 2051"/>
+      <RequiredDistribution name="From A 401k" account="A Retirement" year_turning_70="2056"/>
+      <RequiredDistribution name="From B 401k" account="B Retirement" year_turning_70="2056"/>
+    </Rules>
+  </PersonalFinances>
+
+</FinancialStates>

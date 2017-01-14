@@ -1,0 +1,48 @@
+<FinancialMC_Configuration>
+
+  <DataSources>
+    <TaxData>
+      <XML>Configs/Tests/ZeroTax.xml</XML>
+    </TaxData>
+    <RateModels>
+      <XML>Configs/Tests/RateModelTest.xml</XML>
+    </RateModels>
+    <FinancialStates>
+      <XML>Configs/Tests/FlowTestFS.xml</XML>
+    </FinancialStates>
+  </DataSources>
+  
+  <Configurations>
+
+    <Configuration name="SalaryTest" financial_state="Salary"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+    
+    <Configuration name="ExpenseTest" financial_state="Expense"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+  
+    <Configuration name="InflationTest" financial_state="Expense"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="Fixed Price Inflation"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="PaymentTest" financial_state="Recurring Payment"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="FX PaymentTest" financial_state="Recurring Payment (EUR)"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="FX"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="RentalTest" financial_state="Rental"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+  </Configurations> 
+</FinancialMC_Configuration>

@@ -1,0 +1,596 @@
+DeductibleExpense:
+  Rules: []
+  CF:
+    FlowMap:
+      PropertyTax:
+        contents:
+          FlowCore:
+            Amount:
+              Amount: 10000
+              Currency: USD
+            Frequency: Annually
+            DateRange:
+              tag: Always
+              contents: []
+            Name: PropertyTax
+        type: DeductibleExpense
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 83333.33
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+TaxTrade:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 10000
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+      TotalExpenses:
+        contents:
+          FlowCore:
+            Amount:
+              Amount: 100000
+              Currency: USD
+            Frequency: Annually
+            DateRange:
+              tag: Always
+              contents: []
+            Name: TotalExpenses
+        type: Expense
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Sweep:
+        Currency: USD
+        Name: Sweep
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: SweepCash
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Sweep
+    type: Sweep
+  LifeEvents: []
+CapitalGain:
+  Rules:
+  - contents:
+      Amount:
+        Amount: 50000
+        Currency: USD
+      ToTradeType: Normal
+      FromTradeType: Normal
+      FromAcct: Vanguard
+      DateRange:
+        tag: Between
+        contents:
+        - 2014
+        - 2014
+      ToAcct: Bank
+      Name: Single 50k transfer
+    type: Transfer
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: Sweep
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Sweep:
+        Currency: USD
+        Name: Sweep
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 50000
+                Currency: USD
+              Name: SweepCash
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: CashAsset
+      Vanguard:
+        Currency: USD
+        Name: Vanguard
+        Type: Brokerage
+        Assets:
+        - contents:
+            StockPct: 1
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Investment
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: MixedFund
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Sweep
+    type: Sweep
+  LifeEvents: []
+MortgageDeduction:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 10000
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      house:
+        Currency: USD
+        Name: house
+        Type: PrimaryHome
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 200000
+                Currency: USD
+              Name: house
+              CostBasis:
+                Amount: 200000
+                Currency: USD
+          type: ResidentialRE
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+      MortgageAccount:
+        Currency: USD
+        Name: MortgageAccount
+        Type: Debt
+        Assets:
+        - contents:
+            Years: 30
+            Rate: 5.0e-2
+            Core:
+              Value:
+                Amount: -100000
+                Currency: USD
+              Name: 30 yr Fixed at 5%
+              CostBasis:
+                Amount: -100000
+                Currency: USD
+          type: FixedRateMortgage
+  Sweep:
+    contents:
+      Acct: Bank
+    type: Sweep
+  LifeEvents: []
+CapitalGain_1MM:
+  Rules:
+  - contents:
+      Amount:
+        Amount: 50000
+        Currency: USD
+      ToTradeType: Normal
+      FromTradeType: Normal
+      FromAcct: Vanguard
+      DateRange:
+        tag: Between
+        contents:
+        - 2014
+        - 2014
+      ToAcct: Bank
+      Name: Single 50k transfer
+    type: Transfer
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 83333.33
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Sweep
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Sweep:
+        Currency: USD
+        Name: Sweep
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 50000
+                Currency: USD
+              Name: SweepCash
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: CashAsset
+      Vanguard:
+        Currency: USD
+        Name: Vanguard
+        Type: Brokerage
+        Assets:
+        - contents:
+            StockPct: 1
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Investment
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: MixedFund
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Sweep
+    type: Sweep
+  LifeEvents: []
+Salary1MM:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 83333.33
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+Rental:
+  Rules: []
+  CF:
+    FlowMap:
+      RentalTest:
+        contents:
+          MaxAnnualDeduction:
+            Amount: 2000
+            Currency: USD
+          FlowCore:
+            Amount:
+              Amount: 2500
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: RentalTest
+        type: RentalIncome
+  TaxTrade:
+    contents:
+      Acct: Bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Bank
+    type: Sweep
+  LifeEvents: []
+Salary40k:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 3333.33
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []
+CapitalGain_FundEarnings:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 83333.33
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Vanguard:
+        Currency: USD
+        Name: Vanguard
+        Type: Brokerage
+        Assets:
+        - contents:
+            StockPct: 0.5
+            BondInterest: 2.0e-2
+            DividendYield: 1.0e-2
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Investment
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: MixedFund
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Bank
+    type: Sweep
+  LifeEvents: []
+Salary10k:
+  Rules: []
+  CF:
+    FlowMap:
+      Test:
+        contents:
+          pFlowCore:
+            Amount:
+              Amount: 833.33
+              Currency: USD
+            Frequency: Monthly
+            DateRange:
+              tag: Always
+              contents: []
+            Name: Test
+        type: SalaryPayment
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 0.0
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 0.0
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []

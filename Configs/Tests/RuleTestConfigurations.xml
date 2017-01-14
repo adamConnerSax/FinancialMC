@@ -1,0 +1,37 @@
+<FinancialMC_Configuration>
+
+  <DataSources>
+    <TaxData>
+      <XML>Configs/Tests/ZeroTax.xml</XML>
+    </TaxData>
+    <RateModels>
+      <XML>Configs/Tests/RateModelTest.xml</XML>
+    </RateModels>
+    <FinancialStates>
+      <XML>Configs/Tests/RuleTestFS.xml</XML>
+    </FinancialStates>
+  </DataSources>
+  
+  <Configurations>
+    <Configuration name="SweepTest" financial_state="SweepTest"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="PayFromTest" financial_state="PayFrom Test"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="RequiredDistributionTest" financial_state="RequiredDistributionTest"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="EmergencySellTest" financial_state="EmergencySellTest"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="Zero" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+    
+  </Configurations> 
+</FinancialMC_Configuration>

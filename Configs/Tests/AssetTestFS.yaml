@@ -1,0 +1,283 @@
+GuaranteedFund:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: GuaranteedFund
+    type: TaxTrade
+  BS:
+    AccountMap:
+      GuaranteedFund:
+        Currency: USD
+        Name: GuaranteedFund
+        Type: Brokerage
+        Assets:
+        - contents:
+            Rate: 5.0e-2
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: TestGF
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: GuaranteedFund
+  Sweep:
+    contents:
+      Acct: GuaranteedFund
+    type: Sweep
+  LifeEvents: []
+MortgageFail2:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: Bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Brokerage
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 150000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 150000
+                Currency: USD
+          type: CashAsset
+      MortgageAccount:
+        Currency: USD
+        Name: MortgageAccount
+        Type: Debt
+        Assets:
+        - contents:
+            Years: 30
+            Rate: 5.0e-2
+            Core:
+              Value:
+                Amount: -100000
+                Currency: USD
+              Name: 30yr Fixed at 5%
+              CostBasis:
+                Amount: -100000
+                Currency: USD
+          type: FixedRateMortgage
+  Sweep:
+    contents:
+      Acct: Bank
+    type: Sweep
+  LifeEvents: []
+StockFund:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: MixedFund
+    type: TaxTrade
+  BS:
+    AccountMap:
+      MixedFund:
+        Currency: USD
+        Name: MixedFund
+        Type: Brokerage
+        Assets:
+        - contents:
+            StockPct: 1
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: MixedFund
+  Sweep:
+    contents:
+      Acct: MixedFund
+    type: Sweep
+  LifeEvents: []
+MixedFund:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: MixedFund
+    type: TaxTrade
+  BS:
+    AccountMap:
+      MixedFund:
+        Currency: USD
+        Name: MixedFund
+        Type: Brokerage
+        Assets:
+        - contents:
+            StockPct: 0.5
+            BondInterest: 0.0
+            DividendYield: 0.0
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: MixedFund
+  Sweep:
+    contents:
+      Acct: MixedFund
+    type: Sweep
+  LifeEvents: []
+MortgageSucceed:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: Bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Brokerage
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 200000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 200000
+                Currency: USD
+          type: CashAsset
+      MortgageAccount:
+        Currency: USD
+        Name: MortgageAccount
+        Type: Debt
+        Assets:
+        - contents:
+            Years: 30
+            Rate: 5.0e-2
+            Core:
+              Value:
+                Amount: -100000
+                Currency: USD
+              Name: 30yr Fixed at 5%
+              CostBasis:
+                Amount: -100000
+                Currency: USD
+          type: FixedRateMortgage
+  Sweep:
+    contents:
+      Acct: Bank
+    type: Sweep
+  LifeEvents: []
+MortgageFail1:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: Bank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      house:
+        Currency: USD
+        Name: house
+        Type: PrimaryHome
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: house
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: ResidentialRE
+      Bank:
+        Currency: USD
+        Name: Bank
+        Type: Brokerage
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 50000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 50000
+                Currency: USD
+          type: CashAsset
+      MortgageAccount:
+        Currency: USD
+        Name: MortgageAccount
+        Type: Debt
+        Assets:
+        - contents:
+            Years: 30
+            Rate: 5.0e-2
+            Core:
+              Value:
+                Amount: -100000
+                Currency: USD
+              Name: 30yr Fixed at 5%
+              CostBasis:
+                Amount: -100000
+                Currency: USD
+          type: FixedRateMortgage
+  Sweep:
+    contents:
+      Acct: Bank
+    type: Sweep
+  LifeEvents: []
+Bank:
+  Rules: []
+  CF:
+    FlowMap: {}
+  TaxTrade:
+    contents:
+      Acct: Citibank
+    type: TaxTrade
+  BS:
+    AccountMap:
+      Citibank:
+        Currency: USD
+        Name: Citibank
+        Type: Bank
+        Assets:
+        - contents:
+            Core:
+              Value:
+                Amount: 100000
+                Currency: USD
+              Name: Adam and Pauline
+              CostBasis:
+                Amount: 100000
+                Currency: USD
+          type: CashAsset
+  Sweep:
+    contents:
+      Acct: Citibank
+    type: Sweep
+  LifeEvents: []

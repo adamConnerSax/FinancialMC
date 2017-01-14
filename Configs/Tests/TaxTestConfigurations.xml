@@ -1,0 +1,103 @@
+<FinancialMC_Configuration>
+
+  <DataSources>
+    <TaxData>
+      <XML>Configs/Tests/SimpleTax.xml</XML>
+    </TaxData>
+    <RateModels>
+      <XML>Configs/Tests/RateModelTest.xml</XML>
+    </RateModels>
+    <FinancialStates>
+      <XML>Configs/Tests/TaxTestFS.xml</XML>
+    </FinancialStates>
+  </DataSources>
+  
+  <Configurations>
+
+    <Configuration name="10kTest_FedOnly" financial_state="Salary10k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="40kTest_FedOnly" financial_state="Salary40k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="1MMTest_FedOnly" financial_state="Salary1MM"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="10kTest_NYS" financial_state="Salary10k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="40kTest_NYS" financial_state="Salary40k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="1MMTest_NYS" financial_state="Salary1MM"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="10kTest_NYC" financial_state="Salary10k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="40kTest_NYC" financial_state="Salary40k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="1MMTest_NYC" financial_state="Salary1MM"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="DeductibleExpense" financial_state="DeductibleExpense"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="TaxTrade" financial_state="TaxTrade"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="CapitalGainFedOnly" financial_state="CapitalGain"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="CapitalGainFed+NYS" financial_state="CapitalGain"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="CapitalGainFed+NYS+NYC" financial_state="CapitalGain_1MM"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="CapitalGain_FundEarnings" financial_state="CapitalGain_FundEarnings"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="Rental" financial_state="Rental"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+    <Configuration name="MortgageDeduction" financial_state="MortgageDeduction"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
+    </Configuration>
+
+  </Configurations> 
+</FinancialMC_Configuration>
