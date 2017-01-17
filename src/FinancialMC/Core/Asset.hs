@@ -31,7 +31,6 @@ module FinancialMC.Core.Asset
 import           FinancialMC.Core.MoneyValue    (Currency (..),
                                                  ExchangeRateFunction,
                                                  MoneyValue (..), mCurrency)
---import           FinancialMC.Core.MoneyValueOps (AGroup(..))
 import           FinancialMC.Core.CValued       ((|+|))
 import qualified FinancialMC.Core.CValued       as CV
 import           FinancialMC.Core.Evolve        (Evolvable (..), evolveWithin)
@@ -42,27 +41,15 @@ import           FinancialMC.Core.TradingTypes  (AccountType, TradeApp,
                                                  TradeType)
 
 import           Control.Lens                   (makeClassy, (^.))
---import           Control.Monad                  (liftM)
-
 import           Data.Aeson                     (FromJSON (..), ToJSON (..),
-                                                 genericParseJSON,
-                                                 genericToJSON)
-{-
-import           Data.Aeson.Existential         (EnvFromJSON (..), HasParsers,
-                                                 JSON_Existential (..),
-                                                 TypeNamed (..),
-                                                 existentialToJSON,
-                                                 genericEnvParseJSON,
-                                                 parseJSON_Existential)
--}
+                                                 genericParseJSON,genericToJSON)
 import           Data.Aeson.TH                  (deriveJSON)
 import           Data.Aeson.Types               (Options (fieldLabelModifier),
                                                  defaultOptions)
 import qualified Data.Text                      as T
 
 import           Control.Exception              (SomeException)
---import           Data.Dynamic                   (Dynamic, fromDynamic, toDyn)
---import           Data.Typeable                  (Typeable)
+
 import           GHC.Generics                   (Generic)
 
 data AssetRevaluation = NewValue !MoneyValue | NewBasis !MoneyValue | NewValueAndBasis !MoneyValue !MoneyValue
@@ -133,6 +120,9 @@ type AccountName = T.Text
 
 data Account a = Account { _acName:: !AccountName, _acType:: !AccountType, _acCurrency:: !Currency, _acAssets:: ![a] } deriving (Generic)
 makeClassy ''Account
+
+instance Functor Account where
+  fmap f (Account n t c as) = Account n t c (f <$> as) 
 
 instance ToJSON a=>ToJSON (Account a) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}

@@ -1,7 +1,10 @@
-flags: {}
+resolver: lts-7.15
+#compiler: ghc-8.0.2
 packages:
-- ../aeson-existential
-- .
-extra-deps: []
-resolver: lts-6.13
-
+- location:
+    git: https://github.com/adamConnerSax/aeson-existential
+    commit: b3e4378bf29dc05a116adf43453c764898382ab7
+  extra-dep: true
+- '.'
+extra-deps:
+- hxt-relaxng-9.1.5.5

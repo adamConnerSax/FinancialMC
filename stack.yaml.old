@@ -1,0 +1,7 @@
+flags: {}
+packages:
+- ../aeson-existential
+- .
+extra-deps: []
+resolver: lts-6.13
+
