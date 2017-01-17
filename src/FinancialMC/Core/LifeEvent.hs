@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances  #-}
+{-# LANGUAGE FunctionalDependencies #-}
 module FinancialMC.Core.LifeEvent
        (
          LifeEventName,
@@ -42,33 +43,33 @@ type LifeEventApp a = ResultT (LifeEventOutput a) (ReaderT FinState (ReaderT Fin
 type LifeEventName = T.Text
 
 
-class (IsAsset a,TypeNamed (e a)) => IsLifeEvent e a where
-  lifeEventName::e a->LifeEventName
-  lifeEventYear::e a->Year
-  doLifeEvent::e a->AccountGetter a->LifeEventApp a ()
+class TypeNamed e => IsLifeEvent e where
+  lifeEventName::e->LifeEventName
+  lifeEventYear::e->Year
+  doLifeEvent::(IsAsset a, IsAsset b)=>e->AccountGetter b->LifeEventApp a ()
 
-data LifeEvent a where
-  MkLifeEvent::(IsLifeEvent e a, Show (e a), ToJSON (e a))=>(e a)->LifeEvent a
+data LifeEvent where
+  MkLifeEvent::(IsLifeEvent e, Show e, ToJSON e)=>e->LifeEvent
 
-instance Show a=>Show (LifeEvent a) where
+instance Show LifeEvent where
   show (MkLifeEvent le) = show le
 
-instance TypeNamed (LifeEvent a) where
+instance TypeNamed LifeEvent where
   typeName (MkLifeEvent e) = typeName e
 
-instance IsAsset a=>IsLifeEvent LifeEvent a where
+instance IsLifeEvent LifeEvent where
   lifeEventName (MkLifeEvent e) = lifeEventName e
   lifeEventYear (MkLifeEvent e) = lifeEventYear e
   doLifeEvent (MkLifeEvent e) = doLifeEvent e
 
 
-instance JSON_Existential (LifeEvent a) where
+instance JSON_Existential LifeEvent where
   containedName (MkLifeEvent le) = typeName le
   containedJSON (MkLifeEvent le) = toJSON le
 
-instance ToJSON (LifeEvent a) where
+instance ToJSON LifeEvent where
   toJSON = existentialToJSON
 
-instance HasParsers e (LifeEvent a) => EnvFromJSON e (LifeEvent a) where
+instance HasParsers e LifeEvent => EnvFromJSON e LifeEvent where
   envParseJSON = parseJSON_Existential
 

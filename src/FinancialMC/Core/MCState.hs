@@ -157,7 +157,7 @@ instance Show FSSummary where
                                  ++ "; tax rate=" ++ show (100*tr) ++ "%"  
 
 data MCState a = MCState { _mcsBalanceSheet:: !(BalanceSheet a), _mcsCashFlows:: !CashFlows, 
-                           _mcsLifeEvents:: ![LifeEvent a], _mcsRules:: ![Rule a], _mcsSweep:: !(Rule a), _mcsTaxTrade:: !(Rule a), 
+                           _mcsLifeEvents:: ![LifeEvent a], _mcsRules:: ![Rule], _mcsSweep:: !Rule, _mcsTaxTrade:: !Rule, 
                            _mcsPathSummary:: !PathSummary, _mcsNWHistory:: ![(Year,MoneyValue)], _mcsHistory:: ![(Year,FSSummary)]}
 
 
@@ -182,7 +182,7 @@ instance Show a=>Show (MCState a) where
     "\nHistory: " ++ show history
                                                          
     
-addRule::Rule a->State (MCState a) ()
+addRule::Rule->State (MCState a) ()
 addRule r = do
   rs <- use mcsRules
   mcsRules .= rs++[r] -- NB this is append so do I need to think about ordering?
@@ -244,7 +244,7 @@ grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy
   FlowAccum' inF outF = F.foldr g (FlowAccum' z z) flows
 
 
-makeMCState::BalanceSheet a->CashFlows->FinEnv->[LifeEvent a]->[Rule a]->Rule a->Rule a->MCState a
+makeMCState::BalanceSheet a->CashFlows->FinEnv->[LifeEvent a]->[Rule]->Rule->Rule->MCState a
 makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] [] where
   z = MV.zero  (fe ^. feDefaultCCY)
 

@@ -18,7 +18,7 @@ import qualified FinancialMC.Core.MoneyValueOps as MV
 import qualified FinancialMC.Core.CValued as CV
 import           FinancialMC.Core.CValued ((|+|),(|-|),(|*|),(|/|))
 import FinancialMC.Core.Evolve (Evolvable(..),Evolver,EvolveOutput(EvolveOutput),TaxAmount(..),FlowResult(..))
-import FinancialMC.Core.Asset (IsAsset(..),assetCurrency,assetValue,assetCostBasis,assetName,AssetCore(..),revalueAssetCore,AssetRevaluation(..))
+import FinancialMC.Core.Asset (IsAsset(..),assetCurrency,assetValue,assetCostBasis,AssetCore(..),revalueAssetCore,AssetRevaluation(..))
 import FinancialMC.Core.AssetTrading (defaultNonCapitalAssetBuySellF,defaultAssetBuySellF,liquidateOnlyBuySellF,nullAssetTradeF)
 import FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..))
 import FinancialMC.Core.Rates (RateTable,rateRequest,RateTag(..),InterestType(..),ReturnType(..))
@@ -31,8 +31,8 @@ import Control.Exception (SomeException)
 
 --import Data.Aeson
 import Data.Aeson.TH (deriveJSON)
-import Data.Aeson.Types (fieldLabelModifier,defaultOptions)
-import Data.Aeson.Existential (TypeNamed)
+import Data.Aeson.Types (defaultOptions)
+--import Data.Aeson.Existential (TypeNamed)
 
 import GHC.Generics (Generic)
 
