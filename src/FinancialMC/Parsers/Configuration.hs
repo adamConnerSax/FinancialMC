@@ -46,7 +46,7 @@ import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,
 import           FinancialMC.Core.Rates (RateModel)
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
 import           FinancialMC.Core.Rule (Rule)
-import           FinancialMC.Core.LifeEvent (LifeEvent)
+import           FinancialMC.Core.LifeEvent (IsLifeEvent)
 import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..))
 import           FinancialMC.Parsers.JSON.Utilities (EnumKeyMap(..))
 
@@ -104,8 +104,8 @@ instance FromJSON Unparsed where
   parseJSON (Object v) = parseF v <|> parseS v <|> parseBS v <|> parseLBS v where
     parseF v' = UnparsedFile <$> v' .: "filePath"
     parseS v' = UnparsedString <$> v' .: "string"
-    parseBS v' = UnparsedByteString <$> BC.pack <$> v' .: "byteString" 
-    parseLBS v' = UnparsedLazyByteString <$> LBC.pack <$> v' .: "lazyByteString"
+    parseBS v' = UnparsedByteString . BC.pack <$> v' .: "byteString" 
+    parseLBS v' = UnparsedLazyByteString . LBC.pack <$> v' .: "lazyByteString"
   parseJSON _ = fail "Non-object in parseJSON::Unparsed"
     
 data SourceStructure = Parseable Unparsed Encoding | DBQuery  deriving (Generic,ToJSON,FromJSON)
@@ -156,29 +156,29 @@ instance Monoid ConfigurationInputs where
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
 
-data InitialFS a = InitialFS {ifsBS::BalanceSheet a, 
-                              ifsCF::CashFlows, 
-                              ifsLifeEvents::[LifeEvent a],
-                              ifsRules::[Rule],
-                              ifsSweep::Rule, 
-                              ifsTaxTrade::Rule} deriving (Show,Generic)
+data InitialFS a le = InitialFS {ifsBS::BalanceSheet a, 
+                                 ifsCF::CashFlows, 
+                                 ifsLifeEvents::[le],
+                                 ifsRules::[Rule],
+                                 ifsSweep::Rule, 
+                                 ifsTaxTrade::Rule} deriving (Show,Generic)
                            
 
 
-instance ToJSON a=>ToJSON (InitialFS a) where
+instance (ToJSON a, ToJSON le)=>ToJSON (InitialFS a le) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance (FromJSON a,EnvFromJSON e (BalanceSheet a),
+instance (FromJSON a, FromJSON le, EnvFromJSON e le,
+          EnvFromJSON e (BalanceSheet a),
           EnvFromJSON e CashFlows,
-          EnvFromJSON e (LifeEvent a),
-          EnvFromJSON e Rule) => EnvFromJSON e (InitialFS a) where
+          EnvFromJSON e Rule) => EnvFromJSON e (InitialFS a le) where
   envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
                  
-type IFSMap a = M.Map String (InitialFS a)
+type IFSMap a le = M.Map String (InitialFS a le)
 
 
-getFinancialState::IFSMap a->String->Maybe (InitialFS a)
+getFinancialState::IFSMap a le->String->Maybe (InitialFS a le)
 getFinancialState ifsm name = M.lookup name ifsm
 
 type RateModels = M.Map String RateModel
@@ -265,24 +265,25 @@ mergeTaxStructures (TaxStructure fedN stateN cityN) = do
 
   
 
-data LoadedModels a = LoadedModels {  _lmFS::IFSMap a, _lmRM::RateModels, _lmTax::TaxStructure }
+data LoadedModels a le = LoadedModels {  _lmFS::IFSMap a le, _lmRM::RateModels, _lmTax::TaxStructure }
 
 Lens.makeClassy ''LoadedModels
 
 
-data ModelConfiguration a = ModelConfiguration { _mcfgInitialFS::InitialFS a,
-                                                 _mcfgStartingRM::RateModel,
-                                                 _mcfgRateModel::RateModel,
-                                                 _mcfgTaxRules::TaxRules,
-                                                 _mcfgYear::Year,
-                                                 _mcfgCCY::Currency } deriving (Generic)
+data ModelConfiguration a le = ModelConfiguration { _mcfgInitialFS::InitialFS a le,
+                                                    _mcfgStartingRM::RateModel,
+                                                    _mcfgRateModel::RateModel,
+                                                    _mcfgTaxRules::TaxRules,
+                                                    _mcfgYear::Year,
+                                                    _mcfgCCY::Currency } deriving (Generic)
 
 Lens.makeClassy ''ModelConfiguration
 
-instance ToJSON a => ToJSON (ModelConfiguration a) where
+instance (ToJSON le, ToJSON a) => ToJSON (ModelConfiguration a le) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
-instance (FromJSON a, EnvFromJSON e (InitialFS a),EnvFromJSON e RateModel,EnvFromJSON e TaxRules) => EnvFromJSON e (ModelConfiguration a) where
+instance (FromJSON a, FromJSON le, EnvFromJSON e (InitialFS a le),
+          EnvFromJSON e RateModel,EnvFromJSON e TaxRules) => EnvFromJSON e (ModelConfiguration a le) where
   envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 5}
 
 data SimConfiguration = SimConfiguration { _scfgYears::Int

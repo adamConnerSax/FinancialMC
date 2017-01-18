@@ -10,6 +10,7 @@ module FinancialMC.Core.Analysis
 
 import FinancialMC.Core.MCState (FSSummary(..),HasFSSummary(..),netWorthBreakout)
 import FinancialMC.Core.MoneyValue (MoneyValue(..),HasMoneyValue(..))
+import FinancialMC.Core.LifeEvent (IsLifeEvent)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 
 import FinancialMC.Core.Engine (execOnePathPure)
@@ -34,7 +35,7 @@ psToNumber::PathSummary->Double
 psToNumber (FinalNW mv) = mv ^. mAmount 
 psToNumber (ZeroNW _) = 0
 
-getHistory::CombinedState->[(Year,FSSummary)]
+getHistory::CombinedState a le->[(Year,FSSummary)]
 getHistory cs = cs ^. csMC.mcsHistory  
 
 sortSummaries::[(PathSummary,a)]->[(PathSummary,a)]     
@@ -46,15 +47,16 @@ qIndices len quantiles = map (\n-> (2*n - 1)*len `div` (2 * quantiles)) [1..quan
 qSubSet::[Int]->[a]->[a]
 qSubSet is xs = map (\n -> xs !! n) is
 
-historiesFromSummaries::[(PathSummary,Word64)]->(FinEnv,CombinedState)->Bool->Int->Int->
-                        (Either SomeException) ([[(Year,MoneyValue)]],[(Year,FSSummary)])
-historiesFromSummaries summaries (fe0,cs0) singleThreaded quantiles years = do
+historiesFromSummaries::IsLifeEvent le=>
+  (AssetType le->a)->[(PathSummary,Word64)]->(FinEnv,CombinedState a le)->Bool->Int->Int->
+  (Either SomeException) ([[(Year,MoneyValue)]],[(Year,FSSummary)])
+historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles years = do
   let year0 = fe0 ^. feCurrentDate
       nw0 = netWorth cs0 fe0
       sorted = sortSummaries summaries
       (_,medianSeed) = sorted !! (length sorted `div` 2)
       csHist = cs0 & (csNeedHistory .~ True)
-      getH seed = (getHistory . fst) <$> execOnePathPure csHist fe0 seed years 
+      getH seed = (getHistory . fst) <$> execOnePathPure convertLE csHist fe0 seed years 
       getNW::[(Year,FSSummary)]->[(Year,MoneyValue)]
       getNW x = (year0,nw0):map (\(d,FSSummary nw _ _ _ _ _)->(d,nw)) x
       inds = qIndices (length sorted) quantiles
@@ -75,7 +77,7 @@ summariesToHistogram summaries numBins =
   let nws = V.fromList $ map (\(x,_)->psToNumber x) summaries
   in histogram numBins  nws 
 
-initialSummary::CombinedState->FinEnv->(Year,FSSummary)                     
+initialSummary::CombinedState a le->FinEnv->(Year,FSSummary)                     
 initialSummary cs0 fe0 =
   let nw =  netWorth cs0 fe0
       nwbo = netWorthBreakout cs0 fe0
