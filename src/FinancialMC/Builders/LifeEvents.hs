@@ -1,17 +1,19 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, TemplateHaskell, FlexibleContexts, TypeFamilies #-}
 module FinancialMC.Builders.LifeEvents (
-  BuyProperty(..)
+    BaseLifeEvent(..)
+  , BaseLifeEventDetails(..)
+  , PropertyPurchase(..)
   ) where
 
 import           FinancialMC.Core.MoneyValue (MoneyValue,HasMoneyValue(..),Currency)
 import qualified FinancialMC.Core.CValued as CV
 import           FinancialMC.Core.CValued ((|+|),(|-|))
-import           FinancialMC.Core.Utilities (DateRange(..),Frequency(..),Year)
+import           FinancialMC.Core.Utilities (DateRange(..),Frequency(..))
 import           FinancialMC.Core.Result (appendAndReturn)
-import           FinancialMC.Core.Asset (IsAsset,AssetCore(AssetCore),Account(Account),AccountGetter)
+import           FinancialMC.Core.Asset (AssetCore(AssetCore),Account(Account),AccountGetter)
 import           FinancialMC.Core.Flow  (Flow(MkFlow),FlowCore(FlowCore))
 import           FinancialMC.Core.FinancialStates (HasFinEnv(feExchange),FinEnv)
-import           FinancialMC.Core.LifeEvent (LifeEventName,IsLifeEvent(..),LifeEventApp,LifeEventOutput(LifeEventOutput))
+import           FinancialMC.Core.LifeEvent (LifeEventCore(..),IsLifeEvent(..),LifeEventApp,LifeEventOutput(LifeEventOutput))
 
 import           FinancialMC.Core.TradingTypes (AccountType(PrimaryHome))
 
@@ -24,7 +26,6 @@ import           Control.Monad.Reader (ReaderT)
 
 import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions)
 import           Data.Aeson.TH (deriveJSON)
-import           Data.Aeson.Existential (TypeNamed)
 import qualified Data.Text as T
 import           GHC.Generics (Generic)
 
@@ -32,14 +33,46 @@ import           GHC.Generics (Generic)
 laERMV::(MonadTrans t1, MonadTrans t2, Monad m, Monad (t2 n), n ~ ReaderT FinEnv m)=>Currency->CV.CVD->t1 (t2 (ReaderT FinEnv m)) MoneyValue
 laERMV c a = lift . lift . magnify feExchange $ CV.asERMV c a
 
+
+-- Here we can add new constructors for new types of event (Retirement?  Child?)
+data BaseLifeEventDetails = BuyProperty PropertyPurchase deriving (Generic)
+{- $(deriveJSON defaultOptions ''BaseLifeEventDetails) -}
+
+
+data BaseLifeEvent = BaseLifeEvent { leCore::LifeEventCore,  leDetails::BaseLifeEventDetails } deriving (Generic)
+{- -$(deriveJSON defaultOptions{fieldLabelModifier = drop 2} ''BaseLifeEvent)  -}
+
+
 -- purchase real estate and take out a mortgage.  
 -- Creates an account to house the real estate asset as well as the mortgage.
 
---data FMCBaseLifeEvent = FMCBaseLifeEvent 
+-- I split this out so I could keep the field names without putting them in a sum type
+data PropertyPurchase = PropertyPurchase { ppPropertyName:: !T.Text,
+                                           ppPropertyValue:: !MoneyValue,
+                                           ppDownPayment:: !MoneyValue,
+                                           ppCostsInCash:: !MoneyValue,
+                                           ppCostsInMortgage:: !MoneyValue,
+                                           ppMortgageRate:: !Double,
+                                           ppMortgageTerm:: !Int,
+                                           ppAnnualInsurance:: !MoneyValue,
+                                           ppAnnualTax:: !MoneyValue,
+                                           ppAnnualMaintenance:: !MoneyValue
+                                         } deriving (Generic)
+
+$(deriveJSON defaultOptions{fieldLabelModifier = drop 2} ''PropertyPurchase)  
+
+instance IsLifeEvent BaseLifeEvent where
+  type AssetType BaseLifeEvent = FMCBaseAsset
+  lifeEventCore (BaseLifeEvent lec _) = lec
+  doLifeEvent ble@(BaseLifeEvent lec (BuyProperty pp)) = buyProperty lec pp
+
+
+instance Show BaseLifeEvent where
+  show (BaseLifeEvent lec (BuyProperty pp)) = printPropertyPurchase lec pp
 
 -- should this get fixed to run underneath ResultT until the end?
-buyProperty::IsAsset a=>BuyProperty -> (FMCBaseAsset -> a) ->AccountGetter a->LifeEventApp a ()
-buyProperty (BuyProperty y name pName pValue downPmt cashC finC rate term ins tax maint) convert _ = do
+buyProperty::LifeEventCore ->PropertyPurchase -> (FMCBaseAsset -> a) ->AccountGetter a->LifeEventApp a ()
+buyProperty (LifeEventCore name y) (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint) convert _ = do
   let propertyA = convert $ FMCBaseAsset (AssetCore pName pValue pValue) ResidentialRE
       ccy = pValue ^. mCurrency
       borrowedF val dp c = CV.cvNegate (val |-| dp |+| c)
@@ -54,41 +87,21 @@ buyProperty (BuyProperty y name pName pValue downPmt cashC finC rate term ins ta
   appendAndReturn (LifeEventOutput [pAccount] [cashExpense,insExpense,taxExpense,maintExpense]) ()
 
 
-data BuyProperty = BuyProperty { bpYear:: !Year, 
-                                 bpName:: !LifeEventName,
-                                 bpPropertyName:: !T.Text,
-                                 bpPropertyValue:: !MoneyValue,
-                                 bpDownPayment:: !MoneyValue,
-                                 bpCostsInCash:: !MoneyValue,
-                                 bpCostsInMortgage:: !MoneyValue,
-                                 bpMortgageRate:: !Double,
-                                 bpMortgageTerm:: !Int,
-                                 bpAnnualInsurance:: !MoneyValue,
-                                 bpAnnualTax:: !MoneyValue,
-                                 bpAnnualMaintenance:: !MoneyValue
-                               } deriving (Generic)
-                
-instance Show BuyProperty where
-  show (BuyProperty y n pn pv dp cic cim mr mt ins tax maint) = "BuyProperty (" ++ show n ++ "): In " ++ show y ++ ", buy " 
-                                                  ++ show pn ++ " for " ++ show pv ++ ", putting " 
-                                                  ++ show dp ++ " down and financing the remainder with a " 
-                                                  ++ show (100*mr) ++ "%/" ++ show mt ++ " year mortgage. " ++ show cic
-                                                  ++ " in costs will be paid in cash and " ++ show cim 
-                                                  ++ " in costs will be rolled into mortgage."
-                                                  ++ " Taxes=" ++ show tax ++ "/yr; "
-                                                  ++ "insurance=" ++ show ins ++ "/yr; " 
-                                                  ++ "maintenance=" ++ show maint ++ "/yr"
+    
+printPropertyPurchase::LifeEventCore->PropertyPurchase->String
+printPropertyPurchase (LifeEventCore n y) (PropertyPurchase pn pv dp cic cim mr mt ins tax maint) =
+  "BuyProperty (" ++ show n ++ "): In " ++ show y ++ ", buy " 
+  ++ show pn ++ " for " ++ show pv ++ ", putting " 
+  ++ show dp ++ " down and financing the remainder with a " 
+  ++ show (100*mr) ++ "%/" ++ show mt ++ " year mortgage. " ++ show cic
+  ++ " in costs will be paid in cash and " ++ show cim 
+  ++ " in costs will be rolled into mortgage."
+  ++ " Taxes=" ++ show tax ++ "/yr; "
+  ++ "insurance=" ++ show ins ++ "/yr; " 
+  ++ "maintenance=" ++ show maint ++ "/yr"
                                                  
 
-
-instance TypeNamed BuyProperty
-  
-instance IsLifeEvent BuyProperty where
-  type AssetType BuyProperty = FMCBaseAsset
-  lifeEventName (BuyProperty _ n _ _ _ _ _ _ _ _ _ _) = n
-  lifeEventYear (BuyProperty y _ _ _ _ _ _ _ _ _ _ _) = y
-  doLifeEvent = buyProperty
   
 
-$(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''BuyProperty)  
+
 

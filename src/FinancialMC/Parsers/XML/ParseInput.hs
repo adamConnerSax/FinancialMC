@@ -16,6 +16,9 @@ import FinancialMC.Parsers.XML.ParseTax (loadTaxDataFromFile,emptyTaxStructure)
 import FinancialMC.Parsers.XML.ParseRateModel (loadRateModelsFromFile)
 import FinancialMC.Parsers.XML.ParseFinancialState  (loadFinancialStatesFromFile)
 
+import FinancialMC.Builders.Assets (FMCBaseAsset)
+import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
+
 import FinancialMC.Parsers.XML.Utilities (atTag,readAttrValue,getAttrValueIf,readAttrValueDef,parseXML,runFMCX,FMCXmlArrow)
 
 import Text.XML.HXT.Core (getAttrValue,returnA,XmlTree,listA,returnA,(>>>),getText,getChildren)
@@ -61,7 +64,7 @@ getConfigurations = atTag "Configurations" >>>
     returnA -< M.fromList configs
 
 
-loadConfigurations'::Maybe String->FilePath->IO (C.LoadedModels,C.ModelDescriptionMap) 
+loadConfigurations'::Maybe String->FilePath->IO (C.LoadedModels FMCBaseAsset BaseLifeEvent,C.ModelDescriptionMap) 
 loadConfigurations' mSchema path = do
   let configXML = parseXML path
   result <- runFMCX (configXML >>> getXMLDataSources)

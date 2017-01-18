@@ -8,8 +8,10 @@
 module FinancialMC.Core.LifeEvent
        (
          LifeEventName
---       ,  LifeEvent(..)
+       , LifeEventCore(..)
        , IsLifeEvent(..)
+       , lifeEventName
+       , lifeEventYear
        , LifeEventOutput(..)
        , LifeEventApp
        ) where
@@ -43,13 +45,19 @@ type LifeEventName = T.Text
  The alternative would be to create the LifeEvent with return-type flexibility somehow
 -}
 
---data LifeEventCore = LifeEventCore { leName::!T.Text, leYear::!Year }
+data LifeEventCore = LifeEventCore { leName :: !T.Text, leYear :: !Year }
 
 class IsLifeEvent e where
   type AssetType e :: *
-  lifeEventName::e->LifeEventName
-  lifeEventYear::e->Year
+  lifeEventCore::e->LifeEventCore                    
   doLifeEvent::IsAsset a=>e->(AssetType e->a)->AccountGetter a->LifeEventApp a ()
+
+lifeEventName::IsLifeEvent e=>e->LifeEventName
+lifeEventName = leName . lifeEventCore
+
+lifeEventYear::IsLifeEvent e=>e->Year
+lifeEventYear = leYear . lifeEventCore
+
 
 {-
 data LifeEvent where

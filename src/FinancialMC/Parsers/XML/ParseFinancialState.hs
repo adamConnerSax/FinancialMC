@@ -15,6 +15,9 @@ import FinancialMC.Parsers.XML.Flow (getCashFlows)
 import FinancialMC.Parsers.XML.LifeEvent (getLifeEvents)
 import FinancialMC.Parsers.XML.Rule (getRules,getSweepRule,getTaxTradeRule)
 
+import FinancialMC.Builders.Assets (FMCBaseAsset)
+import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
+
 import Text.XML.HXT.Core (withRemoveWS,yes,readString,IOSLA,XIOState,XmlTree,(>>>),getAttrValue,returnA)
 import Control.Monad.State.Strict (StateT,lift,MonadTrans,MonadState,get,put)
 
@@ -23,18 +26,18 @@ import qualified Data.Map as M
 
 
 
-loadFinancialStatesFromFile::Maybe FilePath->FilePath->StateT IFSMap IO ()
+loadFinancialStatesFromFile::Maybe FilePath->FilePath->StateT (IFSMap FMCBaseAsset BaseLifeEvent) IO ()
 loadFinancialStatesFromFile mSchemaDir file = 
   lift (readFile file) >>= loadFinancialStatesFromString mSchemaDir
 
-loadFinancialStatesFromString::Maybe FilePath->String->StateT IFSMap IO () 
+loadFinancialStatesFromString::Maybe FilePath->String->StateT (IFSMap FMCBaseAsset BaseLifeEvent) IO () 
 loadFinancialStatesFromString mSchemaDir content = do
   let opts = buildOpts mSchemaDir [withRemoveWS yes] "FinancialStates.rng"
   let xml = readString opts content
   loadFinancialStates' xml
   
 
-loadFinancialStates'::(MonadTrans t, MonadState IFSMap (t IO)) =>
+loadFinancialStates'::(MonadTrans t, MonadState (IFSMap FMCBaseAsset BaseLifeEvent) (t IO)) =>
                       IOSLA (XIOState XmlParseInfos) XmlTree XmlTree -> t IO ()
 loadFinancialStates' xml = do  
   pfm <- get
@@ -45,7 +48,7 @@ loadFinancialStates' xml = do
   put result
 
     
-getPersonalFinances::FMCXmlArrow XmlTree (String,InitialFS)                 
+getPersonalFinances::FMCXmlArrow XmlTree (String,InitialFS FMCBaseAsset BaseLifeEvent)                 
 getPersonalFinances = atTag "PersonalFinances" >>>
   proc l -> do
     name <- getAttrValue "name" -< l

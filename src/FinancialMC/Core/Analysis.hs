@@ -10,7 +10,8 @@ module FinancialMC.Core.Analysis
 
 import FinancialMC.Core.MCState (FSSummary(..),HasFSSummary(..),netWorthBreakout)
 import FinancialMC.Core.MoneyValue (MoneyValue(..),HasMoneyValue(..))
-import FinancialMC.Core.LifeEvent (IsLifeEvent)
+import FinancialMC.Core.LifeEvent (IsLifeEvent(..))
+import FinancialMC.Core.Asset (IsAsset)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 
 import FinancialMC.Core.Engine (execOnePathPure)
@@ -47,7 +48,7 @@ qIndices len quantiles = map (\n-> (2*n - 1)*len `div` (2 * quantiles)) [1..quan
 qSubSet::[Int]->[a]->[a]
 qSubSet is xs = map (\n -> xs !! n) is
 
-historiesFromSummaries::IsLifeEvent le=>
+historiesFromSummaries::(IsAsset a,Show a,IsLifeEvent le)=>
   (AssetType le->a)->[(PathSummary,Word64)]->(FinEnv,CombinedState a le)->Bool->Int->Int->
   (Either SomeException) ([[(Year,MoneyValue)]],[(Year,FSSummary)])
 historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles years = do
@@ -77,7 +78,7 @@ summariesToHistogram summaries numBins =
   let nws = V.fromList $ map (\(x,_)->psToNumber x) summaries
   in histogram numBins  nws 
 
-initialSummary::CombinedState a le->FinEnv->(Year,FSSummary)                     
+initialSummary::IsAsset a=>CombinedState a le->FinEnv->(Year,FSSummary)                     
 initialSummary cs0 fe0 =
   let nw =  netWorth cs0 fe0
       nwbo = netWorthBreakout cs0 fe0

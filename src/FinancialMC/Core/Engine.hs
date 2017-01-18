@@ -27,7 +27,7 @@ import FinancialMC.Core.MCState (CombinedState,HasCombinedState(..),HasMCState(.
                                 computeFlows,summarize,evolveMCS,addFlow,getAccount,insertAccount)
 
 import           FinancialMC.Core.Rule (Rule,IsRule(..),RuleOutput(..),RuleWhen(..))
-import           FinancialMC.Core.LifeEvent (IsLifeEvent(..),LifeEventOutput(..))
+import           FinancialMC.Core.LifeEvent (IsLifeEvent(..),lifeEventYear,lifeEventName,LifeEventOutput(..))
 import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),HasMoneyValue(..),ExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Tax (updateTaxRules,carryForwardTaxData,fullTaxCV,TaxData)
@@ -86,7 +86,7 @@ execOnePathPure convertLE cs fe seed years = do
   let newSource = pureMT seed
   execPathApp (doPath convertLE newSource years) cs fe
   
-doPaths::(IsLifeEvent le, Show le, IsAsset a, Show a)=>
+doPaths::(IsLifeEvent le, IsAsset a, Show a)=>
          (AssetType le->a)->CombinedState a le->FinEnv->Bool->PureMT->Int->Int->Either SomeException [(PathSummary,Word64)]
 doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do  
   let seeds =  getNSeeds pMT paths
