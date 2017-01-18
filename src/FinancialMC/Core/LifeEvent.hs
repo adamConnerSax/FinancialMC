@@ -42,8 +42,11 @@ type LifeEventName = T.Text
  This Seems bad, maybe.
  The alternative would be to create the LifeEvent with return-type flexibility somehow
 -}
+
+--data LifeEventCore = LifeEventCore { leName::!T.Text, leYear::!Year }
+
 class IsLifeEvent e where
-  data AssetType e :: *
+  type AssetType e :: *
   lifeEventName::e->LifeEventName
   lifeEventYear::e->Year
   doLifeEvent::IsAsset a=>e->(AssetType e->a)->AccountGetter a->LifeEventApp a ()
