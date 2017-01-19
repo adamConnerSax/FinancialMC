@@ -4,8 +4,10 @@ module FinancialMC.Parsers.Configuration
        (
          ParseException(..),
          ModelDescription(..),
-         ModelConfiguration(..),HasModelConfiguration(..), 
-         SimConfiguration(..),HasSimConfiguration(..),
+         ModelConfiguration(..),
+         HasModelConfiguration(..), 
+         SimConfiguration(..),
+         HasSimConfiguration(..),
          LoadedModels(LoadedModels),
          HasLoadedModels(..),
          Encoding(..),
@@ -19,6 +21,8 @@ module FinancialMC.Parsers.Configuration
          DataSource(..),
          ModelDescriptionMap,
          ConfigurationInputs(..),
+         FMCComponentConverters(..),
+         FMCConvertible(..),
          InitialFS(..),
          IFSMap,
          getFinancialState,
@@ -155,6 +159,10 @@ instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
+data FMCComponentConverters ab a leb le = FMCComponentConverters { assetConverter::(ab->a), lifeEventConverter::(leb->le) }
+
+class FMCConvertible f where
+  convert::FMCComponentConverters ab a leb le->f ab leb->f a le
 
 data InitialFS a le = InitialFS {ifsBS::BalanceSheet a, 
                                  ifsCF::CashFlows, 
@@ -163,7 +171,9 @@ data InitialFS a le = InitialFS {ifsBS::BalanceSheet a,
                                  ifsSweep::Rule, 
                                  ifsTaxTrade::Rule} deriving (Show,Generic)
                            
-
+instance FMCConvertible InitialFS where
+  convert (FMCComponentConverters convertA convertLE) (InitialFS bs cfs les rs sw tax) =
+    InitialFS (convertA <$> bs) cfs (convertLE <$> les) rs sw tax
 
 instance (ToJSON a, ToJSON le)=>ToJSON (InitialFS a le) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
@@ -279,6 +289,10 @@ data ModelConfiguration a le = ModelConfiguration { _mcfgInitialFS::InitialFS a 
 
 Lens.makeClassy ''ModelConfiguration
 
+
+instance FMCConvertible ModelConfiguration where
+  convert converters (ModelConfiguration ifs srm rm tr y c) = ModelConfiguration (convert converters ifs) srm rm tr y c
+  
 instance (ToJSON le, ToJSON a) => ToJSON (ModelConfiguration a le) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 

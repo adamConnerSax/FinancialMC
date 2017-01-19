@@ -65,6 +65,9 @@ type FlowMap = MyMap FlowName Flow
 data BalanceSheet a = BalanceSheet {_bsAccountMap:: !(AccountMap a) } deriving (Generic)
 makeClassy ''BalanceSheet
 
+instance Functor BalanceSheet where
+  fmap f (BalanceSheet am) = BalanceSheet (fmap f <$> am)
+
 instance Evolvable a=>Evolvable (BalanceSheet a) where
   evolve bs  = evolveWithin bs bsAccountMap    
     
