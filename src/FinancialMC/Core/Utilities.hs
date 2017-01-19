@@ -1,15 +1,25 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass #-}
 module FinancialMC.Core.Utilities 
        (
-         readOnly,multS,multR,
-         note,
-         FMCException(..),eitherToIO,noteM,
-         mapSl,mapMSl,mapSr,buildStringSl,
-         TimeInterval,
-         Frequency(..),
-         frequencyMultiplier,
-         Year,
-         DateRange(..),between
+         readOnly
+       , multS
+       , multR
+       , note
+       , FMCException(..)
+       , eitherToIO
+       , noteM
+       , mapSl
+       , mapMSl
+       , mapSr
+       , buildStringSl
+       , TimeInterval
+       , Frequency(..)
+       , frequencyMultiplier
+       , Year
+       , DateRange(..)
+       , between
+       , FMCComponentConverters(..)
+       , FMCConvertible(..)
        ) where
 
 import Control.Error (note)
@@ -103,6 +113,16 @@ between day (Only e) = day == e
 between day (Between s e) = (s <= day) && (day <= e)  
 between _ Never = False
 
+
+data FMCComponentConverters ab a leb le  =
+  FMCComponentConverters
+  {
+    assetF::(ab->a),
+    lifeEventF::(leb->le)
+  }
+
+class FMCConvertible f where
+  fmcMap::FMCComponentConverters ab a leb le->f ab leb->f a le
 
 
 --class TypeNamed a where

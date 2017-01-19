@@ -9,6 +9,7 @@ module FinancialMC.Parsers.XML.ParseFinancialState
 
 
 import FinancialMC.Parsers.Configuration (InitialFS(..),IFSMap)
+import FinancialMC.Core.Utilities (FMCComponentConverters(..),FMCConvertible(..))
 import FinancialMC.Parsers.XML.Utilities (buildOpts,XmlParseInfos,runFMCX,FMCXmlArrow,atTag)
 import FinancialMC.Parsers.XML.Account (getBalanceSheet)
 import FinancialMC.Parsers.XML.Flow (getCashFlows)
@@ -24,26 +25,26 @@ import Control.Monad.State.Strict (StateT,lift,MonadTrans,MonadState,get,put)
 
 import qualified Data.Map as M
 
+type FCC a le = FMCComponentConverters FMCBaseAsset a BaseLifeEvent le
 
+loadFinancialStatesFromFile::FCC a le->Maybe FilePath->FilePath->StateT (IFSMap a le) IO ()
+loadFinancialStatesFromFile fcc mSchemaDir file = 
+  lift (readFile file) >>= loadFinancialStatesFromString fcc mSchemaDir
 
-loadFinancialStatesFromFile::Maybe FilePath->FilePath->StateT (IFSMap FMCBaseAsset BaseLifeEvent) IO ()
-loadFinancialStatesFromFile mSchemaDir file = 
-  lift (readFile file) >>= loadFinancialStatesFromString mSchemaDir
-
-loadFinancialStatesFromString::Maybe FilePath->String->StateT (IFSMap FMCBaseAsset BaseLifeEvent) IO () 
-loadFinancialStatesFromString mSchemaDir content = do
+loadFinancialStatesFromString::FCC a le->Maybe FilePath->String->StateT (IFSMap a le) IO () 
+loadFinancialStatesFromString fcc mSchemaDir content = do
   let opts = buildOpts mSchemaDir [withRemoveWS yes] "FinancialStates.rng"
   let xml = readString opts content
-  loadFinancialStates' xml
+  loadFinancialStates' fcc xml
   
 
-loadFinancialStates'::(MonadTrans t, MonadState (IFSMap FMCBaseAsset BaseLifeEvent) (t IO)) =>
-                      IOSLA (XIOState XmlParseInfos) XmlTree XmlTree -> t IO ()
-loadFinancialStates' xml = do  
+loadFinancialStates'::(MonadTrans t, MonadState (IFSMap a le) (t IO)) =>
+                      FCC a le -> IOSLA (XIOState XmlParseInfos) XmlTree XmlTree -> t IO ()
+loadFinancialStates' fcc xml = do  
   pfm <- get
   pfs <- lift $ runFMCX (xml >>> getPersonalFinances)
 --  mapM_ (\(confName,x)-> lift $ eitherToIO $ validateFinancialState x confName) pfs
-  let f (name,ifs) = M.insert name ifs  
+  let f (name,ifs) = M.insert name (fmcMap fcc ifs)  
       result = foldr f pfm pfs
   put result
 

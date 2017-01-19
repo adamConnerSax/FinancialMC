@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, TemplateHaskell, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module FinancialMC.Builders.LifeEvents (
     BaseLifeEvent(..)
   , BaseLifeEventDetails(..)
@@ -24,8 +26,9 @@ import           Control.Lens (magnify,(^.))
 import           Control.Monad.Trans.Class (MonadTrans,lift)
 import           Control.Monad.Reader (ReaderT)
 
-import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions)
-import           Data.Aeson.TH (deriveJSON)
+import Data.Aeson (genericToJSON, genericParseJSON)
+import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions,FromJSON(..),ToJSON(..))
+import Data.Aeson.Existential (EnvFromJSON)
 import qualified Data.Text as T
 import           GHC.Generics (Generic)
 
@@ -34,14 +37,20 @@ laERMV::(MonadTrans t1, MonadTrans t2, Monad m, Monad (t2 n), n ~ ReaderT FinEnv
 laERMV c a = lift . lift . magnify feExchange $ CV.asERMV c a
 
 
--- Here we can add new constructors for new types of event (Retirement?  Child?)
-data BaseLifeEventDetails = BuyProperty PropertyPurchase deriving (Generic)
-{- $(deriveJSON defaultOptions ''BaseLifeEventDetails) -}
-
 
 data BaseLifeEvent = BaseLifeEvent { leCore::LifeEventCore,  leDetails::BaseLifeEventDetails } deriving (Generic)
-{- -$(deriveJSON defaultOptions{fieldLabelModifier = drop 2} ''BaseLifeEvent)  -}
+instance ToJSON BaseLifeEvent where
+  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2}
+instance FromJSON BaseLifeEvent where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2}
 
+instance EnvFromJSON e BaseLifeEvent
+
+-- Here we can add new constructors for new types of event (Retirement?  Child?)
+data BaseLifeEventDetails = BuyProperty PropertyPurchase deriving (Generic)
+instance ToJSON BaseLifeEventDetails
+instance FromJSON BaseLifeEventDetails
+instance EnvFromJSON e BaseLifeEventDetails
 
 -- purchase real estate and take out a mortgage.  
 -- Creates an account to house the real estate asset as well as the mortgage.
@@ -59,7 +68,14 @@ data PropertyPurchase = PropertyPurchase { ppPropertyName:: !T.Text,
                                            ppAnnualMaintenance:: !MoneyValue
                                          } deriving (Generic)
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 2} ''PropertyPurchase)  
+
+instance ToJSON PropertyPurchase where
+  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2}
+instance FromJSON PropertyPurchase where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2}
+instance EnvFromJSON e PropertyPurchase
+
+
 
 instance IsLifeEvent BaseLifeEvent where
   type AssetType BaseLifeEvent = FMCBaseAsset
@@ -69,6 +85,7 @@ instance IsLifeEvent BaseLifeEvent where
 
 instance Show BaseLifeEvent where
   show (BaseLifeEvent lec (BuyProperty pp)) = printPropertyPurchase lec pp
+
 
 -- should this get fixed to run underneath ResultT until the end?
 buyProperty::LifeEventCore ->PropertyPurchase -> (FMCBaseAsset -> a) ->AccountGetter a->LifeEventApp a ()

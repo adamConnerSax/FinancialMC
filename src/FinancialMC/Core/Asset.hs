@@ -46,6 +46,8 @@ import           Data.Aeson                     (FromJSON (..), ToJSON (..),
 import           Data.Aeson.TH                  (deriveJSON)
 import           Data.Aeson.Types               (Options (fieldLabelModifier),
                                                  defaultOptions)
+import           Data.Aeson.Existential.EnvParser (EnvFromJSON(..),liftToEnv)
+
 import qualified Data.Text                      as T
 
 import           Control.Exception              (SomeException)
@@ -113,7 +115,7 @@ instance HasParsers e Asset => EnvFromJSON e Asset where
   envParseJSON = parseJSON_Existential
 
 safeCastAsset::Typeable a=>Asset->Maybe a
-safeCastAsset (MkAsset a) = fromDynamic $ toDyn a
+safeCastAsset (MkAsset a) = fromDynamic $ toDyn a1
 -}
 
 type AccountName = T.Text
@@ -129,6 +131,11 @@ instance ToJSON a=>ToJSON (Account a) where
 
 instance FromJSON a=>FromJSON (Account a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
+
+-- I don't get why we need this
+-- why doesn't the default instance of EnvParseJSON kick in?
+instance FromJSON a=>EnvFromJSON e (Account a) where
+  envParseJSON = liftToEnv . parseJSON
 
 
 instance Show a=>Show (Account a) where

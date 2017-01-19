@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 --{-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE DeriveGeneric #-}
 module FinancialMC.Core.LifeEvent
        (
          LifeEventName
@@ -27,6 +28,9 @@ import           Control.Exception                (SomeException)
 import           Control.Monad.Reader             (ReaderT)
 import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
+import GHC.Generics (Generic)
+import Data.Aeson (FromJSON(..),ToJSON(..),genericToJSON,genericParseJSON,defaultOptions)
+import Data.Aeson.Types (fieldLabelModifier)
 
 data LifeEventOutput a = LifeEventOutput ![Account a] ![Flow]
 instance Monoid (LifeEventOutput a) where
@@ -45,8 +49,13 @@ type LifeEventName = T.Text
  The alternative would be to create the LifeEvent with return-type flexibility somehow
 -}
 
-data LifeEventCore = LifeEventCore { leName :: !T.Text, leYear :: !Year }
+data LifeEventCore = LifeEventCore { leName :: !T.Text, leYear :: !Year } deriving (Generic)
+instance ToJSON LifeEventCore where
+  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2 }
 
+instance FromJSON LifeEventCore where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2 }
+  
 class IsLifeEvent e where
   type AssetType e :: *
   lifeEventCore::e->LifeEventCore                    

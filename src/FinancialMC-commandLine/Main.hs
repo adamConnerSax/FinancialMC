@@ -1,4 +1,6 @@
-{-# LANGUAGE FlexibleContexts,QuasiQuotes #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 module Main where
 
 import           Control.Lens ((^.))
@@ -22,15 +24,20 @@ import           FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,bui
 
 import           FinancialMC.Base (FinEnv,CombinedState,HasCombinedState(..),HasMCState(..),PathSummary,
                                    FSSummary(..),HasFSSummary(..),LiquidityType(..),
-                                   isZeroNW,netWorth,grossFlows,doPathsIO,doPaths,baseParsers)
+                                   isZeroNW,netWorth,grossFlows,doPathsIO,doPaths,baseParsers,FMCBaseAsset,BaseLifeEvent)
 
 import           FinancialMC.Core.Analysis (nwHistFromSummaries,analyzeBankruptcies,historiesFromSummaries,addReturns)
 import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue))
-import           FinancialMC.Core.Utilities (eitherToIO,Year)
+import           FinancialMC.Core.Utilities (eitherToIO,Year,FMCComponentConverters(..))
+import           FinancialMC.Core.LifeEvent (IsLifeEvent(..))
 
+--import FinancialMC.Builders.Assets (FMCBaseAsset)
+--import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
+ccs::FMCComponentConverters FMCBaseAsset FMCBaseAsset BaseLifeEvent BaseLifeEvent
+ccs = FMCComponentConverters id id
 
-runWithOptions::FinEnv->CombinedState->FinMCOptions->IO [(PathSummary,Word64)]
+runWithOptions::FinEnv->CombinedState FMCBaseAsset BaseLifeEvent->FinMCOptions->IO [(PathSummary,Word64)]
 runWithOptions fe0 cs0 options = do
   let showFS = optShowFinalStates options -- NB: if showFinalStates is true, paths will be run serially rather than in parallel
       logLevels = optLogLevels options
@@ -41,8 +48,8 @@ runWithOptions fe0 cs0 options = do
   src <- srcF (optSeed options)
   let runW x = x cs0 fe0 (optSingleThreaded options) src (optYears options) (optPaths options)
   if needsIO 
-    then runW (doPathsIO logLevels showFS) -- cs0 fe0 singleThreaded src years paths
-    else eitherToIO $ runW doPaths -- cs0 fe0 singleThreaded src years paths    
+    then runW (doPathsIO id logLevels showFS) -- cs0 fe0 singleThreaded src years paths
+    else eitherToIO $ runW (doPaths id) -- cs0 fe0 singleThreaded src years paths    
   
 parseOptions::IO FinMCOptions
 parseOptions = execParser finMCOptionParser
@@ -60,7 +67,7 @@ runAndOutput::Bool->FinMCOptions->IO ()
 runAndOutput doOutput options = do
   let writeIf x = when doOutput $ putStrLn x
   writeIf ("Running configs from " ++ optConfigFile options)    
-  (configInfo,configMap) <- loadConfigurations (optSchemaPath options) baseParsers (C.UnparsedFile (optConfigFile options)) 
+  (configInfo,configMap) <- loadConfigurations ccs (optSchemaPath options) baseParsers (C.UnparsedFile (optConfigFile options)) 
   writeIf ("Loaded " ++ show (M.keys configMap))
   let runConfig::String->IO () 
       runConfig cfgName = do
@@ -81,7 +88,7 @@ runAndOutput doOutput options = do
             strB1 = (show numB ++ " (" ++ printf "%0.2f" pctB ++ "%) paths result in bankruptcy.")
         writeIf strB1
         when (numB > 0) $ writeIf ("Median bankruptcy year=" ++ show (fromJust medianB) ++ "; mode=" ++ show (fromJust modeB)) 
-        (histories,medianHist) <- eitherToIO $ historiesFromSummaries summaries (fe0,cs0) 
+        (histories,medianHist) <- eitherToIO $ historiesFromSummaries id summaries (fe0,cs0) 
                                   (optSingleThreaded options) (optQuantiles options) (optYears options)
         let medianFS = snd (last medianHist)
             mOPath = flip outputPath mOPrefix (optOutPath options)

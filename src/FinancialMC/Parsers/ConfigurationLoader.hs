@@ -1,4 +1,6 @@
-{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module FinancialMC.Parsers.ConfigurationLoader
        (
@@ -21,7 +23,7 @@ import           FinancialMC.Core.Rule (ruleAccounts)
 import qualified FinancialMC.Core.MoneyValue as MV
 import           FinancialMC.Core.Rates (Rate,RateTable,applyModel,defaultRateTable,RateModel)
 import           FinancialMC.Core.Tax (FilingStatus,TaxRules)
-import           FinancialMC.Core.Utilities (noteM,eitherToIO)
+import           FinancialMC.Core.Utilities (noteM,eitherToIO,FMCComponentConverters,FMCConvertible(..))
 import qualified FinancialMC.Parsers.Configuration as C
 import           FinancialMC.Parsers.JSON.BaseTypes (FMC_ParserMaps)
 import           FinancialMC.Parsers.XML.ParseFinancialState (loadFinancialStatesFromString)
@@ -29,6 +31,8 @@ import qualified FinancialMC.Parsers.XML.ParseInput as XML
 import           FinancialMC.Parsers.XML.ParseRateModel (loadRateModelsFromString)
 import           FinancialMC.Parsers.XML.ParseTax (loadTaxDataFromString)
 
+import           FinancialMC.Builders.Assets (FMCBaseAsset)
+import           FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
 import qualified Control.Exception as E
 import           Control.Monad (foldM)
@@ -39,37 +43,40 @@ import           Data.Random.Source.PureMT (pureMT)
 
 import           Control.Lens (zoom,(%=),_1,_2)
 import           Control.Monad.Morph (hoist,lift,generalize)
+import Data.Aeson (FromJSON)
 import           Data.Aeson.Existential.EnvParser (envEitherDecode,envEitherDecodeYaml)
-import           Data.Aeson.Existential (EnvFromJSON)
+import           Data.Aeson.Existential (EnvFromJSON(..))
 
-loadDataSource::Maybe FilePath->FMC_ParserMaps->C.DataSource->StateT (C.LoadedModels a le) IO ()
+type BaseFCC a le = FMCComponentConverters FMCBaseAsset a BaseLifeEvent le 
+type FJ a le = (FromJSON a, FromJSON le, EnvFromJSON FMC_ParserMaps le)
 
-loadDataSource mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.FinancialStateS) = 
-  zoom C.lmFS $ lift (C.asIOString up) >>= loadFinancialStatesFromString mSchemaDir 
+loadDataSource::FJ a le=>BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.DataSource->StateT (C.LoadedModels a le) IO ()
+loadDataSource fcc mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.FinancialStateS) = 
+  zoom C.lmFS $ lift (C.asIOString up) >>= loadFinancialStatesFromString fcc mSchemaDir 
   -- validate!!
 
-loadDataSource mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.TaxStructureS) =
+loadDataSource _ mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.TaxStructureS) =
   zoom C.lmTax $ lift (C.asIOString up) >>= loadTaxDataFromString mSchemaDir
 
-loadDataSource mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.RateModelS) =
+loadDataSource _ mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.RateModelS) =
   zoom C.lmRM $ lift (C.asIOString up) >>= loadRateModelsFromString mSchemaDir
 
-loadDataSource _ pMap (C.DataSource (C.Parseable up encoding) C.FinancialStateS) = do
+loadDataSource _ _ pMap (C.DataSource (C.Parseable up encoding) C.FinancialStateS) = do
   newStates <- lift $ decodeUnparsed pMap up encoding
   mapM_ (\(confName,x)-> lift $ eitherToIO $ validateFinancialState x confName) (M.toList newStates)
   C.lmFS %= M.union newStates
 
-loadDataSource _ pMap (C.DataSource (C.Parseable up encoding) C.RateModelS) = do
+loadDataSource _ _ pMap (C.DataSource (C.Parseable up encoding) C.RateModelS) = do
   newRMs <- lift $ decodeUnparsed pMap up encoding 
   C.lmRM %= M.union newRMs
 
-loadDataSource _ pMap (C.DataSource (C.Parseable up encoding) C.TaxStructureS) = do
+loadDataSource _ _ pMap (C.DataSource (C.Parseable up encoding) C.TaxStructureS) = do
   newTS <- lift $ decodeUnparsed pMap up encoding 
   zoom C.lmTax $ hoist generalize $ C.mergeTaxStructures newTS
 
-loadDataSource _ _ (C.DataSource C.DBQuery _) = lift $ E.throwIO $ BadParse "DBQuery data source not yet implemented!"
+loadDataSource _ _ _ (C.DataSource C.DBQuery _) = lift $ E.throwIO $ BadParse "DBQuery data source not yet implemented!"
 
-loadDataSource _ _ _ = lift $ E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
+loadDataSource _ _ _ _ = lift $ E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
 
 decodeUnparsed::EnvFromJSON FMC_ParserMaps a=>FMC_ParserMaps->C.Unparsed->C.Encoding->IO a
 decodeUnparsed _ _ C.XML = E.throwIO $ BadParse "XML handled specifically! Should not get to decodeUnparsed with an XML source." 
@@ -88,48 +95,54 @@ decodeUnparsed pMap up C.YAML = do
 
 decodeUnparsed _ _ _ = E.throwIO $ BadParse "Fallthrough case in decodeUnparsed." 
 
-loadDataSources::Maybe FilePath->FMC_ParserMaps->[C.DataSource]->StateT (C.LoadedModels a le) IO ()
-loadDataSources mSchemaDir pMap = mapM_ (loadDataSource mSchemaDir pMap) 
+loadDataSources::FJ a le=>
+  BaseFCC a le->Maybe FilePath->FMC_ParserMaps->[C.DataSource]->StateT (C.LoadedModels a le) IO ()
+loadDataSources fcc mSchemaDir pMap = mapM_ (loadDataSource fcc mSchemaDir pMap) 
 
-loadXMLConfigs::Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO () 
-loadXMLConfigs mSchema pMap (C.UnparsedFile fp) = do
+loadXMLConfigs::FJ a le=>
+  BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO () 
+loadXMLConfigs fcc mSchema pMap (C.UnparsedFile fp) = do
   (sources,configM) <- lift $ XML.loadConfigurations mSchema fp
-  zoom _1 $ loadDataSources mSchema pMap sources
+  zoom _1 $ loadDataSources fcc mSchema pMap sources
   hoist generalize $ _2 %= M.union configM 
-loadXMLConfigs _ _ _ = lift $ E.throwIO $ BadParse "loadXMLConfigs called with Unparsed of sort other than UnparsedFile"
+loadXMLConfigs _ _ _ _ = lift $ E.throwIO $ BadParse "loadXMLConfigs called with Unparsed of sort other than UnparsedFile"
 
-loadJSONConfigs::Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO ()
-loadJSONConfigs mSchema pMap up = do
+loadJSONConfigs::FJ a le=>
+  BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO ()
+loadJSONConfigs fcc mSchema pMap up = do
   configLBS <- lift $ C.asIOLazyByteString up
   case envEitherDecode pMap configLBS of
     Left err -> lift $ E.throwIO $ BadParse err
     Right (C.ConfigurationInputs sources configM) -> do
-      zoom _1 $ loadDataSources mSchema pMap sources
+      zoom _1 $ loadDataSources fcc mSchema pMap sources
       hoist generalize $ _2 %= M.union configM 
 
-loadYAMLConfigs::Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO ()
-loadYAMLConfigs mSchema pMap up = do
+loadYAMLConfigs::FJ a le=>
+  BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO ()
+loadYAMLConfigs fcc mSchema pMap up = do
   configBS <- lift $ C.asIOByteString up
   case envEitherDecodeYaml pMap configBS of
     Left err -> lift $ E.throwIO $ BadParse err
     Right (C.ConfigurationInputs sources configM) -> do
-      zoom _1 $ loadDataSources mSchema pMap sources
+      zoom _1 $ loadDataSources fcc mSchema pMap sources
       hoist generalize $ _2 %= M.union configM 
 
-loadConfigurationsS::Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO ()
-loadConfigurationsS mSchemaP pMaps up@(C.UnparsedFile configP) = loadC mSchemaP pMaps up where
+loadConfigurationsS::FJ a le=>
+  BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a le,C.ModelDescriptionMap) IO ()
+loadConfigurationsS fcc mSchemaP pMaps up@(C.UnparsedFile configP) = loadC fcc mSchemaP pMaps up where
   loadC = case C.encodingFromSuffix configP of 
     C.XML -> loadXMLConfigs 
     C.JSON -> loadJSONConfigs 
     C.YAML -> loadYAMLConfigs
-    C.UnkEncoding -> \_ _ _ -> lift $ E.throwIO $ Other "Bad file type specified as config.  Only .xml .json and .yaml supported"
+    C.UnkEncoding -> \_ _ _ _ -> lift $ E.throwIO $ Other "Bad file type specified as config.  Only .xml .json and .yaml supported"
 
-loadConfigurationsS _ _ _ = lift $ E.throwIO $ BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
+loadConfigurationsS _ _ _ _ = lift $ E.throwIO $ BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
 
 
-loadConfigurations::Maybe FilePath->FMC_ParserMaps->C.Unparsed->IO (C.LoadedModels a le,C.ModelDescriptionMap)
-loadConfigurations mSchemaP pMaps up =
-  execStateT (loadConfigurationsS mSchemaP pMaps up) (C.LoadedModels M.empty M.empty C.emptyTaxStructure,M.empty)
+loadConfigurations::FJ a le=>
+  BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->IO (C.LoadedModels a le,C.ModelDescriptionMap)
+loadConfigurations fcc mSchemaP pMaps up =
+  execStateT (loadConfigurationsS fcc mSchemaP pMaps up) (C.LoadedModels M.empty M.empty C.emptyTaxStructure,M.empty)
 
 buildMCState::C.InitialFS a le->FinEnv->MCState a le
 buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs cfs fe les rules sweepR taxTradeR

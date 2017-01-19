@@ -12,6 +12,7 @@ import FinancialMC.Core.MoneyValue (Currency(USD))
 import FinancialMC.Core.Tax (FilingStatus(..))
 
 import qualified FinancialMC.Parsers.Configuration as C
+import FinancialMC.Core.Utilities (FMCComponentConverters(..),FMCConvertible(..))
 import FinancialMC.Parsers.XML.ParseTax (loadTaxDataFromFile,emptyTaxStructure)
 import FinancialMC.Parsers.XML.ParseRateModel (loadRateModelsFromFile)
 import FinancialMC.Parsers.XML.ParseFinancialState  (loadFinancialStatesFromFile)
@@ -64,8 +65,10 @@ getConfigurations = atTag "Configurations" >>>
     returnA -< M.fromList configs
 
 
-loadConfigurations'::Maybe String->FilePath->IO (C.LoadedModels FMCBaseAsset BaseLifeEvent,C.ModelDescriptionMap) 
-loadConfigurations' mSchema path = do
+type FCC a le = FMCComponentConverters FMCBaseAsset a BaseLifeEvent le
+
+loadConfigurations'::FCC a le->Maybe String->FilePath->IO (C.LoadedModels a le,C.ModelDescriptionMap) 
+loadConfigurations' fcc mSchema path = do
   let configXML = parseXML path
   result <- runFMCX (configXML >>> getXMLDataSources)
   let (taxXMLs,rateXMLs,finStateXMLs) = head result
@@ -73,7 +76,7 @@ loadConfigurations' mSchema path = do
       f list load = execStateT (mapM_ load list)
   taxStructure <- f taxXMLs (loadTaxDataFromFile mSchema) emptyTaxStructure
   rateModels <-   f rateXMLs (loadRateModelsFromFile mSchema) M.empty 
-  finStates <-    f finStateXMLs (loadFinancialStatesFromFile mSchema) M.empty
+  finStates <-    f finStateXMLs (loadFinancialStatesFromFile fcc mSchema) M.empty
   configs <- runFMCX (configXML >>> getConfigurations)
   return ((C.LoadedModels finStates rateModels taxStructure),head configs)
 

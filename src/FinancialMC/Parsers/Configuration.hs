@@ -2,45 +2,44 @@
 {-# LANGUAGE TemplateHaskell, ScopedTypeVariables, FunctionalDependencies, OverloadedStrings #-}
 module FinancialMC.Parsers.Configuration
        (
-         ParseException(..),
-         ModelDescription(..),
-         ModelConfiguration(..),
-         HasModelConfiguration(..), 
-         SimConfiguration(..),
-         HasSimConfiguration(..),
-         LoadedModels(LoadedModels),
-         HasLoadedModels(..),
-         Encoding(..),
-         encodingFromSuffix,
-         Unparsed(..),
-         AsIOString(..),
-         AsIOByteString(..),
-         AsIOLazyByteString(..),
-         SourceContents(..),
-         SourceStructure(..),
-         DataSource(..),
-         ModelDescriptionMap,
-         ConfigurationInputs(..),
-         FMCComponentConverters(..),
-         FMCConvertible(..),
-         InitialFS(..),
-         IFSMap,
-         getFinancialState,
-         RateModels,
-         getRateModel,
-         MapByFS,
-         makeFSMap,
-         TaxStructure(..),
-         HasTaxStructure(..),
-         FederalTaxStructure(..),
-         HasFederalTaxStructure(..),
-         StateTaxStructure(..),
-         HasStateTaxStructure(..),      
-         CityTaxStructure(..),
-         HasCityTaxStructure(..),
-         emptyTaxStructure,
-         mergeTaxStructures,
-         makeTaxRules
+         ParseException(..)
+       , ModelDescription(..)
+       , ModelConfiguration(..)
+       ,  HasModelConfiguration(..) 
+       ,  SimConfiguration(..)
+       ,  HasSimConfiguration(..)
+       ,  LoadedModels(LoadedModels)
+       ,  HasLoadedModels(..)
+       ,  Encoding(..)
+       ,  encodingFromSuffix
+       ,  Unparsed(..)
+       ,  AsIOString(..)
+       ,  AsIOByteString(..)
+       ,  AsIOLazyByteString(..)
+       ,  SourceContents(..)
+       ,  SourceStructure(..)
+       ,  DataSource(..)
+       ,  ModelDescriptionMap
+       ,  ConfigurationInputs(..)
+       ,  InitialFS(..)
+       ,  IFSMap
+       ,  convertIFSMap
+       ,  getFinancialState
+       ,  RateModels
+       ,  getRateModel
+       ,  MapByFS
+       ,  makeFSMap
+       ,  TaxStructure(..)
+       ,  HasTaxStructure(..)
+       ,  FederalTaxStructure(..)
+       ,  HasFederalTaxStructure(..)
+       ,  StateTaxStructure(..)
+       ,  HasStateTaxStructure(..)
+       ,  CityTaxStructure(..)
+       ,  HasCityTaxStructure(..)
+       ,  emptyTaxStructure
+       ,  mergeTaxStructures
+       ,  makeTaxRules
        ) where
 
 
@@ -51,7 +50,7 @@ import           FinancialMC.Core.Rates (RateModel)
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
 import           FinancialMC.Core.Rule (Rule)
 import           FinancialMC.Core.LifeEvent (IsLifeEvent)
-import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..))
+import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..),FMCConvertible(..),FMCComponentConverters(..))
 import           FinancialMC.Parsers.JSON.Utilities (EnumKeyMap(..))
 
 import           Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON,object,(.=),(.:),Value(Object))
@@ -159,10 +158,6 @@ instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
-data FMCComponentConverters ab a leb le = FMCComponentConverters { assetConverter::(ab->a), lifeEventConverter::(leb->le) }
-
-class FMCConvertible f where
-  convert::FMCComponentConverters ab a leb le->f ab leb->f a le
 
 data InitialFS a le = InitialFS {ifsBS::BalanceSheet a, 
                                  ifsCF::CashFlows, 
@@ -172,8 +167,8 @@ data InitialFS a le = InitialFS {ifsBS::BalanceSheet a,
                                  ifsTaxTrade::Rule} deriving (Show,Generic)
                            
 instance FMCConvertible InitialFS where
-  convert (FMCComponentConverters convertA convertLE) (InitialFS bs cfs les rs sw tax) =
-    InitialFS (convertA <$> bs) cfs (convertLE <$> les) rs sw tax
+  fmcMap (FMCComponentConverters fA fLE) (InitialFS bs cfs les rs sw tax) =
+    InitialFS (fA <$> bs) cfs (fLE <$> les) rs sw tax
 
 instance (ToJSON a, ToJSON le)=>ToJSON (InitialFS a le) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
@@ -187,6 +182,8 @@ instance (FromJSON a, FromJSON le, EnvFromJSON e le,
                  
 type IFSMap a le = M.Map String (InitialFS a le)
 
+convertIFSMap::FMCComponentConverters ab a leb le->IFSMap ab leb->IFSMap a le
+convertIFSMap ccs ifsm = fmcMap ccs <$> ifsm 
 
 getFinancialState::IFSMap a le->String->Maybe (InitialFS a le)
 getFinancialState ifsm name = M.lookup name ifsm
@@ -291,7 +288,7 @@ Lens.makeClassy ''ModelConfiguration
 
 
 instance FMCConvertible ModelConfiguration where
-  convert converters (ModelConfiguration ifs srm rm tr y c) = ModelConfiguration (convert converters ifs) srm rm tr y c
+  fmcMap converters (ModelConfiguration ifs srm rm tr y c) = ModelConfiguration (fmcMap converters ifs) srm rm tr y c
   
 instance (ToJSON le, ToJSON a) => ToJSON (ModelConfiguration a le) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
