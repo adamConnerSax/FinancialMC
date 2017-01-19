@@ -25,7 +25,8 @@ import           FinancialMC.Parsers.XML.All (loadFinancialStatesFromFile,
                                               loadTaxDataFromFile,emptyTaxStructure)
 import           FinancialMC.Parsers.XML.Utilities (XmlParseInfos,runFMCX,buildOpts)
 
-
+import           FinancialMC.Core.Utilities (FMCComponentConverters(..))
+import           FinancialMC.Base (FMCBaseAsset,BaseLifeEvent)
 
 
 data XmlType = FinStates | RModels | TData | Configs deriving (Show,Enum,Bounded,Ord,Eq)
@@ -104,6 +105,9 @@ loadConfigurationsFromFile mSchemaDir file = do
   loadConfigurations' xml
 --  
 
+ccs::FMCComponentConverters FMCBaseAsset FMCBaseAsset BaseLifeEvent BaseLifeEvent
+ccs = FMCComponentConverters id id
+
 main::IO ()
 main = do
      options <- execParser xmlToJSONOptionParser
@@ -112,7 +116,7 @@ main = do
          parseXml mSchemaDir fileName = do
            let fileType = optFileType options
            jsonPretty <- case fileType of
-             FinStates -> outputTypeToEncoder ot <$> execStateT (loadFinancialStatesFromFile mSchemaDir fileName) M.empty 
+             FinStates -> outputTypeToEncoder ot <$> execStateT (loadFinancialStatesFromFile ccs mSchemaDir fileName) M.empty 
              RModels -> outputTypeToEncoder ot <$> execStateT (loadRateModelsFromFile mSchemaDir fileName) M.empty 
              TData -> outputTypeToEncoder ot <$> execStateT (loadTaxDataFromFile mSchemaDir fileName) emptyTaxStructure
              Configs -> outputTypeToEncoder ot <$> execStateT (loadConfigurationsFromFile mSchemaDir fileName) (C.ConfigurationInputs [] M.empty)

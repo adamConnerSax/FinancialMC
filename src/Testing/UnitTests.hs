@@ -6,31 +6,42 @@ import FinancialMC.Base (CombinedState,HasCombinedState(..),FinEnv,HasFinEnv(..)
                         execOnePathPure)
 
 import FinancialMC.Core.Asset (AccountName)
+import FinancialMC.Core.LifeEvent (IsLifeEvent(..))
 import FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),Currency(USD,EUR),ExchangeRateFunction)
-import FinancialMC.Core.Utilities (FMCException(..),eitherToIO)
+import FinancialMC.Core.Utilities (FMCException(..),eitherToIO,FMCComponentConverters(..))
 import qualified FinancialMC.Core.MoneyValueOps as MV
 
 import qualified FinancialMC.Parsers.Configuration as C
 import FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,buildInitialStateFromConfig)
 import FinancialMC.Parsers.JSON.BaseTypes (baseParsers)
+import FinancialMC.Base (FMCBaseAsset,BaseLifeEvent)
 
 import Distribution.TestSuite (run,TestInstance(TestInstance),Test(Test),Progress(Finished),Result(Pass,Fail),tags,options,name,setOption)
 import Control.Lens ((^.),(&),(.~))
 
 
-type FMCTestF = Int->(CombinedState,FinEnv)->Bool
+type TestAsset = FMCBaseAsset
+type TestLifeEvent = BaseLifeEvent
+
+leConverter::AssetType TestLifeEvent -> TestAsset
+leConverter = id
+
+ccs::FMCComponentConverters FMCBaseAsset TestAsset BaseLifeEvent TestLifeEvent
+ccs = FMCComponentConverters id id
+
+type FMCTestF = Int->(CombinedState TestAsset TestLifeEvent,FinEnv)->Bool
 data FMCTest = FMCTest String FMCTestF
 data FMCTestSet = ConfigTests String [(String,Int,[FMCTest])] |
-                  StateTests  (CombinedState,FinEnv) [(Int,[FMCTest])]
+                  StateTests  (CombinedState TestAsset TestLifeEvent,FinEnv) [(Int,[FMCTest])]
 
 
 notTest::FMCTestF->FMCTestF
 notTest f x y = not $ f x y 
 
-andTest::FMCTestF->FMCTestF->Int->(CombinedState,FinEnv)->Bool
+andTest::FMCTestF->FMCTestF->Int->(CombinedState TestAsset TestLifeEvent,FinEnv)->Bool
 andTest f g x y = f x y && g x y
   
-andTests::[FMCTestF]->Int->(CombinedState,FinEnv)->Bool
+andTests::[FMCTestF]->Int->(CombinedState TestAsset TestLifeEvent,FinEnv)->Bool
 andTests fs x y = not (any not (map (\f -> f x y) fs)) 
 
 almostEqual::Double->Double->Double->Bool
@@ -216,9 +227,9 @@ fails n failMsg = TestInstance
              setOption = \_ _ -> Right $ fails n failMsg}
                        
 
-doTest::String->(CombinedState,FinEnv)->Int->FMCTestF->IO Test
+doTest::String->(CombinedState TestAsset TestLifeEvent,FinEnv)->Int->FMCTestF->IO Test
 doTest testName (cs0,fe0) years f = do 
-  let result = execOnePathPure cs0 fe0 1 years
+  let result = execOnePathPure leConverter cs0 fe0 1 years
   case result of     
     Left e -> do
       putStrLn ("Execution failed.  Error=" ++ show e) 
@@ -230,7 +241,7 @@ doTest testName (cs0,fe0) years f = do
 evalTest::FMCTestSet->IO [Test]
 evalTest (ConfigTests cFile testSets) = do
   putStrLn ("\nRunning tests from config file=" ++ cFile)
-  (configInfo, configMap) <- loadConfigurations Nothing baseParsers (C.UnparsedFile cFile)
+  (configInfo, configMap) <- loadConfigurations ccs Nothing baseParsers (C.UnparsedFile cFile)
   let f (cfgName,years,testl) = do
         (_,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
         let csHist = cs0 & (csNeedHistory .~ True)
