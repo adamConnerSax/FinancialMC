@@ -8,26 +8,26 @@ import FinancialMC.Base (CombinedState,HasCombinedState(..),FinEnv,HasFinEnv(..)
 import FinancialMC.Core.Asset (AccountName)
 import FinancialMC.Core.LifeEvent (IsLifeEvent(..))
 import FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),Currency(USD,EUR),ExchangeRateFunction)
-import FinancialMC.Core.Utilities (FMCException(..),eitherToIO,FMCComponentConverters(..))
+import FinancialMC.Core.Utilities (FMCException(..),eitherToIO)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 
 import qualified FinancialMC.Parsers.Configuration as C
 import FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,buildInitialStateFromConfig)
 import FinancialMC.Parsers.JSON.BaseTypes (baseParsers)
-import FinancialMC.Base (FMCBaseAsset,BaseLifeEvent)
+import FinancialMC.Base (BaseAsset,BaseLifeEvent)
 
 import Distribution.TestSuite (run,TestInstance(TestInstance),Test(Test),Progress(Finished),Result(Pass,Fail),tags,options,name,setOption)
 import Control.Lens ((^.),(&),(.~))
 
 
-type TestAsset = FMCBaseAsset
+type TestAsset = BaseAsset
 type TestLifeEvent = BaseLifeEvent
 
 leConverter::AssetType TestLifeEvent -> TestAsset
 leConverter = id
 
-ccs::FMCComponentConverters FMCBaseAsset TestAsset BaseLifeEvent TestLifeEvent
-ccs = FMCComponentConverters id id
+ccs::C.FMCComponentConverters BaseAsset TestAsset BaseLifeEvent TestLifeEvent
+ccs = C.FMCComponentConverters id id
 
 type FMCTestF = Int->(CombinedState TestAsset TestLifeEvent,FinEnv)->Bool
 data FMCTest = FMCTest String FMCTestF

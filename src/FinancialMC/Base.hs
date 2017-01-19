@@ -11,7 +11,7 @@ module FinancialMC.Base
        , module FinancialMC.Core.Tax
        , module FinancialMC.Core.TradingTypes
        , module FinancialMC.Parsers.JSON.BaseTypes
-       , FMCBaseAsset
+       , BaseAsset
        , BaseLifeEvent
        ) where
 
@@ -28,5 +28,5 @@ import FinancialMC.Core.Utilities (Year,FMCException(..))
 import FinancialMC.Core.MapLike (IsMap(..),IndexedList(..))
 import FinancialMC.Parsers.JSON.BaseTypes (baseParsers,addParser,FMC_ParserMaps)
 
-import FinancialMC.Builders.Assets (FMCBaseAsset)
+import FinancialMC.Builders.Assets (BaseAsset)
 import FinancialMC.Builders.LifeEvents (BaseLifeEvent)

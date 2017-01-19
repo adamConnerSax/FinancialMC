@@ -12,12 +12,11 @@ import FinancialMC.Core.MoneyValue (Currency(USD))
 import FinancialMC.Core.Tax (FilingStatus(..))
 
 import qualified FinancialMC.Parsers.Configuration as C
-import FinancialMC.Core.Utilities (FMCComponentConverters(..),FMCConvertible(..))
 import FinancialMC.Parsers.XML.ParseTax (loadTaxDataFromFile,emptyTaxStructure)
 import FinancialMC.Parsers.XML.ParseRateModel (loadRateModelsFromFile)
 import FinancialMC.Parsers.XML.ParseFinancialState  (loadFinancialStatesFromFile)
 
-import FinancialMC.Builders.Assets (FMCBaseAsset)
+import FinancialMC.Builders.Assets (BaseAsset)
 import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
 import FinancialMC.Parsers.XML.Utilities (atTag,readAttrValue,getAttrValueIf,readAttrValueDef,parseXML,runFMCX,FMCXmlArrow)
@@ -65,7 +64,7 @@ getConfigurations = atTag "Configurations" >>>
     returnA -< M.fromList configs
 
 
-type FCC a le = FMCComponentConverters FMCBaseAsset a BaseLifeEvent le
+type FCC a le = C.FMCComponentConverters BaseAsset a BaseLifeEvent le
 
 loadConfigurations'::FCC a le->Maybe String->FilePath->IO (C.LoadedModels a le,C.ModelDescriptionMap) 
 loadConfigurations' fcc mSchema path = do

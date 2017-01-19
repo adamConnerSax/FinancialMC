@@ -4,10 +4,10 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
-
+{-# LANGUAGE DeriveAnyClass #-}
 module FinancialMC.Builders.Assets (
-  FMCBaseAssetDetails(..)
-  , FMCBaseAsset(..)
+  BaseAssetDetails(..)
+  , BaseAsset(..)
   ) where
 
 import Prelude hiding ((*>),(<*))
@@ -31,7 +31,8 @@ import Control.Exception (SomeException)
 
 --import Data.Aeson
 import Data.Aeson.TH (deriveJSON)
-import Data.Aeson.Types (defaultOptions)
+import Data.Aeson.Types (ToJSON(..),FromJSON(..),defaultOptions,fieldLabelModifier)
+
 --import Data.Aeson.Existential (TypeNamed)
 
 import GHC.Generics (Generic)
@@ -45,16 +46,16 @@ assetCVMult x rate = laERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (a
 liftRates::ReaderT (RateTable Double) (Either SomeException) Double -> ReaderT FinEnv (Either SomeException) Double
 liftRates = magnify feRates
 
-data FMCBaseAssetDetails =
+data BaseAssetDetails =
   CashAsset |
   MixedFund !Double !Double !Double  | -- stockPct divYield bondInterest
   GuaranteedFund !Double  | -- rate
   ResidentialRE |
-  FixedRateMortgage !Double !Int  {- rate years -} deriving (Generic)
+  FixedRateMortgage !Double !Int  {- rate years -} deriving (Generic,ToJSON,FromJSON)
 
-$(deriveJSON defaultOptions ''FMCBaseAssetDetails)  
+{- $(deriveJSON defaultOptions ''FMCBaseAssetDetails) -}
 
-instance Show FMCBaseAssetDetails where
+instance Show BaseAssetDetails where
   show CashAsset = "Cash:"
   show (MixedFund pct sYld bInt) = "Mixed Stock/Bond Fund (" ++ show pct ++ " stock; div yld=" ++ show (100*sYld) 
                                       ++ "%; bond int=" ++ show (100*bInt) ++"%):"
@@ -64,42 +65,42 @@ instance Show FMCBaseAssetDetails where
   show (FixedRateMortgage rate years) = "Mortgage (Fixed " ++ show rate ++ " rate, "  
                                       ++ show years ++ " years):" 
 
-data FMCBaseAsset = FMCBaseAsset !AssetCore !FMCBaseAssetDetails deriving (Generic)
+data BaseAsset = BaseAsset !AssetCore !BaseAssetDetails deriving (Generic,ToJSON,FromJSON)
 
-$(deriveJSON defaultOptions ''FMCBaseAsset)  
+{- $(deriveJSON defaultOptions ''FMCBaseAsset) -}
 
-instance Show FMCBaseAsset where
-  show (FMCBaseAsset (AssetCore n v b) (FixedRateMortgage rate years)) =
+instance Show BaseAsset where
+  show (BaseAsset (AssetCore n v b) (FixedRateMortgage rate years)) =
     show n ++ " (Fixed " ++ show rate ++ " rate, " 
     ++ show years ++ " years mortgage): " 
     ++ show (MV.negate v) 
     ++ " owed of " ++ show (MV.negate b) ++ " borrowed."
 
-  show (FMCBaseAsset ac dets) = show dets ++ " " ++ show ac
+  show (BaseAsset ac dets) = show dets ++ " " ++ show ac
                                         
 
-instance IsAsset FMCBaseAsset where
-  assetCore (FMCBaseAsset ac _) = ac
-  revalueAsset (FMCBaseAsset ac d) x = FMCBaseAsset (revalueAssetCore ac x) d
+instance IsAsset BaseAsset where
+  assetCore (BaseAsset ac _) = ac
+  revalueAsset (BaseAsset ac d) x = BaseAsset (revalueAssetCore ac x) d
 
-  tradeAsset a@(FMCBaseAsset _ CashAsset) = defaultNonCapitalAssetBuySellF a
-  tradeAsset a@(FMCBaseAsset _ ResidentialRE) = liquidateOnlyBuySellF a
-  tradeAsset a@(FMCBaseAsset _ (FixedRateMortgage _ _)) = nullAssetTradeF a
---  tradeAsset a@(FMCBaseAsset _ (MixedFund _ _ _)) = defaultAssetBuySellF a
---  tradeAsset a@(FMCBaseAsset _ (GuaranteedFund _)) = defaultAssetBuySellF
+  tradeAsset a@(BaseAsset _ CashAsset) = defaultNonCapitalAssetBuySellF a
+  tradeAsset a@(BaseAsset _ ResidentialRE) = liquidateOnlyBuySellF a
+  tradeAsset a@(BaseAsset _ (FixedRateMortgage _ _)) = nullAssetTradeF a
+--  tradeAsset a@(BaseAsset _ (MixedFund _ _ _)) = defaultAssetBuySellF a
+--  tradeAsset a@(BaseAsset _ (GuaranteedFund _)) = defaultAssetBuySellF
   tradeAsset a = defaultAssetBuySellF a
 
 
-instance Evolvable FMCBaseAsset where
-  evolve a@(FMCBaseAsset _ CashAsset) = cashEvolveFunction a
-  evolve a@(FMCBaseAsset _ (MixedFund _ _ _)) = mixedFundEvolveFunction a
-  evolve a@(FMCBaseAsset _ (GuaranteedFund _)) = guaranteedFundEvolveFunction a
-  evolve a@(FMCBaseAsset _ ResidentialRE) = residentialREEvolveF a
-  evolve a@(FMCBaseAsset _ (FixedRateMortgage _ _)) = fixedMortgageEvolveFunction a
+instance Evolvable BaseAsset where
+  evolve a@(BaseAsset _ CashAsset) = cashEvolveFunction a
+  evolve a@(BaseAsset _ (MixedFund _ _ _)) = mixedFundEvolveFunction a
+  evolve a@(BaseAsset _ (GuaranteedFund _)) = guaranteedFundEvolveFunction a
+  evolve a@(BaseAsset _ ResidentialRE) = residentialREEvolveF a
+  evolve a@(BaseAsset _ (FixedRateMortgage _ _)) = fixedMortgageEvolveFunction a
 
 -- these functions are almost all partial and definitely only meant to work on one asset detail type.
 -- The Evolvable instance *is* total and these functions won't be exported
-cashEvolveFunction::Evolver FMCBaseAsset 
+cashEvolveFunction::Evolver BaseAsset 
 cashEvolveFunction ca = do
   (interest',v') <- lift $  do
     rate <- magnify feRates $ rateRequest (Interest Savings)
@@ -108,8 +109,8 @@ cashEvolveFunction ca = do
     return (interest,v)
   appendAndReturn (EvolveOutput [OnlyTaxed (TaxAmount NonPayrollIncome interest')] []) (revalueAsset ca (NewValueAndBasis v' v'))
   
-mixedFundEvolveFunction::Evolver FMCBaseAsset  
-mixedFundEvolveFunction mf@(FMCBaseAsset _ (MixedFund fracStock stkYield bondInterest)) = do
+mixedFundEvolveFunction::Evolver BaseAsset  
+mixedFundEvolveFunction mf@(BaseAsset _ (MixedFund fracStock stkYield bondInterest)) = do
   (flows', newA') <- lift $ do
     stockRet <- liftRates $ rateRequest (Return Stock)
     bondRet <- liftRates $ rateRequest (Return Bond)
@@ -126,12 +127,12 @@ mixedFundEvolveFunction mf@(FMCBaseAsset _ (MixedFund fracStock stkYield bondInt
     return (flows, revalueAsset mf (NewValueAndBasis newV newB))    
   appendAndReturn (EvolveOutput flows' []) newA'  
 
-guaranteedFundEvolveFunction::Evolver FMCBaseAsset
-guaranteedFundEvolveFunction gf@(FMCBaseAsset _ (GuaranteedFund rate)) = do
+guaranteedFundEvolveFunction::Evolver BaseAsset
+guaranteedFundEvolveFunction gf@(BaseAsset _ (GuaranteedFund rate)) = do
   v' <- lift $ assetCVMult gf (1.0 + rate)
   returnOnly $! revalueAsset gf (NewValue v')
 
-residentialREEvolveF::Evolver FMCBaseAsset
+residentialREEvolveF::Evolver BaseAsset
 residentialREEvolveF rre = do
   v <- lift $ do 
     ret <- liftRates $ rateRequest (Return RealEstate)
@@ -139,8 +140,8 @@ residentialREEvolveF rre = do
   returnOnly $! revalueAsset rre $ NewValue v
 
 
-fixedMortgageEvolveFunction::Evolver FMCBaseAsset
-fixedMortgageEvolveFunction frm@(FMCBaseAsset _ (FixedRateMortgage rate years)) =  do
+fixedMortgageEvolveFunction::Evolver BaseAsset
+fixedMortgageEvolveFunction frm@(BaseAsset _ (FixedRateMortgage rate years)) =  do
   let ccy = (assetCurrency frm)     
       borrowed' = CV.cvNegate $ CV.fromMoneyValue (assetCostBasis frm)
       curPrincipal' = CV.cvNegate $ CV.fromMoneyValue (assetValue frm)  

@@ -24,20 +24,20 @@ import           FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,bui
 
 import           FinancialMC.Base (FinEnv,CombinedState,HasCombinedState(..),HasMCState(..),PathSummary,
                                    FSSummary(..),HasFSSummary(..),LiquidityType(..),
-                                   isZeroNW,netWorth,grossFlows,doPathsIO,doPaths,baseParsers,FMCBaseAsset,BaseLifeEvent)
+                                   isZeroNW,netWorth,grossFlows,doPathsIO,doPaths,baseParsers,BaseAsset,BaseLifeEvent)
 
 import           FinancialMC.Core.Analysis (nwHistFromSummaries,analyzeBankruptcies,historiesFromSummaries,addReturns)
 import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue))
-import           FinancialMC.Core.Utilities (eitherToIO,Year,FMCComponentConverters(..))
+import           FinancialMC.Core.Utilities (eitherToIO,Year)
 import           FinancialMC.Core.LifeEvent (IsLifeEvent(..))
 
 --import FinancialMC.Builders.Assets (FMCBaseAsset)
 --import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
-ccs::FMCComponentConverters FMCBaseAsset FMCBaseAsset BaseLifeEvent BaseLifeEvent
-ccs = FMCComponentConverters id id
+ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseLifeEvent BaseLifeEvent
+ccs = C.FMCComponentConverters id id
 
-runWithOptions::FinEnv->CombinedState FMCBaseAsset BaseLifeEvent->FinMCOptions->IO [(PathSummary,Word64)]
+runWithOptions::FinEnv->CombinedState BaseAsset BaseLifeEvent->FinMCOptions->IO [(PathSummary,Word64)]
 runWithOptions fe0 cs0 options = do
   let showFS = optShowFinalStates options -- NB: if showFinalStates is true, paths will be run serially rather than in parallel
       logLevels = optLogLevels options
@@ -60,7 +60,6 @@ outputPath Nothing Nothing = Nothing
 outputPath (Just optPath) Nothing = Just optPath
 outputPath Nothing (Just confPrefix) = Just confPrefix
 outputPath (Just optPath) (Just confPrefix) = Just (optPath ++ "/" ++ confPrefix) 
-
 
 
 runAndOutput::Bool->FinMCOptions->IO ()

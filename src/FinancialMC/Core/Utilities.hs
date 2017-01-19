@@ -18,8 +18,6 @@ module FinancialMC.Core.Utilities
        , Year
        , DateRange(..)
        , between
-       , FMCComponentConverters(..)
-       , FMCConvertible(..)
        ) where
 
 import Control.Error (note)

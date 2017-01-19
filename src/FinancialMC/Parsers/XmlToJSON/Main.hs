@@ -25,8 +25,7 @@ import           FinancialMC.Parsers.XML.All (loadFinancialStatesFromFile,
                                               loadTaxDataFromFile,emptyTaxStructure)
 import           FinancialMC.Parsers.XML.Utilities (XmlParseInfos,runFMCX,buildOpts)
 
-import           FinancialMC.Core.Utilities (FMCComponentConverters(..))
-import           FinancialMC.Base (FMCBaseAsset,BaseLifeEvent)
+import           FinancialMC.Base (BaseAsset,BaseLifeEvent)
 
 
 data XmlType = FinStates | RModels | TData | Configs deriving (Show,Enum,Bounded,Ord,Eq)
@@ -105,8 +104,8 @@ loadConfigurationsFromFile mSchemaDir file = do
   loadConfigurations' xml
 --  
 
-ccs::FMCComponentConverters FMCBaseAsset FMCBaseAsset BaseLifeEvent BaseLifeEvent
-ccs = FMCComponentConverters id id
+ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseLifeEvent BaseLifeEvent
+ccs = C.FMCComponentConverters id id
 
 main::IO ()
 main = do

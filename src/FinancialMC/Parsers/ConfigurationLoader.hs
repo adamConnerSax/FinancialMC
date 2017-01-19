@@ -23,7 +23,7 @@ import           FinancialMC.Core.Rule (ruleAccounts)
 import qualified FinancialMC.Core.MoneyValue as MV
 import           FinancialMC.Core.Rates (Rate,RateTable,applyModel,defaultRateTable,RateModel)
 import           FinancialMC.Core.Tax (FilingStatus,TaxRules)
-import           FinancialMC.Core.Utilities (noteM,eitherToIO,FMCComponentConverters,FMCConvertible(..))
+import           FinancialMC.Core.Utilities (noteM,eitherToIO)
 import qualified FinancialMC.Parsers.Configuration as C
 import           FinancialMC.Parsers.JSON.BaseTypes (FMC_ParserMaps)
 import           FinancialMC.Parsers.XML.ParseFinancialState (loadFinancialStatesFromString)
@@ -31,8 +31,7 @@ import qualified FinancialMC.Parsers.XML.ParseInput as XML
 import           FinancialMC.Parsers.XML.ParseRateModel (loadRateModelsFromString)
 import           FinancialMC.Parsers.XML.ParseTax (loadTaxDataFromString)
 
-import           FinancialMC.Builders.Assets (FMCBaseAsset)
-import           FinancialMC.Builders.LifeEvents (BaseLifeEvent)
+import           FinancialMC.Base (BaseAsset,BaseLifeEvent)
 
 import qualified Control.Exception as E
 import           Control.Monad (foldM)
@@ -47,7 +46,7 @@ import Data.Aeson (FromJSON)
 import           Data.Aeson.Existential.EnvParser (envEitherDecode,envEitherDecodeYaml)
 import           Data.Aeson.Existential (EnvFromJSON(..))
 
-type BaseFCC a le = FMCComponentConverters FMCBaseAsset a BaseLifeEvent le 
+type BaseFCC a le = C.FMCComponentConverters BaseAsset a BaseLifeEvent le 
 type FJ a le = (FromJSON a, FromJSON le, EnvFromJSON FMC_ParserMaps le)
 
 loadDataSource::FJ a le=>BaseFCC a le->Maybe FilePath->FMC_ParserMaps->C.DataSource->StateT (C.LoadedModels a le) IO ()

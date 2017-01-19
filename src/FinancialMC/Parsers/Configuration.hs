@@ -5,41 +5,43 @@ module FinancialMC.Parsers.Configuration
          ParseException(..)
        , ModelDescription(..)
        , ModelConfiguration(..)
-       ,  HasModelConfiguration(..) 
-       ,  SimConfiguration(..)
-       ,  HasSimConfiguration(..)
-       ,  LoadedModels(LoadedModels)
-       ,  HasLoadedModels(..)
-       ,  Encoding(..)
-       ,  encodingFromSuffix
-       ,  Unparsed(..)
-       ,  AsIOString(..)
-       ,  AsIOByteString(..)
-       ,  AsIOLazyByteString(..)
-       ,  SourceContents(..)
-       ,  SourceStructure(..)
-       ,  DataSource(..)
-       ,  ModelDescriptionMap
-       ,  ConfigurationInputs(..)
-       ,  InitialFS(..)
-       ,  IFSMap
-       ,  convertIFSMap
-       ,  getFinancialState
-       ,  RateModels
-       ,  getRateModel
-       ,  MapByFS
-       ,  makeFSMap
-       ,  TaxStructure(..)
-       ,  HasTaxStructure(..)
-       ,  FederalTaxStructure(..)
-       ,  HasFederalTaxStructure(..)
-       ,  StateTaxStructure(..)
-       ,  HasStateTaxStructure(..)
-       ,  CityTaxStructure(..)
-       ,  HasCityTaxStructure(..)
-       ,  emptyTaxStructure
-       ,  mergeTaxStructures
-       ,  makeTaxRules
+       , HasModelConfiguration(..) 
+       , SimConfiguration(..)
+       , HasSimConfiguration(..)
+       , LoadedModels(LoadedModels)
+       , HasLoadedModels(..)
+       , Encoding(..)
+       , encodingFromSuffix
+       , Unparsed(..)
+       , AsIOString(..)
+       , AsIOByteString(..)
+       , AsIOLazyByteString(..)
+       , SourceContents(..)
+       , SourceStructure(..)
+       , DataSource(..)
+       , ModelDescriptionMap
+       , ConfigurationInputs(..)
+       , InitialFS(..)
+       , IFSMap
+       , FMCComponentConverters(..)
+       , FMCConvertible(..)
+       , convertIFSMap
+       , getFinancialState
+       , RateModels
+       , getRateModel
+       , MapByFS
+       , makeFSMap
+       , TaxStructure(..)
+       , HasTaxStructure(..)
+       , FederalTaxStructure(..)
+       , HasFederalTaxStructure(..)
+       , StateTaxStructure(..)
+       , HasStateTaxStructure(..)
+       , CityTaxStructure(..)
+       , HasCityTaxStructure(..)
+       , emptyTaxStructure
+       , mergeTaxStructures
+       , makeTaxRules
        ) where
 
 
@@ -50,7 +52,7 @@ import           FinancialMC.Core.Rates (RateModel)
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
 import           FinancialMC.Core.Rule (Rule)
 import           FinancialMC.Core.LifeEvent (IsLifeEvent)
-import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..),FMCConvertible(..),FMCComponentConverters(..))
+import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..))
 import           FinancialMC.Parsers.JSON.Utilities (EnumKeyMap(..))
 
 import           Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON,object,(.=),(.:),Value(Object))
@@ -83,7 +85,11 @@ data ModelDescription = ModelDescription { mdFinState::String,
                                            mdRates::(String,String),
                                            mdTax::(FilingStatus,String,String,Maybe String) } deriving (Show,Generic)
 
-$(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ModelDescription)
+instance ToJSON ModelDescription where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 2}
+instance FromJSON ModelDescription where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2}
+{- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ModelDescription) -}
 
 data Encoding = XML | JSON | YAML | UnkEncoding deriving (Generic,ToJSON,FromJSON)
 
@@ -144,19 +150,39 @@ instance AsIOLazyByteString Unparsed where
 data SourceContents = FinancialStateS | RateModelS | TaxStructureS deriving (Generic,ToJSON,FromJSON)
 data DataSource = DataSource { dsStructure::SourceStructure, dsContents::SourceContents } deriving (Generic)
 
-$(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''DataSource)
+instance ToJSON DataSource where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 2}
+instance FromJSON DataSource where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2} 
+
+{- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''DataSource) -}
 
 type ModelDescriptionMap = M.Map String ModelDescription
 
 data ConfigurationInputs = ConfigurationInputs { ciDataSources::[DataSource], ciModelDescriptions::ModelDescriptionMap } deriving (Generic)
 
-$(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ConfigurationInputs)
+instance ToJSON ConfigurationInputs where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 2}
+instance FromJSON ConfigurationInputs where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2}
+
+{- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ConfigurationInputs) -}
 
 instance EnvFromJSON e ConfigurationInputs
 
 instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
+
+data FMCComponentConverters ab a leb le  =
+  FMCComponentConverters
+  {
+    assetF::(ab->a),
+    lifeEventF::(leb->le)
+  }
+
+class FMCConvertible f where
+  fmcMap::FMCComponentConverters ab a leb le->f ab leb->f a le
 
 
 data InitialFS a le = InitialFS {ifsBS::BalanceSheet a, 
@@ -216,7 +242,12 @@ data FederalTaxStructure = FederalTaxStructure {
 
 Lens.makeClassy ''FederalTaxStructure
 
-$(deriveJSON defaultOptions{fieldLabelModifier= drop 4} ''FederalTaxStructure)
+instance ToJSON FederalTaxStructure where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 4}
+instance FromJSON FederalTaxStructure where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 4}
+  
+{- $(deriveJSON defaultOptions{fieldLabelModifier= drop 4} ''FederalTaxStructure) -}
 
 data StateTaxStructure = StateTaxStructure {
   _stsIncome::MapByFS TaxBrackets,
@@ -224,12 +255,23 @@ data StateTaxStructure = StateTaxStructure {
 
 Lens.makeClassy ''StateTaxStructure
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''StateTaxStructure)
+instance ToJSON StateTaxStructure where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier = drop 4}
+instance FromJSON StateTaxStructure where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier = drop 4}
+
+{- $(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''StateTaxStructure) -}
 
 
 data CityTaxStructure = CityTaxStructure { _ctsIncome::MapByFS TaxBrackets } deriving (Generic,Show)
 Lens.makeClassy ''CityTaxStructure
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''CityTaxStructure)
+
+instance ToJSON CityTaxStructure where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier = drop 4}
+instance FromJSON CityTaxStructure where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier = drop 4}
+
+{-  $(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''CityTaxStructure) -}
 
 data TaxStructure = TaxStructure {
   _tsFederal::M.Map String FederalTaxStructure,
@@ -237,7 +279,13 @@ data TaxStructure = TaxStructure {
   _tsCity::M.Map String CityTaxStructure } deriving (Show,Generic)
 
 Lens.makeClassy ''TaxStructure
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''TaxStructure)
+
+instance ToJSON TaxStructure where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier = drop 3}
+instance FromJSON TaxStructure where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier = drop 3}
+
+{- $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''TaxStructure) -}
 
 instance EnvFromJSON e TaxStructure
 
@@ -306,6 +354,11 @@ data SimConfiguration = SimConfiguration { _scfgYears::Int
 
 Lens.makeClassy ''SimConfiguration
 
-$(deriveJSON defaultOptions{fieldLabelModifier = drop 5} ''SimConfiguration)
+instance ToJSON SimConfiguration where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier = drop 5}
+instance FromJSON SimConfiguration where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier = drop 5}
+
+{- $(deriveJSON defaultOptions{fieldLabelModifier = drop 5} ''SimConfiguration) -}
 
 instance EnvFromJSON e SimConfiguration 

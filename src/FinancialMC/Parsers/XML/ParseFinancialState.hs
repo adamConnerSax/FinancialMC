@@ -8,15 +8,14 @@ module FinancialMC.Parsers.XML.ParseFinancialState
        ) where
 
 
-import FinancialMC.Parsers.Configuration (InitialFS(..),IFSMap)
-import FinancialMC.Core.Utilities (FMCComponentConverters(..),FMCConvertible(..))
+import FinancialMC.Parsers.Configuration (InitialFS(..),IFSMap,FMCComponentConverters(..),FMCConvertible(..))
 import FinancialMC.Parsers.XML.Utilities (buildOpts,XmlParseInfos,runFMCX,FMCXmlArrow,atTag)
 import FinancialMC.Parsers.XML.Account (getBalanceSheet)
 import FinancialMC.Parsers.XML.Flow (getCashFlows)
 import FinancialMC.Parsers.XML.LifeEvent (getLifeEvents)
 import FinancialMC.Parsers.XML.Rule (getRules,getSweepRule,getTaxTradeRule)
 
-import FinancialMC.Builders.Assets (FMCBaseAsset)
+import FinancialMC.Builders.Assets (BaseAsset)
 import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
 import Text.XML.HXT.Core (withRemoveWS,yes,readString,IOSLA,XIOState,XmlTree,(>>>),getAttrValue,returnA)
@@ -25,7 +24,7 @@ import Control.Monad.State.Strict (StateT,lift,MonadTrans,MonadState,get,put)
 
 import qualified Data.Map as M
 
-type FCC a le = FMCComponentConverters FMCBaseAsset a BaseLifeEvent le
+type FCC a le = FMCComponentConverters BaseAsset a BaseLifeEvent le
 
 loadFinancialStatesFromFile::FCC a le->Maybe FilePath->FilePath->StateT (IFSMap a le) IO ()
 loadFinancialStatesFromFile fcc mSchemaDir file = 
@@ -49,7 +48,7 @@ loadFinancialStates' fcc xml = do
   put result
 
     
-getPersonalFinances::FMCXmlArrow XmlTree (String,InitialFS FMCBaseAsset BaseLifeEvent)                 
+getPersonalFinances::FMCXmlArrow XmlTree (String,InitialFS BaseAsset BaseLifeEvent)                 
 getPersonalFinances = atTag "PersonalFinances" >>>
   proc l -> do
     name <- getAttrValue "name" -< l

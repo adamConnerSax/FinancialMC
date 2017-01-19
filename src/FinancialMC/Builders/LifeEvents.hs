@@ -19,7 +19,7 @@ import           FinancialMC.Core.LifeEvent (LifeEventCore(..),IsLifeEvent(..),L
 
 import           FinancialMC.Core.TradingTypes (AccountType(PrimaryHome))
 
-import           FinancialMC.Builders.Assets (FMCBaseAsset(..),FMCBaseAssetDetails(ResidentialRE,FixedRateMortgage))
+import           FinancialMC.Builders.Assets (BaseAsset(..),BaseAssetDetails(ResidentialRE,FixedRateMortgage))
 import           FinancialMC.Builders.Flows (Expense(Expense),DeductibleExpense(DeductibleExpense))
 
 import           Control.Lens (magnify,(^.))
@@ -78,7 +78,7 @@ instance EnvFromJSON e PropertyPurchase
 
 
 instance IsLifeEvent BaseLifeEvent where
-  type AssetType BaseLifeEvent = FMCBaseAsset
+  type AssetType BaseLifeEvent = BaseAsset
   lifeEventCore (BaseLifeEvent lec _) = lec
   doLifeEvent ble@(BaseLifeEvent lec (BuyProperty pp)) = buyProperty lec pp
 
@@ -88,13 +88,13 @@ instance Show BaseLifeEvent where
 
 
 -- should this get fixed to run underneath ResultT until the end?
-buyProperty::LifeEventCore ->PropertyPurchase -> (FMCBaseAsset -> a) ->AccountGetter a->LifeEventApp a ()
+buyProperty::LifeEventCore ->PropertyPurchase -> (BaseAsset -> a) ->AccountGetter a->LifeEventApp a ()
 buyProperty (LifeEventCore name y) (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint) convert _ = do
-  let propertyA = convert $ FMCBaseAsset (AssetCore pName pValue pValue) ResidentialRE
+  let propertyA = convert $ BaseAsset (AssetCore pName pValue pValue) ResidentialRE
       ccy = pValue ^. mCurrency
       borrowedF val dp c = CV.cvNegate (val |-| dp |+| c)
   borrowed <- laERMV ccy $ borrowedF (CV.fromMoneyValue pValue) (CV.fromMoneyValue downPmt) (CV.fromMoneyValue finC)     
-  let mortgageA = convert $ FMCBaseAsset (AssetCore (T.append pName (T.pack "_mortgage")) borrowed borrowed) (FixedRateMortgage rate term) 
+  let mortgageA = convert $ BaseAsset (AssetCore (T.append pName (T.pack "_mortgage")) borrowed borrowed) (FixedRateMortgage rate term) 
       pAccount = Account name PrimaryHome ccy [propertyA,mortgageA]
   cashP <- laERMV ccy $ CV.fromMoneyValue downPmt |+| CV.fromMoneyValue cashC 
   let cashExpense = MkFlow $ Expense (FlowCore (T.append pName (T.pack " down payment and costs.")) cashP Annually (Only y))
