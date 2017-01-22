@@ -44,6 +44,7 @@ instance Monoid (LifeEventOutput a fl) where
 instance Bifunctor LifeEventOutput where
   first f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
   second f (LifeEventOutput accts flows) = LifeEventOutput accts (f <$> flows)
+
 type LifeEventApp a fl = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
 
 type LifeEventName = T.Text
