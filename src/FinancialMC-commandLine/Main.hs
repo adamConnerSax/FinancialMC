@@ -1,43 +1,64 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE QuasiQuotes #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE QuasiQuotes         #-}
 module Main where
 
-import           Control.Lens ((^.))
-import           Control.Monad (when)
-import           Options.Applicative (execParser)
+import           Control.Lens                            ((^.))
+import           Control.Monad                           (when)
+import           Options.Applicative                     (execParser)
 
-import           Data.Random.Source.PureMT (PureMT,pureMT,newPureMT)
-import           Data.List (transpose,elemIndex)
+import           Data.List                               (elemIndex, transpose)
+import           Data.Random.Source.PureMT               (PureMT, newPureMT,
+                                                          pureMT)
 
-import           Data.Word (Word64)
-import           Data.Maybe (fromJust)
-import qualified Data.Vector as V
-import qualified Data.Map as M
-import           Text.RawString.QQ (r)
-import           Text.Printf (printf)
-import           System.IO (openFile,IOMode(WriteMode),hPutStrLn,hClose)
+import qualified Data.Map                                as M
+import           Data.Maybe                              (fromJust)
+import qualified Data.Vector                             as V
+import           Data.Word                               (Word64)
+import           System.IO                               (IOMode (WriteMode),
+                                                          hClose, hPutStrLn,
+                                                          openFile)
+import           Text.Printf                             (printf)
+import           Text.RawString.QQ                       (r)
 
-import           OptionParser (FinMCOptions(..),finMCOptionParser)
-import qualified FinancialMC.Parsers.Configuration as C
-import           FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,buildInitialStateFromConfig)
+import qualified FinancialMC.Parsers.Configuration       as C
+import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
+                                                          loadConfigurations)
+import           OptionParser                            (FinMCOptions (..),
+                                                          finMCOptionParser)
 
-import           FinancialMC.Base (FinEnv,CombinedState,HasCombinedState(..),HasMCState(..),PathSummary,
-                                   FSSummary(..),HasFSSummary(..),LiquidityType(..),
-                                   isZeroNW,netWorth,grossFlows,doPathsIO,doPaths,baseParsers,BaseAsset,BaseLifeEvent)
+import           FinancialMC.Base                        (BaseAsset, BaseFlow,
+                                                          BaseLifeEvent,
+                                                          CombinedState,
+                                                          FSSummary (..),
+                                                          FinEnv,
+                                                          HasCombinedState (..),
+                                                          HasFSSummary (..),
+                                                          HasMCState (..),
+                                                          LiquidityType (..),
+                                                          PathSummary,
+                                                          baseParsers, doPaths,
+                                                          doPathsIO, grossFlows,
+                                                          isZeroNW, netWorth)
 
-import           FinancialMC.Core.Analysis (nwHistFromSummaries,analyzeBankruptcies,historiesFromSummaries,addReturns)
-import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue))
-import           FinancialMC.Core.Utilities (eitherToIO,Year)
-import           FinancialMC.Core.LifeEvent (IsLifeEvent(..))
+import           FinancialMC.Core.Analysis               (addReturns,
+                                                          analyzeBankruptcies,
+                                                          historiesFromSummaries,
+                                                          nwHistFromSummaries)
+import           FinancialMC.Core.LifeEvent              (IsLifeEvent (..), LifeEventConverters (LEC))
+import           FinancialMC.Core.MoneyValue             (MoneyValue (MoneyValue))
+import           FinancialMC.Core.Utilities              (Year, eitherToIO)
 
 --import FinancialMC.Builders.Assets (FMCBaseAsset)
 --import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
-ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseLifeEvent BaseLifeEvent
-ccs = C.FMCComponentConverters id id
+ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseFlow BaseFlow BaseLifeEvent BaseLifeEvent
+ccs = C.FMCComponentConverters id id id
 
-runWithOptions::FinEnv->CombinedState BaseAsset BaseLifeEvent->FinMCOptions->IO [(PathSummary,Word64)]
+lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
+lec = LEC id id
+
+runWithOptions::FinEnv->CombinedState BaseAsset BaseFlow BaseLifeEvent->FinMCOptions->IO [(PathSummary,Word64)]
 runWithOptions fe0 cs0 options = do
   let showFS = optShowFinalStates options -- NB: if showFinalStates is true, paths will be run serially rather than in parallel
       logLevels = optLogLevels options
@@ -47,10 +68,10 @@ runWithOptions fe0 cs0 options = do
       needsIO = not (null logLevels) || showFS
   src <- srcF (optSeed options)
   let runW x = x cs0 fe0 (optSingleThreaded options) src (optYears options) (optPaths options)
-  if needsIO 
-    then runW (doPathsIO id logLevels showFS) -- cs0 fe0 singleThreaded src years paths
-    else eitherToIO $ runW (doPaths id) -- cs0 fe0 singleThreaded src years paths    
-  
+  if needsIO
+    then runW (doPathsIO lec logLevels showFS) -- cs0 fe0 singleThreaded src years paths
+    else eitherToIO $ runW (doPaths lec) -- cs0 fe0 singleThreaded src years paths
+
 parseOptions::IO FinMCOptions
 parseOptions = execParser finMCOptionParser
 
@@ -59,16 +80,16 @@ outputPath::Maybe String->Maybe String->Maybe String
 outputPath Nothing Nothing = Nothing
 outputPath (Just optPath) Nothing = Just optPath
 outputPath Nothing (Just confPrefix) = Just confPrefix
-outputPath (Just optPath) (Just confPrefix) = Just (optPath ++ "/" ++ confPrefix) 
+outputPath (Just optPath) (Just confPrefix) = Just (optPath ++ "/" ++ confPrefix)
 
 
 runAndOutput::Bool->FinMCOptions->IO ()
 runAndOutput doOutput options = do
   let writeIf x = when doOutput $ putStrLn x
-  writeIf ("Running configs from " ++ optConfigFile options)    
-  (configInfo,configMap) <- loadConfigurations ccs (optSchemaPath options) baseParsers (C.UnparsedFile (optConfigFile options)) 
+  writeIf ("Running configs from " ++ optConfigFile options)
+  (configInfo,configMap) <- loadConfigurations ccs (optSchemaPath options) baseParsers (C.UnparsedFile (optConfigFile options))
   writeIf ("Loaded " ++ show (M.keys configMap))
-  let runConfig::String->IO () 
+  let runConfig::String->IO ()
       runConfig cfgName = do
         (mOPrefix,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
         let nw =  netWorth cs0 fe0
@@ -78,7 +99,7 @@ runAndOutput doOutput options = do
         writeIf $ "Initial Net Worth: " ++ show nw
         writeIf $ "Initial positive cashflow: " ++ show inFlow
         writeIf $ "Initial gross spending: " ++ show outFlow
-        
+
         summaries <- runWithOptions fe0 cs0 options
         let histData = nwHistFromSummaries summaries (optBins options)
             bankruptcies = fst.unzip $ filter (isZeroNW.fst) summaries
@@ -86,8 +107,8 @@ runAndOutput doOutput options = do
             pctB = (100*fromIntegral numB::Double)/fromIntegral (length summaries)
             strB1 = (show numB ++ " (" ++ printf "%0.2f" pctB ++ "%) paths result in bankruptcy.")
         writeIf strB1
-        when (numB > 0) $ writeIf ("Median bankruptcy year=" ++ show (fromJust medianB) ++ "; mode=" ++ show (fromJust modeB)) 
-        (histories,medianHist) <- eitherToIO $ historiesFromSummaries id summaries (fe0,cs0) 
+        when (numB > 0) $ writeIf ("Median bankruptcy year=" ++ show (fromJust medianB) ++ "; mode=" ++ show (fromJust modeB))
+        (histories,medianHist) <- eitherToIO $ historiesFromSummaries lec summaries (fe0,cs0)
                                   (optSingleThreaded options) (optQuantiles options) (optYears options)
         let medianFS = snd (last medianHist)
             mOPath = flip outputPath mOPrefix (optOutPath options)
@@ -95,16 +116,16 @@ runAndOutput doOutput options = do
         case mOPath of
              Nothing -> writeIf "No saved output."
              Just path -> writeIf ("Saving output in " ++ path ++ "...")
-        output mOPath histData histories (medianFS ^. fssNW) medianHist 
-  
+        output mOPath histData histories (medianFS ^. fssNW) medianHist
+
   mapM_ runConfig (optConfigs options)
-  
-normalMain::IO ()  
-normalMain = do 
+
+normalMain::IO ()
+normalMain = do
   parseOptions >>= runAndOutput True
   return ()
 
--- Criterion 
+-- Criterion
 {--
 benchmarkOptions years paths = FinMCOptions years paths (Just 1) 30 5 Nothing [] False
 benchmarkMain = defaultMain [
@@ -145,16 +166,16 @@ output (Just prefix) histData history _ medianHist = do
   gnuplotHandle <- openFile (prefix ++ ".gnuplot") WriteMode
   hPutStrLn gnuplotHandle $ formatGnuplotOutput prefix paths quantiles
   hClose gnuplotHandle
-  
+
 divFloat::(Integral a, Integral b)=>a->b->Float
 divFloat a b = (fromIntegral a::Float)/(fromIntegral b::Float)
 
-formatHistogramOutput::(V.Vector Double, V.Vector Int)->String   
+formatHistogramOutput::(V.Vector Double, V.Vector Int)->String
 formatHistogramOutput (lowerBound,count) = str where
   (sm,sumL) = foldl (\(s,l) n -> (s+(count V.! n),l++[s+(count V.! n)])) (0,[]) [0..(V.length count-1)]
-  fmtLB x = printf "%.0f" (x/1000.0) 
+  fmtLB x = printf "%.0f" (x/1000.0)
   str = foldl (\s n->s ++ fmtLB (lowerBound V.! n) ++ "\t" ++ show (count V.! n) ++ "\t" ++ show (divFloat (sumL !! n) sm) ++ "\n") "#k$\tcount\tCum Density\n" [0..(V.length lowerBound - 1)]
-  
+
 
 formatHistoryOutput::[[(Year,MoneyValue)]]->String
 formatHistoryOutput hists = str where
@@ -163,20 +184,20 @@ formatHistoryOutput hists = str where
   header = foldl (\s n-> s ++ "Net Worth " ++ show n ++ "\t") "#Date\t" [1..length hists] ++ "\n"
   fmtNWs = foldl (\s (MoneyValue x _) -> s ++ printf "%.0f" x ++ "\t") ""
   str = foldl (\s (d,nw)-> s ++ show d ++ "\t" ++ fmtNWs nw ++ "\n") header hists'
-  
-    
+
+
 formatMedianSummaryOutput::[(Year,FSSummary)]->String
 formatMedianSummaryOutput medianHist = str where
   wrs = addReturns medianHist
   header = "Date\t\tNet Worth($)\tReturn($)\tReturn(%)\tNear Cash\tInflow($)\tOutflow($)\tTax($)\tTax Rate(%)\n"
   g = printf "%.2f"
   f (MoneyValue x _) = printf "%.0f" x
-  l lt nwm = f (fromJust $ M.lookup lt nwm) 
-  h (d,FSSummary nw nwbo i o t tr,ret,retR) = show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t\t" ++ g (100*retR) ++ "%\t\t" 
+  l lt nwm = f (fromJust $ M.lookup lt nwm)
+  h (d,FSSummary nw nwbo i o t tr,ret,retR) = show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t\t" ++ g (100*retR) ++ "%\t\t"
                                                 ++ l NearCash nwbo ++ "\t\t"
                                                 ++ f i ++ "\t\t" ++ f o ++ "\t\t" ++ f t ++ "\t" ++ g (100*tr) ++ "\n"
   str = foldl (\s x -> s ++ h x) header wrs
-                                                
+
 
 formatGnuplotOutput::String->Int->Int->String
 formatGnuplotOutput prefix paths quantiles = str where

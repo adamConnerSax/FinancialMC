@@ -15,12 +15,13 @@ import           FinancialMC.Core.Result (appendAndReturn)
 import           FinancialMC.Core.Asset (AssetCore(AssetCore),Account(Account),AccountGetter)
 import           FinancialMC.Core.Flow  (FlowCore(FlowCore))
 import           FinancialMC.Core.FinancialStates (HasFinEnv(feExchange),FinEnv)
-import           FinancialMC.Core.LifeEvent (LifeEventCore(..),IsLifeEvent(..),LifeEventApp,LifeEventOutput(LifeEventOutput))
+import           FinancialMC.Core.LifeEvent (LifeEventCore(..),IsLifeEvent(..),LifeEventConverters(LEC),
+                                             LifeEventApp,LifeEventOutput(LifeEventOutput))
 
 import           FinancialMC.Core.TradingTypes (AccountType(PrimaryHome))
 
 import           FinancialMC.Builders.Assets (BaseAsset(..),BaseAssetDetails(ResidentialRE,FixedRateMortgage))
-import           FinancialMC.Builders.Flows (Expense(Expense),DeductibleExpense(DeductibleExpense))
+import           FinancialMC.Builders.Flows (BaseFlow(..),BaseFlowDetails(Expense,DeductibleExpense))
 
 import           Control.Lens (magnify,(^.))
 import           Control.Monad.Trans.Class (MonadTrans,lift)
@@ -89,10 +90,11 @@ instance Show BaseLifeEvent where
 
 
 -- should this get fixed to run underneath ResultT until the end?
-buyProperty::LifeEventCore ->PropertyPurchase -> (BaseAsset -> a) -> (BaseFlow -> fl)->AccountGetter a->LifeEventApp a fl ()
+buyProperty::LifeEventCore->PropertyPurchase->LifeEventConverters a fl BaseLifeEvent->
+             AccountGetter a->LifeEventApp a fl ()
 buyProperty (LifeEventCore name y)
   (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint)
-  convertA convertF _ = do
+  (LEC convertA convertF) _ = do
   let propertyA = convertA $ BaseAsset (AssetCore pName pValue pValue) ResidentialRE
       ccy = pValue ^. mCurrency
       borrowedF val dp c = CV.cvNegate (val |-| dp |+| c)
@@ -100,10 +102,10 @@ buyProperty (LifeEventCore name y)
   let mortgageA = convertA $ BaseAsset (AssetCore (T.append pName (T.pack "_mortgage")) borrowed borrowed) (FixedRateMortgage rate term) 
       pAccount = Account name PrimaryHome ccy [propertyA,mortgageA]
   cashP <- laERMV ccy $ CV.fromMoneyValue downPmt |+| CV.fromMoneyValue cashC 
-  let cashExpense = convertF $ Expense (FlowCore (T.append pName (T.pack " down payment and costs.")) cashP Annually (Only y))
-      insExpense = convertF $ Expense (FlowCore (T.append pName (T.pack " insurance.")) ins Annually (Starting y))
-      taxExpense = convertF $ DeductibleExpense (FlowCore (T.append pName (T.pack " property tax")) tax Annually (Starting y))
-      maintExpense = convertF $ Expense (FlowCore (T.append pName (T.pack " maintenance.")) maint Annually (Starting y))
+  let cashExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " down payment and costs.")) cashP Annually (Only y)) Expense
+      insExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " insurance.")) ins Annually (Starting y)) Expense
+      taxExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " property tax")) tax Annually (Starting y)) DeductibleExpense
+      maintExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " maintenance.")) maint Annually (Starting y)) Expense
   appendAndReturn (LifeEventOutput [pAccount] [cashExpense,insExpense,taxExpense,maintExpense]) ()
 
 

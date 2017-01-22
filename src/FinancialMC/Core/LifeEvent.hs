@@ -1,8 +1,8 @@
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
---{-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE RankNTypes             #-}
 --{-# LANGUAGE UndecidableInstances   #-}
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE TypeFamilies           #-}
@@ -11,6 +11,7 @@ module FinancialMC.Core.LifeEvent
          LifeEventName
        , LifeEventCore(..)
        , IsLifeEvent(..)
+       , LifeEventConverters(LEC)
        , lifeEventName
        , lifeEventYear
        , LifeEventOutput(..)
@@ -61,11 +62,14 @@ instance ToJSON LifeEventCore where
 instance FromJSON LifeEventCore where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2 }
 
+data LifeEventConverters a fl le = LEC (IsLifeEvent le=>AssetType le->a) (IsLifeEvent le=>FlowType le -> fl)
+
 class IsLifeEvent e where
   type AssetType e :: *
   type FlowType e :: *
   lifeEventCore::e->LifeEventCore
-  doLifeEvent::IsAsset a=>e->(AssetType e->a)->(FlowType e->fl)->AccountGetter a->LifeEventApp a fl ()
+  -- do we need/want the constraints here
+  doLifeEvent::(IsAsset a,IsFlow fl)=>e->LifeEventConverters a fl e->AccountGetter a->LifeEventApp a fl ()
 
 lifeEventName::IsLifeEvent e=>e->LifeEventName
 lifeEventName = leName . lifeEventCore

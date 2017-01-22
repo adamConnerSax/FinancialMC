@@ -1,9 +1,11 @@
-{-# LANGUAGE DeriveAnyClass   #-}
-{-# LANGUAGE DeriveGeneric    #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE Rank2Types       #-}
-{-# LANGUAGE TemplateHaskell  #-}
-{-# LANGUAGE TypeFamilies     #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE Rank2Types            #-}
+{-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeFamilies          #-}
 module FinancialMC.Builders.Flows (
     BaseFlow(..)
   , BaseFlowDetails(..)
@@ -37,6 +39,7 @@ import           Control.Lens                     (magnify, view)
 import           Control.Monad.Reader             (ReaderT, lift)
 
 import           Data.Aeson                       (FromJSON, ToJSON)
+import           Data.Aeson.Existential           (EnvFromJSON)
 import           Data.Aeson.Types                 (Options (fieldLabelModifier),
                                                    defaultOptions)
 --import           Data.Aeson.Existential (TypeNamed)
@@ -62,6 +65,7 @@ data BaseFlowDetails =
   SalaryPayment |
   RentalIncome !MoneyValue {- max annual deduction -} deriving (Generic,ToJSON,FromJSON)
 
+instance EnvFromJSON e BaseFlowDetails
 
 baseFlowDirection::BaseFlowDetails->FlowDirection
 baseFlowDirection Expense = OutFlow
@@ -82,6 +86,8 @@ instance Show BaseFlowDetails where
   show fl@(RentalIncome md) = "Rental income [" ++ show (baseFlowDirection fl) ++ "; max annual deduction=" ++ show md ++ "]->"
 
 data BaseFlow = BaseFlow !FlowCore !BaseFlowDetails deriving (Generic,ToJSON,FromJSON)
+
+instance EnvFromJSON e BaseFlow
 
 instance Show BaseFlow where
   show (BaseFlow fc fdet) = show fdet ++ show fc

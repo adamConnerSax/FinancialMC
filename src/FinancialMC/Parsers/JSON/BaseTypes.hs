@@ -14,7 +14,7 @@ import           Data.Aeson.Existential (ParseF,HasParsers(parserLookup),makeSim
 -- import           Data.Time (Day,fromGregorian,toGregorian)
 
 --import           FinancialMC.Core.Asset (Asset(MkAsset))
-import           FinancialMC.Core.Flow  (Flow(MkFlow))
+--import           FinancialMC.Core.Flow  (Flow(MkFlow))
 import           FinancialMC.Core.Rule (Rule(MkRule))
 --import           FinancialMC.Core.LifeEvent (LifeEvent(MkLifeEvent))
 import           FinancialMC.Core.Rates (RateModel(MkRateModel))
@@ -45,8 +45,8 @@ data FMC_ParserMaps =
   FMC_ParserMaps
   {
 --      _assetParsers::ParserMap FMC_ParserMaps Asset
-    _flowParsers::ParserMap FMC_ParserMaps Flow
-  , _ruleParsers::ParserMap FMC_ParserMaps Rule
+--    _flowParsers::ParserMap FMC_ParserMaps Flow
+    _ruleParsers::ParserMap FMC_ParserMaps Rule
 --  , _lifeEventParsers::ParserMap FMC_ParserMaps LifeEvent
   , _rateModelParsers::ParserMap FMC_ParserMaps RateModel
   , _rateModelFactorParsers::ParserMap FMC_ParserMaps RateModelFactor
@@ -62,10 +62,10 @@ instance HasParsers FMC_ParserMaps Asset where
 
 instance HasParsers FMC_ParserMaps LifeEvent where
   parserLookup key x = M.lookup key (_lifeEventParsers x)
--}
 
 instance HasParsers FMC_ParserMaps Flow where
   parserLookup key x = M.lookup key (_flowParsers x)
+-}
 
 instance HasParsers FMC_ParserMaps Rule where
   parserLookup key x = M.lookup key (_ruleParsers x)
@@ -90,7 +90,6 @@ addBaseParsers = do
   addParser assetParsers $ makeSimpleParserPairG (MkAsset :: Assets.FixedRateMortgage->Asset)
   addParser assetParsers $ makeSimpleParserPairG (MkAsset :: Assets.GuaranteedFund->Asset)
   addParser lifeEventParsers  $ makeSimpleParserPairG (MkLifeEvent :: LifeEvents.BuyProperty->LifeEvent)
--}
   addParser flowParsers  $ makeSimpleParserPairG (MkFlow :: Flows.Expense->Flow)
   addParser flowParsers  $ makeSimpleParserPairG (MkFlow :: Flows.DeductibleExpense->Flow)
   addParser flowParsers  $ makeSimpleParserPairG (MkFlow :: Flows.EducationalExpense->Flow)
@@ -98,6 +97,7 @@ addBaseParsers = do
   addParser flowParsers  $ makeSimpleParserPairG (MkFlow :: Flows.Payment->Flow)
   addParser flowParsers  $ makeSimpleParserPairG (MkFlow :: Flows.SalaryPayment->Flow)
   addParser flowParsers  $ makeSimpleParserPairG (MkFlow :: Flows.RentalIncome->Flow)
+-}
   addParser ruleParsers  $ makeSimpleParserPairG (MkRule :: Rules.PayFrom->Rule)
   addParser ruleParsers  $ makeSimpleParserPairG (MkRule :: Rules.Transfer->Rule)
   addParser ruleParsers  $ makeSimpleParserPairG (MkRule :: Rules.Contribution->Rule)
@@ -115,7 +115,7 @@ addBaseParsers = do
   addParser rateModelFactorParsers  $ makeSimpleParserPairG (MkRateModelFactor :: RateModels.LogNormalRateModelFactor->RateModelFactor)
 
 baseParsers::FMC_ParserMaps
-baseParsers = execState addBaseParsers (FMC_ParserMaps M.empty M.empty M.empty M.empty)
+baseParsers = execState addBaseParsers (FMC_ParserMaps M.empty M.empty M.empty)
 
 
 

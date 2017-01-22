@@ -86,6 +86,11 @@ getAccountNames bs = mKeys (bs ^. bsAccountMap)
 data CashFlows fl = CashFlows { _cfdFlowMap:: !(FlowMap fl) } deriving (Generic)
 makeClassy ''CashFlows
 
+instance (FromJSON fl, EnvFromJSON e fl)=>EnvFromJSON e (CashFlows fl)
+
+instance Functor CashFlows where
+  fmap f (CashFlows cfm) = CashFlows (f <$> cfm)
+  
 instance Evolvable fl=>Evolvable (CashFlows fl) where
   evolve cfd = evolveWithin cfd cfdFlowMap
     
