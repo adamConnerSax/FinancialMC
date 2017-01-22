@@ -4,8 +4,8 @@
 --{-# LANGUAGE GADTs                  #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 --{-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE TypeFamilies           #-}
-{-# LANGUAGE DeriveGeneric #-}
 module FinancialMC.Core.LifeEvent
        (
          LifeEventName
@@ -20,27 +20,31 @@ module FinancialMC.Core.LifeEvent
 import           FinancialMC.Core.Asset           (Account, AccountGetter,
                                                    IsAsset)
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
-import           FinancialMC.Core.Flow            (Flow)
+import           FinancialMC.Core.Flow            (IsFlow)
 import           FinancialMC.Core.Result          (ResultT)
 import           FinancialMC.Core.Utilities       (Year)
 
 import           Control.Exception                (SomeException)
 import           Control.Monad.Reader             (ReaderT)
+import           Data.Aeson                       (FromJSON (..), ToJSON (..),
+                                                   defaultOptions,
+                                                   genericParseJSON,
+                                                   genericToJSON)
+import           Data.Aeson.Types                 (fieldLabelModifier)
+import           Data.Bifunctor                   (Bifunctor (..))
 import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
-import GHC.Generics (Generic)
-import Data.Aeson (FromJSON(..),ToJSON(..),genericToJSON,genericParseJSON,defaultOptions)
-import Data.Aeson.Types (fieldLabelModifier)
+import           GHC.Generics                     (Generic)
 
-data LifeEventOutput a = LifeEventOutput ![Account a] ![Flow]
-instance Monoid (LifeEventOutput a) where
+data LifeEventOutput a fl = LifeEventOutput ![Account a] ![fl]
+instance Monoid (LifeEventOutput a fl) where
   mempty = LifeEventOutput mempty mempty
   mappend (LifeEventOutput a1 f1) (LifeEventOutput a2 f2) = LifeEventOutput (a1<>a2) (f1<>f2)
 
-instance Functor LifeEventOutput where
-  fmap f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
-
-type LifeEventApp a = ResultT (LifeEventOutput a) (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
+instance Bifunctor LifeEventOutput where
+  first f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
+  second f (LifeEventOutput accts flows) = LifeEventOutput accts (f <$> flows)
+type LifeEventApp a fl = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
 
 type LifeEventName = T.Text
 
@@ -55,11 +59,12 @@ instance ToJSON LifeEventCore where
 
 instance FromJSON LifeEventCore where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2 }
-  
+
 class IsLifeEvent e where
   type AssetType e :: *
-  lifeEventCore::e->LifeEventCore                    
-  doLifeEvent::IsAsset a=>e->(AssetType e->a)->AccountGetter a->LifeEventApp a ()
+  type FlowType e :: *
+  lifeEventCore::e->LifeEventCore
+  doLifeEvent::IsAsset a=>e->(AssetType e->a)->(FlowType e->fl)->AccountGetter a->LifeEventApp a fl ()
 
 lifeEventName::IsLifeEvent e=>e->LifeEventName
 lifeEventName = leName . lifeEventCore
@@ -68,29 +73,3 @@ lifeEventYear::IsLifeEvent e=>e->Year
 lifeEventYear = leYear . lifeEventCore
 
 
-{-
-data LifeEvent where
-  MkLifeEvent::(IsLifeEvent e a, Show e, ToJSON e)=>e->LifeEvent
-
-instance Show LifeEvent where
-  show (MkLifeEvent le) = show le
-
-instance TypeNamed LifeEvent where
-  typeName (MkLifeEvent e) = typeName e
-
-instance IsLifeEvent LifeEvent a where
-  lifeEventName (MkLifeEvent e) = lifeEventName e
-  lifeEventYear (MkLifeEvent e) = lifeEventYear e
-  doLifeEvent (MkLifeEvent e) = doLifeEvent e
-
-
-instance JSON_Existential LifeEvent where
-  containedName (MkLifeEvent le) = typeName le
-  containedJSON (MkLifeEvent le) = toJSON le
-
-instance ToJSON LifeEvent where
-  toJSON = existentialToJSON
-
-instance HasParsers e LifeEvent => EnvFromJSON e LifeEvent where
-  envParseJSON = parseJSON_Existential
--}

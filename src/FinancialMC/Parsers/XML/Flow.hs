@@ -1,88 +1,99 @@
 {-# LANGUAGE Arrows #-}
 module FinancialMC.Parsers.XML.Flow (getCashFlows) where
 
-import FinancialMC.Parsers.XML.Utilities (readAttrValue,readAttrValueDef,readAttrValueElse,addInfoA,atTag,catMaybes,XmlParseInfo(Error),FMCXmlArrow)
+import           FinancialMC.Parsers.XML.Utilities (FMCXmlArrow,
+                                                    XmlParseInfo (Error),
+                                                    addInfoA, atTag, catMaybes,
+                                                    readAttrValue,
+                                                    readAttrValueDef,
+                                                    readAttrValueElse)
 
-import FinancialMC.Core.Flow (IsFlow,Flow(..),FlowCore(..))
-import FinancialMC.Core.MCState (CashFlows,addFlow,makeNewCashFlows)
-import FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),Currency(USD))
-import FinancialMC.Core.Utilities (DateRange(Always),Frequency(Monthly,Annually))
-import qualified FinancialMC.Builders.Flows as Flows
+import           FinancialMC.Builders.Flows        (BaseFlow (..),
+                                                    BaseFlowDetails (..))
+import           FinancialMC.Core.Flow             (FlowCore (..), IsFlow)
+import           FinancialMC.Core.MCState          (CashFlows, addFlow,
+                                                    makeNewCashFlows)
+import           FinancialMC.Core.MoneyValue       (Currency (USD),
+                                                    MoneyValue (MoneyValue))
+import           FinancialMC.Core.Utilities        (DateRange (Always), Frequency (Annually, Monthly))
 
 
-import Data.Aeson (ToJSON)
+import           Data.Aeson                        (ToJSON)
 
-import Text.XML.HXT.Core ((>>>),returnA,getChildren,getElemName,localPart,XmlTree,listA,constA,getAttrValue)
-import Control.Monad.State.Strict (execState)
-import qualified Data.Text as T
+import           Control.Monad.State.Strict        (execState)
+import qualified Data.Text                         as T
+import           Text.XML.HXT.Core                 (XmlTree, constA,
+                                                    getAttrValue, getChildren,
+                                                    getElemName, listA,
+                                                    localPart, returnA, (>>>))
 
 z::MoneyValue
 z = MoneyValue 0 USD
 
-getExpense::(IsFlow f, Show f, ToJSON f)=>(FlowCore->f)->FMCXmlArrow XmlTree (Maybe Flow) 
+getExpense::(FlowCore->BaseFlow)->FMCXmlArrow XmlTree (Maybe BaseFlow)
 getExpense expenseMaker = proc l -> do
   name <- getAttrValue "name" -< l
   amt <- readAttrValueDef "amount" z -< l
   freq <- readAttrValueDef "frequency" Monthly -< l
   dRange <- readAttrValueDef "when"  Always -< l
-  returnA -< Just . MkFlow $ expenseMaker (FlowCore (T.pack name) amt freq dRange)
-  
-  
-getCollegeBill::FMCXmlArrow XmlTree (Maybe Flow)                   
-getCollegeBill = proc l -> do  
+  returnA -< Just $ expenseMaker (FlowCore (T.pack name) amt freq dRange)
+
+
+getCollegeBill::FMCXmlArrow XmlTree (Maybe BaseFlow)
+getCollegeBill = proc l -> do
   name <- getAttrValue "name" -< l
   amt <- readAttrValueDef "amount" z -< l
   amount_to <- getAttrValue "amount_to" -< l
   dRange <- readAttrValueDef "when" Always -< l
-  returnA -< Just . MkFlow $ Flows.EducationalExpense (FlowCore (T.pack name) amt Annually dRange) (T.pack amount_to)
+  returnA -< Just $ BaseFlow (FlowCore (T.pack name) amt Annually dRange) (EducationExpense (T.pack amount_to))
 
-getHealthcare::FMCXmlArrow XmlTree (Maybe Flow)
+getHealthcare::FMCXmlArrow XmlTree (Maybe BaseFlow)
 getHealthcare = proc l -> do
   name <- getAttrValue "name" -< l
   amt <- readAttrValueDef "amount" z -< l
   ded <- readAttrValueElse "deductible" False -< l
   dRange <- readAttrValueDef "when" Always -< l
   freq <- readAttrValueDef "frequency" Monthly -< l
-  returnA -< Just . MkFlow $ Flows.HealthCareExpense (FlowCore (T.pack name) amt freq dRange) ded
-                                                      
-getSalary::FMCXmlArrow XmlTree (Maybe Flow)                   
-getSalary = proc l -> do   
+  returnA -< Just $ BaseFlow (FlowCore (T.pack name) amt freq dRange) (HealthCareExpense ded)
+
+getSalary::FMCXmlArrow XmlTree (Maybe BaseFlow)
+getSalary = proc l -> do
   name <- getAttrValue "name" -< l
   amt <- readAttrValueDef "amount" z -< l
   dRange <- readAttrValueDef "when" Always -< l
-  returnA -< Just . MkFlow $ Flows.SalaryPayment (FlowCore (T.pack name) amt Monthly dRange) 
-  
-getPayment::FMCXmlArrow XmlTree (Maybe Flow)                   
-getPayment = proc l -> do   
+  returnA -< Just $ BaseFlow (FlowCore (T.pack name) amt Monthly dRange) SalaryPayment
+
+getPayment::FMCXmlArrow XmlTree (Maybe BaseFlow)
+getPayment = proc l -> do
   name <- getAttrValue "name" -< l
   amt <- readAttrValueDef "amount" z -< l
   dRange <- readAttrValueDef "when" Always -< l
   freq <- readAttrValueElse "frequency" Annually -< l
   rate <- readAttrValue "growth_rate" -< l
-  returnA -< Just . MkFlow $ Flows.Payment (FlowCore (T.pack name) amt freq dRange) (rate/100.0)
-  
-getRentalIncome::FMCXmlArrow XmlTree (Maybe Flow)                   
-getRentalIncome = proc l -> do  
+  returnA -< Just $ BaseFlow (FlowCore (T.pack name) amt freq dRange) (Payment (rate/100.0))
+
+getRentalIncome::FMCXmlArrow XmlTree (Maybe BaseFlow)
+getRentalIncome = proc l -> do
   name <- getAttrValue "name" -< l
   amt <- readAttrValueDef "amount" z -< l
   freq <- readAttrValueElse "frequency" Monthly -< l
   maxDed <- readAttrValueDef "max_annual_deduction" z -< l
   dRange <- readAttrValueDef "when" Always -< l
-  returnA -< Just . MkFlow $ Flows.RentalIncome (FlowCore (T.pack name) amt freq dRange) maxDed
-  
-errorFlow::String->FMCXmlArrow XmlTree (Maybe Flow)  
+  returnA -< Just $ BaseFlow (FlowCore (T.pack name) amt freq dRange) (RentalIncome maxDed)
+
+errorFlow::String->FMCXmlArrow XmlTree (Maybe BaseFlow)
 errorFlow badTag = addInfoA (Error ("unrecognized Flow element \"" ++ badTag ++ "\"")) >>> constA Nothing
-  
-getFlows::FMCXmlArrow XmlTree (Maybe Flow)
+
+getFlows::FMCXmlArrow XmlTree (Maybe BaseFlow)
 getFlows = getChildren >>> getFlow
 
-getFlow::FMCXmlArrow XmlTree (Maybe Flow)                 
+getFlow::FMCXmlArrow XmlTree (Maybe BaseFlow)
 getFlow = proc l -> do
     tag <- getElemName -< l
     flow <- case localPart tag of
-      "Expense" -> getExpense Flows.Expense -< l
+      "Expense" -> getExpense (`BaseFlow` Expense) -< l
       "HealthCareExpense" -> getHealthcare -< l
-      "DeductibleExpense" -> getExpense Flows.DeductibleExpense -< l
+      "DeductibleExpense" -> getExpense (`BaseFlow` DeductibleExpense) -< l
       "CollegeBill" -> getCollegeBill -< l
       "Salary" -> getSalary -< l
       "Payment" -> getPayment -< l
@@ -90,10 +101,10 @@ getFlow = proc l -> do
       _ -> errorFlow (localPart tag) -<< l
     returnA -< flow
 
-getCashFlows::FMCXmlArrow XmlTree CashFlows                
+getCashFlows::FMCXmlArrow XmlTree (CashFlows BaseFlow)
 getCashFlows = atTag "Flows" >>>
   proc l -> do
-    flows <- listA getFlows -< l 
+    flows <- listA getFlows -< l
     returnA -< execState (mapM_ addFlow (catMaybes flows)) makeNewCashFlows
 
 
