@@ -17,13 +17,13 @@ import           Data.Aeson.Existential (ParseF,HasParsers(parserLookup),makeSim
 --import           FinancialMC.Core.Flow  (Flow(MkFlow))
 --import           FinancialMC.Core.Rule (Rule(MkRule))
 --import           FinancialMC.Core.LifeEvent (LifeEvent(MkLifeEvent))
-import           FinancialMC.Core.Rates (RateModel(MkRateModel))
+--import           FinancialMC.Core.Rates (RateModel(MkRateModel))
 import qualified FinancialMC.Builders.Assets as Assets
 import qualified FinancialMC.Builders.Flows as Flows
 import qualified FinancialMC.Builders.Rules as Rules
 import qualified FinancialMC.Builders.LifeEvents as LifeEvents
 import qualified FinancialMC.Builders.RateModels as RateModels
-import           FinancialMC.Builders.RateModels (RateModelFactor(MkRateModelFactor))
+--import           FinancialMC.Builders.RateModels (RateModelFactor(MkRateModelFactor))
 
 import qualified Data.Map as M
 
@@ -48,8 +48,8 @@ data FMC_ParserMaps =
 --    _flowParsers::ParserMap FMC_ParserMaps Flow
 --    _ruleParsers::ParserMap FMC_ParserMaps Rule
 --  , _lifeEventParsers::ParserMap FMC_ParserMaps LifeEvent
-    _rateModelParsers::ParserMap FMC_ParserMaps RateModel
-  , _rateModelFactorParsers::ParserMap FMC_ParserMaps RateModelFactor
+--    _rateModelParsers::ParserMap FMC_ParserMaps RateModel
+--  , _rateModelFactorParsers::ParserMap FMC_ParserMaps RateModelFactor
   }
 
 makeClassy ''FMC_ParserMaps
@@ -68,21 +68,20 @@ instance HasParsers FMC_ParserMaps Flow where
 
 instance HasParsers FMC_ParserMaps Rule where
   parserLookup key x = M.lookup key (_ruleParsers x)
--}
 
 instance HasParsers FMC_ParserMaps RateModel where
   parserLookup key x = M.lookup key (_rateModelParsers x)
 
 instance HasParsers FMC_ParserMaps RateModelFactor where
   parserLookup key x = M.lookup key (_rateModelFactorParsers x)
-
+-}
 
 addParser::ParserMapLens a->(String,ParseF FMC_ParserMaps a)->State FMC_ParserMaps ()
 addParser l (key,parser) = l %= M.insert key parser
 
+{-
 addBaseParsers::State FMC_ParserMaps ()
 addBaseParsers = do
-{-
   addParser assetParsers $ makeSimpleParserPairG (MkAsset :: Assets.CashAsset->Asset)
   addParser assetParsers $ makeSimpleParserPairG (MkAsset :: Assets.MixedFund->Asset)
   addParser assetParsers $ makeSimpleParserPairG (MkAsset :: Assets.ResidentialRE->Asset)
@@ -104,7 +103,6 @@ addBaseParsers = do
   addParser ruleParsers  $ makeSimpleParserPairG (MkRule :: Rules.SellAsNeeded->Rule)
   addParser ruleParsers  $ makeSimpleParserPairG (MkRule :: Rules.Sweep->Rule)
   addParser ruleParsers  $ makeSimpleParserPairG (MkRule :: Rules.TaxTrade->Rule)
--}
   addParser rateModelParsers  $ makeEnvParserPairG (MkRateModel :: RateModels.SingleFactorModel->RateModel)
   addParser rateModelParsers  $ makeEnvParserPairG (MkRateModel :: RateModels.GroupedFactorModel->RateModel)
   addParser rateModelParsers  $ makeEnvParserPairG (MkRateModel :: RateModels.SameFactorModel->RateModel)
@@ -112,9 +110,10 @@ addBaseParsers = do
   addParser rateModelFactorParsers  $ makeSimpleParserPairG (MkRateModelFactor :: RateModels.FixedRateModelFactor->RateModelFactor)
   addParser rateModelFactorParsers  $ makeSimpleParserPairG (MkRateModelFactor :: RateModels.NormalRateModelFactor->RateModelFactor)
   addParser rateModelFactorParsers  $ makeSimpleParserPairG (MkRateModelFactor :: RateModels.LogNormalRateModelFactor->RateModelFactor)
-
+-}
+  
 baseParsers::FMC_ParserMaps
-baseParsers = execState addBaseParsers (FMC_ParserMaps M.empty M.empty)
+baseParsers = FMC_ParserMaps
 
 
 

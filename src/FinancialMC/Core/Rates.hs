@@ -1,18 +1,33 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, FlexibleContexts, GADTs, KindSignatures, DataKinds, TypeFamilies, OverloadedStrings, ScopedTypeVariables #-}
-{-# LANGUAGE UndecidableInstances, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ConstraintKinds #-}
 module FinancialMC.Core.Rates 
        (
-         RateType(..),isRateType,
-         InterestType(..),ReturnType(..),InflationType(..),
-         RateTag(..),
-         RateTable(..),fromMap,setToDefaults,defaultRateTable, -- defaultRateTable is map based
-         rateRequest,
-         RSource,Rate,
-         IsRateModel(..),RateModel(..),
---         RateModelF(..),
-         applyModel,
-         RateModelC
+         RateType(..)
+       , isRateType
+       , InterestType(..)
+       , ReturnType(..)
+       , InflationType(..)
+       , RateTag(..)
+       , RateTable(..)
+       , fromMap
+       , setToDefaults
+       , defaultRateTable -- defaultRateTable is map based
+       , rateRequest
+       , RSource
+       , Rate
+       , IsRateModel(..)
+       , applyModel
+       , RateModelC
        ) where
 
 
@@ -97,29 +112,16 @@ throwingLookup rt t = noteM (FailedLookup (show t ++ ": rate not found")) $ rLoo
 
 rateRequest::(MonadReader (RateTable a) m,MonadThrow m)=>RateTag->m a
 rateRequest rTag = ask >>= flip throwingLookup rTag
---do
---  rTable <- ask
---  throwingLookup rTable rTag 
 
-
-
-
-
-
---MonadState (RateTable Rate, RSource) m, MonadThrow m
---newtype RateModelF = RateModelF { unRateModelF::StateT (RateTable Rate,RSource) (Either SomeException) RateModel }
 type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadThrow m)
 
---applyModel::(RateTable Rate,RSource)->RateModel->Either SomeException (RateModel,(RateTable Rate,RSource))
---applyModel (rates,src) model = runStateT (unRateModelF $ rateModelF model) (rates,src)
-
-applyModel::MonadThrow m=>(RateTable Rate,RSource)->RateModel->m (RateModel,(RateTable Rate,RSource))
+applyModel::(IsRateModel r,MonadThrow m)=>(RateTable Rate,RSource)->r->m (r,(RateTable Rate,RSource))
 applyModel (rates,src) model = runStateT (rateModelF model) (rates,src)
 
-
 class IsRateModel a where
-  rateModelF::(MonadState (RateTable Rate, RSource) m,MonadThrow m)=>a->m RateModel
+  rateModelF::(MonadState (RateTable Rate, RSource) m,MonadThrow m)=>a->m a
 
+{-
 data RateModel where
   MkRateModel::(TypeNamed a, IsRateModel a, ToJSON a) => a->RateModel
 
@@ -135,6 +137,6 @@ instance ToJSON RateModel where
 
 instance HasParsers e RateModel=>EnvFromJSON e RateModel where
   envParseJSON = parseJSON_Existential
-
+-}
 
 

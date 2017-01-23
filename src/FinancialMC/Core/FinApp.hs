@@ -254,7 +254,7 @@ taxDataApp2StepAppFSER::LoggableStepApp FinState ExchangeRateFunction app => Tax
 taxDataApp2StepAppFSER tda = stepLift . (zoomStepApp fsTaxData).  toStepApp $ tda
 
 
-taxDataApp2StepAppFS::TaxDataApp (Either SomeException) a->StepApp FinState FinEnv a          
+taxDataApp2StepAppFS::TaxDataApp (Either SomeException) a->StepApp FinState (FinEnv rm) a          
 taxDataApp2StepAppFS tda = (zoomStepApp fsTaxData) . (magnifyStepApp feExchange) . toStepApp $ tda
 
 taxDataApp2StepApp::LoggableStepApp TaxData ExchangeRateFunction app=>TaxDataApp (Either SomeException) a->app a          

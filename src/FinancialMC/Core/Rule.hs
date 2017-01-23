@@ -17,6 +17,7 @@ module FinancialMC.Core.Rule
 import           Data.Aeson                       (ToJSON (..))
 import           FinancialMC.Core.Asset           (AccountGetter, AccountName,
                                                    IsAsset)
+import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Evolve          (AccumResult)
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
 import           FinancialMC.Core.Result          (ResultT)
@@ -39,7 +40,7 @@ instance Monoid RuleOutput where
   mempty = RuleOutput [] []
   mappend (RuleOutput x1 y1) (RuleOutput x2 y2) = RuleOutput (x1<>x2) (y1<>y2)
 
-type RuleApp = ResultT RuleOutput (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
+type RuleApp rm = ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)))
 
 data RuleWhen = Special | BeforeTax | AfterSweep  deriving (Enum,Ord,Eq,Show,Read)
 
@@ -49,7 +50,7 @@ class IsRule r where
   ruleName::r->RuleName
   ruleAccounts::r->[AccountName]
   ruleWhen::r->RuleWhen
-  doRule::IsAsset a=>r->AccountGetter a->RuleApp ()
+  doRule::(IsAsset a,IsRateModel rm)=>r->AccountGetter a->RuleApp rm ()
 
 showRuleCore::IsRule r=>r->String
 showRuleCore r = show (ruleName r) ++" (involves " ++ show (ruleAccounts r) ++ ")"

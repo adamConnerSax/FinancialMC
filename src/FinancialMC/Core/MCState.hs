@@ -23,6 +23,7 @@ module FinancialMC.Core.MCState
 
 import           FinancialMC.Core.LifeEvent (IsLifeEvent)
 import           FinancialMC.Core.Asset (IsAsset,AccountName,Account(Account),HasAccount(..),accountValueCV)
+import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
 import           FinancialMC.Core.FinApp (LoggableStepApp,zoomStep)
 import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,HasFinState(..))
@@ -219,7 +220,7 @@ instance (Show a,Show fl,Show le, Show ru)=>Show (CombinedState a fl le ru) wher
   show cs = "Financial:\n" ++ show (cs ^. csFinancial) ++ "\nMonteCarlo:\n" ++ show (cs ^. csMC)
 
 
-netWorth::IsAsset a=>CombinedState a fl le ru->FinEnv->MoneyValue
+netWorth::IsAsset a=>CombinedState a fl le ru->FinEnv rm->MoneyValue
 netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValueCV acct) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -231,7 +232,7 @@ byLT::LiquidityType->Account a->Bool
 byLT lt acct = acctLT == lt where 
   acctLT = liquidityType (acct ^. acType)
 
-netWorthByLiquidityType::IsAsset a=>CombinedState a fl le ru->FinEnv->LiquidityType->MoneyValue
+netWorthByLiquidityType::IsAsset a=>CombinedState a fl le ru->FinEnv rm->LiquidityType->MoneyValue
 netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s CV.|+|  (value' acct)) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -241,14 +242,14 @@ netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s
   initial' = if lt == NearCash then (CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow) else z'
 
 
-netWorthBreakout::IsAsset a=>CombinedState a fl le ru->FinEnv->NetWorthMap
+netWorthBreakout::IsAsset a=>CombinedState a fl le ru->FinEnv rm->NetWorthMap
 netWorthBreakout cs fe = M.fromList (zip lts nws) where
   lts = [(minBound::LiquidityType) ..]
   nws = fmap (netWorthByLiquidityType cs fe) lts
 
 
 data FlowAccum' = FlowAccum' !CV.CVD !CV.CVD
-grossFlows::IsFlow fl=>CashFlows fl->FinEnv->(MoneyValue,MoneyValue)
+grossFlows::IsFlow fl=>CashFlows fl->FinEnv rm->(MoneyValue,MoneyValue)
 grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy e outF) where
   e = fe ^. feExchange
   d = fe ^. feCurrentDate
@@ -262,12 +263,12 @@ grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy
   FlowAccum' inF outF = F.foldr g (FlowAccum' z z) flows
 
 
-makeMCState::BalanceSheet a->CashFlows fl->FinEnv->[le]->[ru]->ru->ru->MCState a fl le ru
+makeMCState::BalanceSheet a->CashFlows fl->FinEnv rm->[le]->[ru]->ru->ru->MCState a fl le ru
 makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] [] where
   z = MV.zero  (fe ^. feDefaultCCY)
 
 --NB: this is where all the evolution flows and accums finally get applied
-evolveMCS::(Evolvable a,Evolvable fl)=>LoggableStepApp (CombinedState a fl le ru) FinEnv app=>app ()
+evolveMCS::(Evolvable a,Evolvable fl,IsRateModel rm)=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>app ()
 evolveMCS = do
   mcs <- use csMC
   mcs' <- zoomStep csFinancial $ evolveAndApply mcs
@@ -287,7 +288,7 @@ addPathSummary (FinalNW _) (FinalNW y) = FinalNW y
 addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day 
 
 
-summarize::IsAsset a=>LoggableStepApp (CombinedState a fl le ru) FinEnv app=>
+summarize::IsAsset a=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>
   MoneyValue->MoneyValue->MoneyValue->Double->app ()
 summarize  inF outF tax taxRate = do
   cs <- get
@@ -302,13 +303,13 @@ summarize  inF outF tax taxRate = do
   when needHistory $  addHistory inF outF tax taxRate
   return ()
 
-computeFlows::IsFlow fl=>LoggableStepApp (CashFlows fl) FinEnv app=>app (MoneyValue,MoneyValue)
+computeFlows::IsFlow fl=>LoggableStepApp (CashFlows fl) (FinEnv rm) app=>app (MoneyValue,MoneyValue)
 computeFlows = do
   cs <- get --use (csMC.mcsCashFlows)
   fe <- ask  
   return $ grossFlows cs fe
 
-addHistory::IsAsset a=>LoggableStepApp (CombinedState a fl le ru) FinEnv app=>
+addHistory::IsAsset a=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>
   MoneyValue->MoneyValue->MoneyValue->Double->app ()
 addHistory inF outF tax effRate  = do
   cs <- get

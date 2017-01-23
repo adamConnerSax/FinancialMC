@@ -1,23 +1,34 @@
-{-# LANGUAGE TemplateHaskell, FlexibleContexts #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE FlexibleInstances #-}
 module FinancialMC.Core.FinancialStates
        (
-         FinEnv(FinEnv),HasFinEnv(..),
-         FinState(FinState),HasFinState(..),
-         zeroFinState,
-         currentDate,
-         changeRate,changeCurrentDate,exchangeRFFromRateTable,updateExchangeRateFunction,
-         AccumName,
-         Accumulators(Accumulators),
-         HasAccumulators(..),
-         addToAccumulator,addToAccumulator',
-         getAccumulatedValue,zeroAccumulator,
-         addCashFlow
+         FinEnv(FinEnv)
+       , HasFinEnv(..)
+       , FinState(FinState)
+       , HasFinState(..)
+       , zeroFinState
+       , currentDate
+       , changeRate
+       , changeCurrentDate
+       , exchangeRFFromRateTable
+       , updateExchangeRateFunction
+       , AccumName
+       , Accumulators(Accumulators)
+       , HasAccumulators(..)
+       , addToAccumulator
+       , addToAccumulator'
+       , getAccumulatedValue
+       , zeroAccumulator
+       , addCashFlow
        ) where
 
 import FinancialMC.Core.MoneyValue (ExchangeRateFunction,Currency,MoneyValue) 
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import FinancialMC.Core.Tax (TaxRules,TaxData,defaultTaxData)
-import FinancialMC.Core.Rates (Rate,RateTable(..),RateModel,RateTag(Exchange))
+import FinancialMC.Core.Rates (Rate,RateTable(..),IsRateModel,RateTag(Exchange))
 import FinancialMC.Core.Utilities (Year,FMCException(FailedLookup,Other),noteM)
 
 import qualified Data.Map.Strict as M
@@ -30,25 +41,25 @@ import Control.Lens (makeClassy,use,view,(.=),(^.),(%=))
 import qualified Data.Text as T
 
 
-data FinEnv = FinEnv { _feRates::RateTable Double, _feExchange:: !ExchangeRateFunction , _feCurrentDate:: !Year, _feDefaultCCY:: !Currency, _feTaxRules:: !TaxRules, _feRateModel:: !RateModel} 
+data FinEnv rm = FinEnv { _feRates::RateTable Double, _feExchange:: !ExchangeRateFunction , _feCurrentDate:: !Year, _feDefaultCCY:: !Currency, _feTaxRules:: !TaxRules, _feRateModel:: !rm} 
 makeClassy ''FinEnv
 
 
-instance Show FinEnv where
+instance Show rm=>Show (FinEnv rm) where
   show (FinEnv rates _ cd ccy tr rm) = "rates: " ++ show rates ++ "\nmodel: " ++ "(unShowable)" ++ "\ndate: " ++ show cd ++ "\ncurrency: " ++ show ccy ++ "\ntax: " ++ show tr
 
-currentDate::Reader FinEnv Year
+currentDate::Reader (FinEnv rm) Year
 currentDate = reader $ \e->e ^. feCurrentDate
 
 
 -- functions to change external state between evolves
 
-changeRate::RateTag->Double->State FinEnv ()
+changeRate::RateTag->Double->State (FinEnv rm) ()
 changeRate rateTag x = do 
   rateTable <- use feRates
   feRates .= rSet rateTable rateTag x
   
-changeCurrentDate::Year->State FinEnv ()
+changeCurrentDate::Year->State (FinEnv rm) ()
 changeCurrentDate d = feCurrentDate .= d
                       
 exchangeRFFromRateTable::RateTable Rate->ExchangeRateFunction
@@ -59,7 +70,7 @@ exchangeRFFromRateTable rateTable ca cb =
       eRates = foldl (\m k->M.insert k (eRate k) m) M.empty pairs
   in fromJust (M.lookup (ca,cb) eRates)
       
-updateExchangeRateFunction::MonadState FinEnv m=>m ()
+updateExchangeRateFunction::MonadState (FinEnv rm) m=>m ()
 updateExchangeRateFunction = do
   rateTable <- use feRates
   feExchange .= exchangeRFFromRateTable rateTable
@@ -89,7 +100,7 @@ zeroFinState c = FinState { _fsTaxData=defaultTaxData c,
 
     
   
-addToAccumulator::(MonadThrow m, MonadReader FinEnv m, MonadState FinState m)=>AccumName->MoneyValue->m ()  
+addToAccumulator::(MonadThrow m, MonadReader (FinEnv rm) m, MonadState FinState m)=>AccumName->MoneyValue->m ()  
 addToAccumulator name amount = do 
   when (T.null name) $ throwM (Other "No name specified in call to addToAccumulator")
   e <- view feExchange

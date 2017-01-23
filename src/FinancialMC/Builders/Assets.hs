@@ -37,13 +37,13 @@ import Data.Aeson.Types (ToJSON(..),FromJSON(..),defaultOptions,fieldLabelModifi
 
 import GHC.Generics (Generic)
 
-laERMV::Monad m=>Currency->CV.CVD->ReaderT FinEnv m MoneyValue
+laERMV::Monad m=>Currency->CV.CVD->ReaderT (FinEnv rm) m MoneyValue
 laERMV c = magnify feExchange . CV.asERMV c
 
-assetCVMult::(IsAsset a,Monad m)=>a->Double->ReaderT FinEnv m MoneyValue
+assetCVMult::(IsAsset a,Monad m)=>a->Double->ReaderT (FinEnv rm) m MoneyValue
 assetCVMult x rate = laERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (assetValue x)
 
-liftRates::ReaderT (RateTable Double) (Either SomeException) Double -> ReaderT FinEnv (Either SomeException) Double
+liftRates::ReaderT (RateTable Double) (Either SomeException) Double -> ReaderT (FinEnv rm) (Either SomeException) Double
 liftRates = magnify feRates
 
 data BaseAssetDetails =
@@ -100,7 +100,7 @@ instance Evolvable BaseAsset where
 
 -- these functions are almost all partial and definitely only meant to work on one asset detail type.
 -- The Evolvable instance *is* total and these functions won't be exported
-cashEvolveFunction::Evolver BaseAsset 
+cashEvolveFunction::Evolver rm BaseAsset 
 cashEvolveFunction ca = do
   (interest',v') <- lift $  do
     rate <- magnify feRates $ rateRequest (Interest Savings)
@@ -109,7 +109,7 @@ cashEvolveFunction ca = do
     return (interest,v)
   appendAndReturn (EvolveOutput [OnlyTaxed (TaxAmount NonPayrollIncome interest')] []) (revalueAsset ca (NewValueAndBasis v' v'))
   
-mixedFundEvolveFunction::Evolver BaseAsset  
+mixedFundEvolveFunction::Evolver rm BaseAsset  
 mixedFundEvolveFunction mf@(BaseAsset _ (MixedFund fracStock stkYield bondInterest)) = do
   (flows', newA') <- lift $ do
     stockRet <- liftRates $ rateRequest (Return Stock)
@@ -127,12 +127,12 @@ mixedFundEvolveFunction mf@(BaseAsset _ (MixedFund fracStock stkYield bondIntere
     return (flows, revalueAsset mf (NewValueAndBasis newV newB))    
   appendAndReturn (EvolveOutput flows' []) newA'  
 
-guaranteedFundEvolveFunction::Evolver BaseAsset
+guaranteedFundEvolveFunction::Evolver rm BaseAsset
 guaranteedFundEvolveFunction gf@(BaseAsset _ (GuaranteedFund rate)) = do
   v' <- lift $ assetCVMult gf (1.0 + rate)
   returnOnly $! revalueAsset gf (NewValue v')
 
-residentialREEvolveF::Evolver BaseAsset
+residentialREEvolveF::Evolver rm BaseAsset
 residentialREEvolveF rre = do
   v <- lift $ do 
     ret <- liftRates $ rateRequest (Return RealEstate)
@@ -140,7 +140,7 @@ residentialREEvolveF rre = do
   returnOnly $! revalueAsset rre $ NewValue v
 
 
-fixedMortgageEvolveFunction::Evolver BaseAsset
+fixedMortgageEvolveFunction::Evolver rm BaseAsset
 fixedMortgageEvolveFunction frm@(BaseAsset _ (FixedRateMortgage rate years)) =  do
   let ccy = (assetCurrency frm)     
       borrowed' = CV.cvNegate $ CV.fromMoneyValue (assetCostBasis frm)

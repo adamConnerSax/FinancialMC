@@ -22,6 +22,7 @@ import           FinancialMC.Core.Asset           (Account, AccountGetter,
                                                    IsAsset)
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
 import           FinancialMC.Core.Flow            (IsFlow)
+import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Result          (ResultT)
 import           FinancialMC.Core.Utilities       (Year)
 
@@ -46,7 +47,7 @@ instance Bifunctor LifeEventOutput where
   first f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
   second f (LifeEventOutput accts flows) = LifeEventOutput accts (f <$> flows)
 
-type LifeEventApp a fl = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT FinEnv (Either SomeException)))
+type LifeEventApp a fl rm = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)))
 
 type LifeEventName = T.Text
 
@@ -69,7 +70,7 @@ class IsLifeEvent e where
   type FlowType e :: *
   lifeEventCore::e->LifeEventCore
   -- do we need/want the constraints here
-  doLifeEvent::(IsAsset a,IsFlow fl)=>e->LifeEventConverters a fl e->AccountGetter a->LifeEventApp a fl ()
+  doLifeEvent::(IsAsset a,IsFlow fl,IsRateModel rm)=>e->LifeEventConverters a fl e->AccountGetter a->LifeEventApp a fl rm ()
 
 lifeEventName::IsLifeEvent e=>e->LifeEventName
 lifeEventName = leName . lifeEventCore

@@ -23,7 +23,7 @@ import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Tax (TaxType,TaxDataAppC,addTaxableFlow,addDeductibleFlow)
 import           FinancialMC.Core.Result (MonadResult,Result(Result),ResultT,runResultT)
 import           FinancialMC.Core.Utilities (FMCException(..))
-
+import           FinancialMC.Core.Rates (IsRateModel)
 import           Data.Monoid ((<>))
 
 import           Control.Monad.Trans (MonadTrans)
@@ -63,18 +63,18 @@ instance Monoid EvolveOutput where
 
 type EvolveResult a = Result EvolveOutput a 
 
-type EvolveApp = ResultT EvolveOutput (ReaderT FinEnv (Either SomeException))
+type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either SomeException))
 
-type Evolver a = a->EvolveApp a 
+type Evolver rm a = a->EvolveApp rm a 
                  
-liftER::MV.ER (Either SomeException) a->EvolveApp a
+liftER::MV.ER (Either SomeException) a->EvolveApp rm a
 liftER = lift . magnify feExchange
 
 class Evolvable e where
-  evolve::Evolver e
+  evolve::IsRateModel rm=>Evolver rm e
 
 
-evolveWithin::(Evolvable a,TR.Traversable t)=>b->Lens' b (t a)->EvolveApp b 
+evolveWithin::IsRateModel rm=>(Evolvable a,TR.Traversable t)=>b->Lens' b (t a)->EvolveApp rm b 
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
 
 
@@ -128,7 +128,7 @@ applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyAccums accums
   return $! a
 
-evolveAndApply::(Evolvable a,LoggableStepApp FinState FinEnv app)=> a->app a
+evolveAndApply::IsRateModel rm=>(Evolvable a,LoggableStepApp FinState (FinEnv rm) app)=> a->app a
 evolveAndApply a = stepLift $  do
   x <- (toStepApp . lift . runResultT . evolve $ a)
   magnifyStepApp feExchange . applyEvolveResult $ x

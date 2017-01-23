@@ -5,8 +5,8 @@ module FinancialMC.Parsers.XML.ParseRateModel
          loadRateModelsFromString,
        ) where
                        
-import FinancialMC.Core.Rates (RateModel(MkRateModel))
-import FinancialMC.Builders.RateModels (RateModelFactor(MkRateModelFactor))
+--import FinancialMC.Core.Rates (RateModel(MkRateModel))
+--import FinancialMC.Builders.RateModels (RateModelFactor(MkRateModelFactor))
 import qualified FinancialMC.Builders.RateModels as RM
 import FinancialMC.Parsers.Configuration (RateModels)
 
@@ -17,46 +17,48 @@ import Text.XML.HXT.Core (withRemoveWS,yes,readString,IOSLA,XIOState,XmlTree,(>>
 
 import qualified Data.Map as M
 
-import Control.Monad.State.Strict (put,get,MonadState,StateT,MonadTrans,lift,evalStateT)
+import Control.Monad.State.Strict (put,get,modify,MonadState,StateT,MonadTrans,lift,evalStateT)
 
+type RateModel = RM.BaseRateModel RM.BaseRateModelFactor
 
-loadRateModelsFromFile::Maybe FilePath->FilePath->StateT RateModels IO ()
-loadRateModelsFromFile mSchemaDir file =
-  lift (readFile file) >>= loadRateModelsFromString mSchemaDir
+loadRateModelsFromFile::(RateModel->rm)->Maybe FilePath->FilePath->StateT (RateModels rm) IO ()
+loadRateModelsFromFile f mSchemaDir file =
+  lift (readFile file) >>= loadRateModelsFromString f mSchemaDir
 
   
-loadRateModelsFromString::Maybe FilePath->String->StateT RateModels IO ()
-loadRateModelsFromString mSchemaDir content = do                         
+loadRateModelsFromString::(RateModel->rm)->Maybe FilePath->String->StateT (RateModels rm) IO ()
+loadRateModelsFromString f mSchemaDir content = do                         
   let opts = buildOpts mSchemaDir [withRemoveWS yes] "RateModels.rng"
   let xml = readString opts content
   loadRateModels' xml
+  modify (fmap f)
   
-loadRateModels'::forall (t::(* -> *) -> * -> *).(MonadTrans t, MonadState RateModels (t IO))=>
+loadRateModels'::forall (t::(* -> *) -> * -> *).(MonadTrans t, MonadState (RateModels RateModel) (t IO))=>
                  IOSLA (XIOState XmlParseInfos) XmlTree XmlTree -> t IO ()
 loadRateModels' xml = do
   rms<-get
   result <- lift $ runFMCX (xml >>> parseRateModels rms)
   put $ head result -- returnA always returns a list even if only 1 result
 
-parseFixedSR::ArrowXml a=>a XmlTree RateModelFactor
+parseFixedSR::ArrowXml a=>a XmlTree RM.BaseRateModelFactor
 parseFixedSR = proc l -> do
   rate <- readAttrValue "rate" -< l
-  returnA -< MkRateModelFactor $ RM.FixedRateModelFactor (rate/100)
+  returnA -< RM.Fixed (rate/100)
   
   
-parseNormalSR::ArrowXml a=>a XmlTree RateModelFactor
+parseNormalSR::ArrowXml a=>a XmlTree RM.BaseRateModelFactor
 parseNormalSR = proc l -> do
   mean <- readAttrValue "mean" -< l
   vol  <- readAttrValue "vol"  -< l
-  returnA -< MkRateModelFactor $ RM.NormalRateModelFactor (mean/100) (vol/100)
+  returnA -< RM.Normal (mean/100) (vol/100)
  
-parseLogNormalSR::ArrowXml a=>a XmlTree RateModelFactor
+parseLogNormalSR::ArrowXml a=>a XmlTree RM.BaseRateModelFactor
 parseLogNormalSR = proc l -> do
   mean <- readAttrValue "mean" -< l
   vol  <- readAttrValue "vol"  -< l
-  returnA -< MkRateModelFactor $ RM.LogNormalRateModelFactor (mean/100) (vol/100) Nothing Nothing
+  returnA -< RM.makeLogNormalFactor (mean/100) (vol/100)
 
-parseSRModel::(ArrowChoice a, ArrowXml a)=>a XmlTree RateModelFactor
+parseSRModel::(ArrowChoice a, ArrowXml a)=>a XmlTree RM.BaseRateModelFactor
 parseSRModel = proc l -> do
   srModelType <- getElemName -< l
   srModel <- case localPart srModelType of
@@ -69,14 +71,14 @@ parseSRModel = proc l -> do
 parseGrouped::(ArrowChoice a, ArrowXml a)=>a XmlTree RateModel
 parseGrouped = proc l -> do
   groupType <- readAttrValue "type" -< l
-  model <- getChildren >>> parseSRModel -< l 
-  returnA -< MkRateModel $ RM.GroupedFactorModel groupType model
+  factor <- getChildren >>> parseSRModel -< l 
+  returnA -< RM.GroupedModel groupType factor
 
 parseSimple::(ArrowChoice a, ArrowXml a)=>a XmlTree RateModel
 parseSimple = proc l -> do
   sTag <- readAttrValue "rateType" -< l
-  model <- getChildren >>> parseSRModel -< l 
-  returnA -< MkRateModel $ RM.SingleFactorModel sTag model
+  factor <- getChildren >>> parseSRModel -< l 
+  returnA -< RM.SingleFactorModel sTag factor
 
 parseRateModel::(ArrowChoice a, ArrowXml a)=>a XmlTree RateModel
 parseRateModel = proc l -> do
@@ -90,9 +92,9 @@ parseMultiModel::(ArrowChoice a, ArrowXml a)=>a XmlTree (String,RateModel)
 parseMultiModel = proc l -> do
   name <- getAttrValue "name" -< l
   subModels <- listA (getChildren >>> parseRateModel) -< l
-  returnA -< (name,MkRateModel $ RM.ListModel subModels)
+  returnA -< (name,RM.ListModel subModels)
 
-parseRateModels::(ArrowChoice a, ArrowXml a)=>RateModels->a XmlTree RateModels
+parseRateModels::(ArrowChoice a, ArrowXml a)=>(RateModels RateModel)->a XmlTree (RateModels RateModel)
 parseRateModels rms = proc l -> do
   models <- listA (atTag "RateModel" >>> parseMultiModel) -< l
   returnA -< foldl (\m (k,v)->M.insert k v m) rms models

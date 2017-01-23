@@ -47,10 +47,10 @@ import qualified Data.Text                        as T
 import           GHC.Generics                     (Generic)
 
 -- lifts to one below since we do all work underneath Result and then lift
-laERMV::Monad m=>Currency->CV.CVD->ReaderT FinEnv m MoneyValue
+laERMV::Monad m=>Currency->CV.CVD->ReaderT (FinEnv rm) m MoneyValue
 laERMV c = magnify feExchange . CV.asERMV c
 
-liftFE::ReaderT FinEnv (Either SomeException) a -> ResultT EvolveOutput (ReaderT FinEnv (Either SomeException)) a
+liftFE::ReaderT (FinEnv rm) (Either SomeException) a -> ResultT EvolveOutput (ReaderT (FinEnv rm) (Either SomeException)) a
 liftFE = lift
 
 flowF::IsFlow f=>Year->f->MoneyValue
@@ -106,7 +106,7 @@ instance Evolvable BaseFlow where
   evolve fl@(BaseFlow _ SalaryPayment) = wageEvolve fl
   evolve fl@(BaseFlow _ (RentalIncome _)) = rentalIncomeEvolve fl
 
-expenseWithInflation::IsFlow f=>Bool->AccumName->InflationType->Evolver f
+expenseWithInflation::IsFlow f=>Bool->AccumName->InflationType->Evolver rm f
 expenseWithInflation deductible accumName iType f = do
   infRate <- lift . magnify feRates $ rateRequest (Inflation iType)
   curDate <- view feCurrentDate
@@ -119,7 +119,7 @@ expenseWithInflation deductible accumName iType f = do
   appendAndReturn (EvolveOutput [flowResult] accums) newExpense
 
 
-paymentEvolve::Evolver BaseFlow
+paymentEvolve::Evolver rm BaseFlow
 paymentEvolve p@(BaseFlow _ (Payment growth_rate)) = do
   curDate <- liftFE $ view feCurrentDate
   -- only grows once live.  So a future starting payment starts at amount given
@@ -127,7 +127,7 @@ paymentEvolve p@(BaseFlow _ (Payment growth_rate)) = do
       cashFlow = flowF curDate p
   appendAndReturn (EvolveOutput [AllTaxed (TaxAmount OrdinaryIncome cashFlow)] []) (revalueFlow p newA)
 
-wageEvolve::Evolver BaseFlow
+wageEvolve::Evolver rm BaseFlow
 wageEvolve p = do
   (cashFlow',newA') <- liftFE $ do
     infRate <- (magnify feRates) $ rateRequest (Inflation Wage)
@@ -138,7 +138,7 @@ wageEvolve p = do
   appendAndReturn (EvolveOutput [AllTaxed (TaxAmount OrdinaryIncome cashFlow')] []) (revalueFlow p newA')
 
 --Need test for this.
-rentalIncomeEvolve::Evolver BaseFlow
+rentalIncomeEvolve::Evolver rm BaseFlow
 rentalIncomeEvolve ri@(BaseFlow _ (RentalIncome maxAnnualDed)) = do
   let ccy = flowCurrency ri
   (cashFlow',newPayment',taxable') <- liftFE $ do

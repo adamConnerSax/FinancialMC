@@ -34,7 +34,7 @@ import qualified Data.Text as T
 import           GHC.Generics (Generic)
 
 --laERMV::_
-laERMV::(MonadTrans t1, MonadTrans t2, Monad m, Monad (t2 n), n ~ ReaderT FinEnv m)=>Currency->CV.CVD->t1 (t2 (ReaderT FinEnv m)) MoneyValue
+laERMV::(MonadTrans t1, MonadTrans t2, Monad m, Monad (t2 n), n ~ ReaderT (FinEnv rm) m)=>Currency->CV.CVD->t1 (t2 (ReaderT (FinEnv rm) m)) MoneyValue
 laERMV c a = lift . lift . magnify feExchange $ CV.asERMV c a
 
 
@@ -91,7 +91,7 @@ instance Show BaseLifeEvent where
 
 -- should this get fixed to run underneath ResultT until the end?
 buyProperty::LifeEventCore->PropertyPurchase->LifeEventConverters a fl BaseLifeEvent->
-             AccountGetter a->LifeEventApp a fl ()
+             AccountGetter a->LifeEventApp a fl rm ()
 buyProperty (LifeEventCore name y)
   (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint)
   (LEC convertA convertF) _ = do
