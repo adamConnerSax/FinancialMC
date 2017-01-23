@@ -28,7 +28,8 @@ import           FinancialMC.Core.Rates                      (Rate, RateModel,
                                                               RateTable,
                                                               applyModel,
                                                               defaultRateTable)
-import           FinancialMC.Core.Rule                       (ruleAccounts)
+import           FinancialMC.Core.Rule                       (IsRule,
+                                                              ruleAccounts)
 import           FinancialMC.Core.Tax                        (FilingStatus,
                                                               TaxRules)
 import           FinancialMC.Core.Utilities                  (eitherToIO, noteM)
@@ -41,7 +42,8 @@ import           FinancialMC.Parsers.XML.ParseTax            (loadTaxDataFromStr
 
 import           FinancialMC.Base                            (BaseAsset,
                                                               BaseFlow,
-                                                              BaseLifeEvent)
+                                                              BaseLifeEvent,
+                                                              BaseRule)
 
 import qualified Control.Exception                           as E
 import           Control.Monad                               (foldM)
@@ -60,13 +62,14 @@ import           Data.Aeson                                  (FromJSON)
 import           Data.Aeson.Existential                      (EnvFromJSON (..))
 import           Data.Aeson.Existential.EnvParser            (envEitherDecode, envEitherDecodeYaml)
 
-type BaseFCC a fl le = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le
-type FJ a fl le = (FromJSON a,
-                   FromJSON fl, EnvFromJSON FMC_ParserMaps fl,
-                   FromJSON le, EnvFromJSON FMC_ParserMaps le)
+type BaseFCC a fl le ru = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le BaseRule ru
+type FJ a fl le ru = (FromJSON a,
+                      FromJSON fl, EnvFromJSON FMC_ParserMaps fl,
+                      FromJSON le, EnvFromJSON FMC_ParserMaps le,
+                      FromJSON ru, EnvFromJSON FMC_ParserMaps ru)
 
-loadDataSource::FJ a fl le=>BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->
-                C.DataSource->StateT (C.LoadedModels a fl le) IO ()
+loadDataSource::(FJ a fl le ru,IsRule ru)=>BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->
+                C.DataSource->StateT (C.LoadedModels a fl le ru) IO ()
 loadDataSource fcc mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.FinancialStateS) =
   zoom C.lmFS $ lift (C.asIOString up) >>= loadFinancialStatesFromString fcc mSchemaDir
   -- validate!!
@@ -111,20 +114,21 @@ decodeUnparsed pMap up C.YAML = do
 
 decodeUnparsed _ _ _ = E.throwIO $ BadParse "Fallthrough case in decodeUnparsed."
 
-loadDataSources::FJ a fl le=>
-  BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->[C.DataSource]->StateT (C.LoadedModels a fl le) IO ()
+loadDataSources::(FJ a fl le ru,IsRule ru)=>
+  BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->[C.DataSource]->StateT (C.LoadedModels a fl le ru) IO ()
 loadDataSources fcc mSchemaDir pMap = mapM_ (loadDataSource fcc mSchemaDir pMap)
 
-loadXMLConfigs::FJ a fl le=>
-  BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a fl le,C.ModelDescriptionMap) IO ()
+loadXMLConfigs::(FJ a fl le ru,IsRule ru)=>
+  BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a fl le ru,C.ModelDescriptionMap) IO ()
 loadXMLConfigs fcc mSchema pMap (C.UnparsedFile fp) = do
   (sources,configM) <- lift $ XML.loadConfigurations mSchema fp
   zoom _1 $ loadDataSources fcc mSchema pMap sources
   hoist generalize $ _2 %= M.union configM
 loadXMLConfigs _ _ _ _ = lift $ E.throwIO $ BadParse "loadXMLConfigs called with Unparsed of sort other than UnparsedFile"
 
-loadJSONConfigs::FJ a fl le=>
-  BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a fl le,C.ModelDescriptionMap) IO ()
+loadJSONConfigs::(FJ a fl le ru,IsRule ru)=>
+  BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->C.Unparsed->
+  StateT (C.LoadedModels a fl le ru,C.ModelDescriptionMap) IO ()
 loadJSONConfigs fcc mSchema pMap up = do
   configLBS <- lift $ C.asIOLazyByteString up
   case envEitherDecode pMap configLBS of
@@ -133,8 +137,9 @@ loadJSONConfigs fcc mSchema pMap up = do
       zoom _1 $ loadDataSources fcc mSchema pMap sources
       hoist generalize $ _2 %= M.union configM
 
-loadYAMLConfigs::FJ a fl le=>
-  BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a fl le,C.ModelDescriptionMap) IO ()
+loadYAMLConfigs::(FJ a fl le ru,IsRule ru)=>
+  BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->C.Unparsed->
+  StateT (C.LoadedModels a fl le ru,C.ModelDescriptionMap) IO ()
 loadYAMLConfigs fcc mSchema pMap up = do
   configBS <- lift $ C.asIOByteString up
   case envEitherDecodeYaml pMap configBS of
@@ -143,8 +148,9 @@ loadYAMLConfigs fcc mSchema pMap up = do
       zoom _1 $ loadDataSources fcc mSchema pMap sources
       hoist generalize $ _2 %= M.union configM
 
-loadConfigurationsS::FJ a fl le=>
-  BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->StateT (C.LoadedModels a fl le,C.ModelDescriptionMap) IO ()
+loadConfigurationsS::(FJ a fl le ru,IsRule ru)=>
+  BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->C.Unparsed->
+  StateT (C.LoadedModels a fl le ru,C.ModelDescriptionMap) IO ()
 loadConfigurationsS fcc mSchemaP pMaps up@(C.UnparsedFile configP) = loadC fcc mSchemaP pMaps up where
   loadC = case C.encodingFromSuffix configP of
     C.XML -> loadXMLConfigs
@@ -155,12 +161,12 @@ loadConfigurationsS fcc mSchemaP pMaps up@(C.UnparsedFile configP) = loadC fcc m
 loadConfigurationsS _ _ _ _ = lift $ E.throwIO $ BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
 
 
-loadConfigurations::FJ a fl le=>
-  BaseFCC a fl le->Maybe FilePath->FMC_ParserMaps->C.Unparsed->IO (C.LoadedModels a fl le,C.ModelDescriptionMap)
+loadConfigurations::(FJ a fl le ru,IsRule ru)=>
+  BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->C.Unparsed->IO (C.LoadedModels a fl le ru,C.ModelDescriptionMap)
 loadConfigurations fcc mSchemaP pMaps up =
   execStateT (loadConfigurationsS fcc mSchemaP pMaps up) (C.LoadedModels M.empty M.empty C.emptyTaxStructure,M.empty)
 
-buildMCState::C.InitialFS a fl le->FinEnv->MCState a fl le
+buildMCState::C.InitialFS a fl le ru->FinEnv->MCState a fl le ru
 buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs cfs fe les rules sweepR taxTradeR
 
 makeStartingRates::MonadThrow m=>RateModel->m (RateTable Rate)
@@ -168,7 +174,7 @@ makeStartingRates rateDefaultModel = do
   (_,(startingRates,_)) <- applyModel (defaultRateTable,pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
   return startingRates
 
-buildInitialState::C.InitialFS a fl le->TaxRules->RateTable Rate->RateModel->Year->MV.Currency->(FinEnv,CombinedState a fl le)
+buildInitialState::C.InitialFS a fl le ru->TaxRules->RateTable Rate->RateModel->Year->MV.Currency->(FinEnv,CombinedState a fl le ru)
 buildInitialState ifs taxRules startingRates rModel date ccy =
   let erF = exchangeRFFromRateTable startingRates
       fe = FinEnv startingRates erF date ccy taxRules rModel
@@ -176,7 +182,7 @@ buildInitialState ifs taxRules startingRates rModel date ccy =
       ics = CombinedState (zeroFinState ccy) mcs False
   in (fe, ics)
 
-getInitialStates::C.LoadedModels a fl le->FilingStatus->(String,String,String,String,String,Maybe String)->Year->MV.Currency->Either E.SomeException (FinEnv,CombinedState a fl le)
+getInitialStates::C.LoadedModels a fl le ru->FilingStatus->(String,String,String,String,String,Maybe String)->Year->MV.Currency->Either E.SomeException (FinEnv,CombinedState a fl le ru)
 getInitialStates (C.LoadedModels ifsM rmM ts) fstat (fsName,rdName,rmName,tfName,tsName,mtcName) date ccy = do
   initialFS <-
     noteM (Other ("Couldn't find Financial State named \"" ++ fsName ++ "\"")) $ C.getFinancialState ifsM fsName
@@ -187,7 +193,7 @@ getInitialStates (C.LoadedModels ifsM rmM ts) fstat (fsName,rdName,rmName,tfName
   return $ buildInitialState initialFS taxRules startingRates rateModel date ccy
 
 
-buildInitialStateFromConfig::C.LoadedModels a fl le->C.ModelDescriptionMap->String->Either E.SomeException (Maybe String,FinEnv,CombinedState a fl le)
+buildInitialStateFromConfig::C.LoadedModels a fl le ru->C.ModelDescriptionMap->String->Either E.SomeException (Maybe String,FinEnv,CombinedState a fl le ru)
 buildInitialStateFromConfig ci cm confName = do
   (C.ModelDescription fs op date ccy (rds,rms) (fstat,fed,st,cty)) <-
     noteM (Other ("Failed to find conf=" ++ confName)) $ M.lookup confName cm
@@ -201,7 +207,7 @@ exchangeRates MV.EUR MV.USD = 1.0/exchangeRates MV.USD MV.EUR
 exchangeRates _ _     = 1.0
 
 
-validateFinancialState::C.InitialFS a fl le->String->Either E.SomeException ()
+validateFinancialState::IsRule ru=>C.InitialFS a fl le ru->String->Either E.SomeException ()
 validateFinancialState (C.InitialFS bs _ _ rs sw tt) configName = do
   let validAccountNames = getAccountNames bs
       checkName::AccountName->Either E.SomeException ()

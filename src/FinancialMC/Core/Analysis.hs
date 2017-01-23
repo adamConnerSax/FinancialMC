@@ -37,7 +37,7 @@ psToNumber::PathSummary->Double
 psToNumber (FinalNW mv) = mv ^. mAmount 
 psToNumber (ZeroNW _) = 0
 
-getHistory::CombinedState a fl le->[(Year,FSSummary)]
+getHistory::CombinedState a fl le ru->[(Year,FSSummary)]
 getHistory cs = cs ^. csMC.mcsHistory  
 
 sortSummaries::[(PathSummary,a)]->[(PathSummary,a)]     
@@ -49,8 +49,8 @@ qIndices len quantiles = map (\n-> (2*n - 1)*len `div` (2 * quantiles)) [1..quan
 qSubSet::[Int]->[a]->[a]
 qSubSet is xs = map (\n -> xs !! n) is
 
-historiesFromSummaries::EngineC a fl le=>
-  LifeEventConverters a fl le->[(PathSummary,Word64)]->(FinEnv,CombinedState a fl le)->Bool->Int->Int->
+historiesFromSummaries::EngineC a fl le ru=>
+  LifeEventConverters a fl le->[(PathSummary,Word64)]->(FinEnv,CombinedState a fl le ru)->Bool->Int->Int->
   (Either SomeException) ([[(Year,MoneyValue)]],[(Year,FSSummary)])
 historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles years = do
   let year0 = fe0 ^. feCurrentDate
@@ -79,7 +79,7 @@ summariesToHistogram summaries numBins =
   let nws = V.fromList $ map (\(x,_)->psToNumber x) summaries
   in histogram numBins  nws 
 
-initialSummary::(IsAsset a,IsFlow fl)=>CombinedState a fl le->FinEnv->(Year,FSSummary)                     
+initialSummary::(IsAsset a,IsFlow fl)=>CombinedState a fl le ru->FinEnv->(Year,FSSummary)                     
 initialSummary cs0 fe0 =
   let nw =  netWorth cs0 fe0
       nwbo = netWorthBreakout cs0 fe0

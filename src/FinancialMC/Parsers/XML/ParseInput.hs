@@ -19,6 +19,7 @@ import           FinancialMC.Parsers.XML.ParseTax            (emptyTaxStructure,
 import           FinancialMC.Builders.Assets                 (BaseAsset)
 import           FinancialMC.Builders.Flows                  (BaseFlow)
 import           FinancialMC.Builders.LifeEvents             (BaseLifeEvent)
+import           FinancialMC.Builders.Rules                  (BaseRule)
 
 import           FinancialMC.Parsers.XML.Utilities           (FMCXmlArrow,
                                                               atTag,
@@ -77,9 +78,9 @@ getConfigurations = atTag "Configurations" >>>
     returnA -< M.fromList configs
 
 
-type FCC a fl le = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le
+type FCC a fl le ru = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le BaseRule ru
 
-loadConfigurations'::FCC a fl le->Maybe String->FilePath->IO (C.LoadedModels a fl le,C.ModelDescriptionMap)
+loadConfigurations'::FCC a fl le ru->Maybe String->FilePath->IO (C.LoadedModels a fl le ru,C.ModelDescriptionMap)
 loadConfigurations' fcc mSchema path = do
   let configXML = parseXML path
   result <- runFMCX (configXML >>> getXMLDataSources)

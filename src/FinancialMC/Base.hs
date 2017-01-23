@@ -14,6 +14,7 @@ module FinancialMC.Base
        , BaseAsset
        , BaseLifeEvent
        , BaseFlow
+       , BaseRule
        ) where
 
 import           FinancialMC.Core.Asset             (accountValue)
@@ -44,3 +45,4 @@ import           FinancialMC.Parsers.JSON.BaseTypes (FMC_ParserMaps, addParser,
 import           FinancialMC.Builders.Assets        (BaseAsset)
 import           FinancialMC.Builders.Flows         (BaseFlow)
 import           FinancialMC.Builders.LifeEvents    (BaseLifeEvent)
+import           FinancialMC.Builders.Rules         (BaseRule)

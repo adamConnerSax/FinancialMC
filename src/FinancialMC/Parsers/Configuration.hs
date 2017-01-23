@@ -50,7 +50,7 @@ import           FinancialMC.Core.MoneyValue (Currency,MoneyValue)
 import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..))
 import           FinancialMC.Core.Rates (RateModel)
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
-import           FinancialMC.Core.Rule (Rule)
+import           FinancialMC.Core.Rule (IsRule)
 import           FinancialMC.Core.LifeEvent (IsLifeEvent)
 import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..))
 import           FinancialMC.Parsers.JSON.Utilities (EnumKeyMap(..))
@@ -174,47 +174,55 @@ instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
-data FMCComponentConverters ab a flb fl leb le  =
+data FMCComponentConverters ab a flb fl leb le  rub ru =
   FMCComponentConverters
   {
     assetF::(ab->a),
     flowF::(flb->fl),
-    lifeEventF::(leb->le)
+    lifeEventF::(leb->le),
+    ruleF::(rub->ru)
   }
 
 class FMCConvertible f where
-  fmcMap::FMCComponentConverters ab a flb fl leb le->f ab flb leb->f a fl le
+  fmcMap::FMCComponentConverters ab a flb fl leb le rub ru->f ab flb leb rub->f a fl le ru
 
 
-data InitialFS a fl le = InitialFS {ifsBS::BalanceSheet a, 
-                                    ifsCF::CashFlows fl, 
-                                    ifsLifeEvents::[le],
-                                    ifsRules::[Rule],
-                                    ifsSweep::Rule, 
-                                    ifsTaxTrade::Rule} deriving (Show,Generic)
+data InitialFS a fl le ru = InitialFS {ifsBS::BalanceSheet a, 
+                                       ifsCF::CashFlows fl, 
+                                       ifsLifeEvents::[le],
+                                       ifsRules::[ru],
+                                       ifsSweep::ru, 
+                                       ifsTaxTrade::ru} deriving (Show,Generic)
                            
 instance FMCConvertible InitialFS where
-  fmcMap (FMCComponentConverters fA fFL fLE) (InitialFS bs cfs les rs sw tax) =
-    InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) rs sw tax
+  fmcMap (FMCComponentConverters fA fFL fLE fRU) (InitialFS bs cfs les rs sw tax) =
+    InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) (fRU <$> rs) (fRU sw) (fRU tax)
 
-instance (ToJSON a, ToJSON fl, ToJSON le)=>ToJSON (InitialFS a fl le) where
+instance (ToJSON a, ToJSON fl, ToJSON le, ToJSON ru)=>ToJSON (InitialFS a fl le ru) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance (FromJSON a, FromJSON le, FromJSON fl,
+instance (FromJSON a, FromJSON fl, FromJSON le, FromJSON ru)=>FromJSON (InitialFS a fl le ru) where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
+
+instance (FromJSON a,FromJSON fl,FromJSON le, FromJSON ru)=>EnvFromJSON e (InitialFS a fl le ru)
+
+{-
+instance (FromJSON a, FromJSON le, FromJSON fl, FromJSON ru,
           EnvFromJSON e le,
           EnvFromJSON e fl,
+          EnvFromJSON e ru,
           EnvFromJSON e (BalanceSheet a),
           EnvFromJSON e (CashFlows fl),
           EnvFromJSON e Rule) => EnvFromJSON e (InitialFS a fl le) where
   envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 3}
-
+-}
                  
-type IFSMap a fl le = M.Map String (InitialFS a fl le)
+type IFSMap a fl le ru = M.Map String (InitialFS a fl le ru)
 
-convertIFSMap::FMCComponentConverters ab a flb fl leb le->IFSMap ab flb leb->IFSMap a fl le
+convertIFSMap::FMCComponentConverters ab a flb fl leb le rub ru->IFSMap ab flb leb rub->IFSMap a fl le ru
 convertIFSMap ccs ifsm = fmcMap ccs <$> ifsm 
 
-getFinancialState::IFSMap a fl le->String->Maybe (InitialFS a fl le)
+getFinancialState::IFSMap a fl le ru->String->Maybe (InitialFS a fl le ru)
 getFinancialState ifsm name = M.lookup name ifsm
 
 type RateModels = M.Map String RateModel
@@ -323,17 +331,17 @@ mergeTaxStructures (TaxStructure fedN stateN cityN) = do
 
   
 
-data LoadedModels a fl le = LoadedModels {  _lmFS::IFSMap a fl le, _lmRM::RateModels, _lmTax::TaxStructure }
+data LoadedModels a fl le ru = LoadedModels {  _lmFS::IFSMap a fl le ru, _lmRM::RateModels, _lmTax::TaxStructure }
 
 Lens.makeClassy ''LoadedModels
 
 
-data ModelConfiguration a fl le = ModelConfiguration { _mcfgInitialFS::InitialFS a fl le,
-                                                    _mcfgStartingRM::RateModel,
-                                                    _mcfgRateModel::RateModel,
-                                                    _mcfgTaxRules::TaxRules,
-                                                    _mcfgYear::Year,
-                                                    _mcfgCCY::Currency } deriving (Generic)
+data ModelConfiguration a fl le ru = ModelConfiguration { _mcfgInitialFS::InitialFS a fl le ru,
+                                                          _mcfgStartingRM::RateModel,
+                                                          _mcfgRateModel::RateModel,
+                                                          _mcfgTaxRules::TaxRules,
+                                                          _mcfgYear::Year,
+                                                          _mcfgCCY::Currency } deriving (Generic)
 
 Lens.makeClassy ''ModelConfiguration
 
@@ -341,11 +349,11 @@ Lens.makeClassy ''ModelConfiguration
 instance FMCConvertible ModelConfiguration where
   fmcMap converters (ModelConfiguration ifs srm rm tr y c) = ModelConfiguration (fmcMap converters ifs) srm rm tr y c
   
-instance (ToJSON le, ToJSON fl, ToJSON a) => ToJSON (ModelConfiguration a fl le) where
+instance (ToJSON le, ToJSON fl, ToJSON a, ToJSON ru) => ToJSON (ModelConfiguration a fl le ru) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
-instance (FromJSON a, FromJSON le, FromJSON fl, EnvFromJSON e (InitialFS a fl le),
-          EnvFromJSON e RateModel,EnvFromJSON e TaxRules) => EnvFromJSON e (ModelConfiguration a fl le) where
+instance (FromJSON a, FromJSON le, FromJSON fl, EnvFromJSON e (InitialFS a fl le ru),
+          EnvFromJSON e RateModel,EnvFromJSON e TaxRules) => EnvFromJSON e (ModelConfiguration a fl le ru) where
   envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 5}
 
 data SimConfiguration = SimConfiguration { _scfgYears::Int

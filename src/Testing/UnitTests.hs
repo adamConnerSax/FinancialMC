@@ -20,7 +20,8 @@ import           FinancialMC.Core.Utilities              (FMCException (..),
                                                           eitherToIO)
 
 import           FinancialMC.Base                        (BaseAsset, BaseFlow,
-                                                          BaseLifeEvent)
+                                                          BaseLifeEvent,
+                                                          BaseRule)
 import qualified FinancialMC.Parsers.Configuration       as C
 import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
                                                           loadConfigurations)
@@ -38,26 +39,27 @@ import           Distribution.TestSuite                  (Progress (Finished),
 type TestAsset = BaseAsset
 type TestFlow  = BaseFlow
 type TestLifeEvent = BaseLifeEvent
+type TestRule = BaseRule
 
 leConverter::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 leConverter = LEC id id
 
-ccs::C.FMCComponentConverters BaseAsset TestAsset BaseFlow TestFlow BaseLifeEvent TestLifeEvent
-ccs = C.FMCComponentConverters id id id
+ccs::C.FMCComponentConverters BaseAsset TestAsset BaseFlow TestFlow BaseLifeEvent TestLifeEvent BaseRule BaseRule
+ccs = C.FMCComponentConverters id id id id
 
-type FMCTestF = Int->(CombinedState TestAsset TestFlow TestLifeEvent,FinEnv)->Bool
+type FMCTestF = Int->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv)->Bool
 data FMCTest = FMCTest String FMCTestF
 data FMCTestSet = ConfigTests String [(String,Int,[FMCTest])] |
-                  StateTests  (CombinedState TestAsset TestFlow TestLifeEvent,FinEnv) [(Int,[FMCTest])]
+                  StateTests  (CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv) [(Int,[FMCTest])]
 
 
 notTest::FMCTestF->FMCTestF
 notTest f x y = not $ f x y
 
-andTest::FMCTestF->FMCTestF->Int->(CombinedState TestAsset TestFlow TestLifeEvent,FinEnv)->Bool
+andTest::FMCTestF->FMCTestF->Int->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv)->Bool
 andTest f g x y = f x y && g x y
 
-andTests::[FMCTestF]->Int->(CombinedState TestAsset TestFlow TestLifeEvent,FinEnv)->Bool
+andTests::[FMCTestF]->Int->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv)->Bool
 andTests fs x y = not (any not (map (\f -> f x y) fs))
 
 almostEqual::Double->Double->Double->Bool
@@ -243,7 +245,7 @@ fails n failMsg = TestInstance
              setOption = \_ _ -> Right $ fails n failMsg}
 
 
-doTest::String->(CombinedState TestAsset TestFlow TestLifeEvent,FinEnv)->Int->FMCTestF->IO Test
+doTest::String->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv)->Int->FMCTestF->IO Test
 doTest testName (cs0,fe0) years f = do
   let result = execOnePathPure leConverter cs0 fe0 1 years
   case result of

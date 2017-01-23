@@ -7,7 +7,6 @@
 module FinancialMC.Core.Rule
        (
          RuleName
-       , Rule(..)
        , RuleWhen(..)
        , IsRule(..)
        , showRuleCore
@@ -46,12 +45,17 @@ data RuleWhen = Special | BeforeTax | AfterSweep  deriving (Enum,Ord,Eq,Show,Rea
 
 type RuleName = T.Text
 
-class TypeNamed r=>IsRule r where
+class IsRule r where
   ruleName::r->RuleName
   ruleAccounts::r->[AccountName]
-  doRule::IsAsset a=>r->AccountGetter a->RuleApp ()
   ruleWhen::r->RuleWhen
+  doRule::IsAsset a=>r->AccountGetter a->RuleApp ()
 
+showRuleCore::IsRule r=>r->String
+showRuleCore r = show (ruleName r) ++" (involves " ++ show (ruleAccounts r) ++ ")"
+
+
+{-
 data Rule where
   MkRule::(IsRule r,Show r,ToJSON r)=>r->Rule
 
@@ -76,8 +80,6 @@ instance ToJSON Rule where
 
 instance HasParsers e Rule => EnvFromJSON e Rule where
   envParseJSON = parseJSON_Existential
+-}
 
-
-showRuleCore::IsRule r=>r->String
-showRuleCore r = show (ruleName r) ++" (involves " ++ show (ruleAccounts r) ++ ")"
 
