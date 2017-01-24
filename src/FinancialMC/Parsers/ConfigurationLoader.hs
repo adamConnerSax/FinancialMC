@@ -70,7 +70,8 @@ type FJ a fl le ru = (FromJSON a,
 
 loadDataSource::(FJ a fl le ru,IsRule ru)=>BaseFCC a fl le ru->Maybe FilePath->FMC_ParserMaps->
                 C.DataSource->StateT (C.LoadedModels a fl le ru) IO ()
-loadDataSource fcc mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.FinancialStateS) =
+loadDataSource fcc mSchemaDir _ (C.DataSource (C.Parseable up C.XML) C.FinancialStateS) = do
+  let newFS = execState
   zoom C.lmFS $ lift (C.asIOString up) >>= loadFinancialStatesFromString fcc mSchemaDir
   -- validate!!
 

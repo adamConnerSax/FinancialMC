@@ -30,15 +30,14 @@ loadRateModelsFromString::(RateModel->rm)->Maybe FilePath->String->StateT (RateM
 loadRateModelsFromString f mSchemaDir content = do                         
   let opts = buildOpts mSchemaDir [withRemoveWS yes] "RateModels.rng"
   let xml = readString opts content
-  loadRateModels' xml
-  modify (fmap f)
+  loadRateModels' f xml
   
-loadRateModels'::forall (t::(* -> *) -> * -> *).(MonadTrans t, MonadState (RateModels RateModel) (t IO))=>
-                 IOSLA (XIOState XmlParseInfos) XmlTree XmlTree -> t IO ()
-loadRateModels' xml = do
+loadRateModels'::forall rm (t::(* -> *) -> * -> *).(MonadTrans t, MonadState (RateModels rm) (t IO))=>
+                 (RateModel->rm)->IOSLA (XIOState XmlParseInfos) XmlTree XmlTree -> t IO ()
+loadRateModels' f xml = do
   rms<-get
   result <- lift $ runFMCX (xml >>> parseRateModels rms)
-  put $ head result -- returnA always returns a list even if only 1 result
+  put . (fmap f) $ head result -- returnA always returns a list even if only 1 result
 
 parseFixedSR::ArrowXml a=>a XmlTree RM.BaseRateModelFactor
 parseFixedSR = proc l -> do
@@ -101,5 +100,5 @@ parseRateModels rms = proc l -> do
 
 test::IO ()
 test = do
-  rms <- evalStateT (loadRateModelsFromFile Nothing "RateModels.xml") M.empty
+  rms <- evalStateT (loadRateModelsFromFile id Nothing "RateModels.xml") M.empty
   print rms
