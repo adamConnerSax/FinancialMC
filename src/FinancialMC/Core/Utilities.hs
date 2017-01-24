@@ -111,7 +111,7 @@ between day (Only e) = day == e
 between day (Between s e) = (s <= day) && (day <= e)  
 between _ Never = False
 
-
+{-
 data FMCComponentConverters ab a leb le  =
   FMCComponentConverters
   {
@@ -122,6 +122,6 @@ data FMCComponentConverters ab a leb le  =
 class FMCConvertible f where
   fmcMap::FMCComponentConverters ab a leb le->f ab leb->f a le
 
-
+-}
 --class TypeNamed a where
 --  typeName::a->String
