@@ -12,15 +12,22 @@
 {-# LANGUAGE StandaloneDeriving #-} 
 module FinancialMC.Core.FinApp 
        (
-         LogLevel(..),faLog,
-         toStepApp,toPathApp,
-         taxDataApp2StepAppFS,taxDataApp2StepAppFSER,taxDataApp2StepApp,
-         zoomStepApp,magnifyStepApp,
-         zoomPathAppS,zoomPathAppE,
-         LoggableStepApp(..),
-         LoggablePathApp(..),
-         StepApp,
-         execPathApp,execPPathApp,
+         LogLevel(..)
+       , faLog
+       , toStepApp
+       , toPathApp
+       , taxDataApp2StepAppFS
+       , taxDataApp2StepAppFSER
+       , taxDataApp2StepApp
+       , zoomStepApp
+       , magnifyStepApp
+       , zoomPathAppS
+       , zoomPathAppE
+       , LoggableStepApp(..)
+       , LoggablePathApp(..)
+       , StepApp
+       , execPathApp
+       , execPPathApp
        ) where
 
 import           FinancialMC.Core.MoneyValue (ExchangeRateFunction)

@@ -124,7 +124,7 @@ instance Monad (SValued c) where
   {-# INLINABLE (>>=) #-}
 
                 
-instance HasOneValue c=>Monad (CValued c) where
+instance Monad (CValued c) where
   return = pure
   {-# INLINABLE return #-}                                                   
   (CVCV ga) >>= f = CVCV $ \c' e -> case f (ga c' e) of
@@ -199,7 +199,7 @@ cvBinOp op (CVMV x cx hx) (CVCV gy) = CVCV $ \c e -> op (hx e c cx x) (gy c e)
 cvBinOp op (CVMV x cx hx) (CVMV y cy hy) = CVCV $ \c e -> op (hx e c cx x) (hy e c cy y)
 {-# INLINABLE cvBinOp #-}
 
-scRFBinOp::(Eq c, RealFrac b)=>(a->a->b)->SValued c a -> SValued c a -> SValued c b
+scRFBinOp::(a->a->b)->SValued c a -> SValued c a -> SValued c b
 scRFBinOp  = scBinOp
 {-# INLINABLE scRFBinOp #-}
 
@@ -241,7 +241,7 @@ class (SumT a b ~ c) => HasAddition a b c where
   (|+|)::a->b->c
   (|-|)::a->b->c
 
-instance (Eq c, RealFrac a,q ~ SValued c a, SumT q q ~ q)=>HasAddition (SValued c a) (SValued c a) (SValued c a) where
+instance (RealFrac a,q ~ SValued c a, SumT q q ~ q)=>HasAddition (SValued c a) (SValued c a) (SValued c a) where
   {-# SPECIALIZE instance HasAddition (SValued Currency Double) (SValued Currency Double) (SValued Currency Double) #-}
   (|+|) = scRFBinOp (+)
   {-# INLINABLE (|+|) #-}
@@ -286,12 +286,12 @@ type family ProdT (a :: *) (b :: *) :: * where
 class (c ~ ProdT a b) => HasMultiplication a b c where
     (|*|)::a->b->c
 
-instance (Eq c, RealFrac a, q ~ SValued c a, ProdT q q ~ q)=>HasMultiplication (SValued c a) (SValued c a) (SValued c a) where
+instance (RealFrac a, q ~ SValued c a, ProdT q q ~ q)=>HasMultiplication (SValued c a) (SValued c a) (SValued c a) where
     {-# SPECIALIZE instance HasMultiplication (SValued Currency Double) (SValued Currency Double) (SValued Currency Double) #-}
     (|*|) = scRFBinOp (*)
     {-# INLINABLE (|*|) #-}
                                                                                     
-instance (Eq c, RealFrac a, q ~ CValued c a, ProdT (SValued c a) q ~ q)=>HasMultiplication (SValued c a) (CValued c a) (CValued c a) where
+instance (RealFrac a, q ~ CValued c a, ProdT (SValued c a) q ~ q)=>HasMultiplication (SValued c a) (CValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasMultiplication (SValued Currency Double) (CValued Currency Double) (CValued Currency Double) #-}
   (CVS y)  |*| (CVCV g) = CVCV $ \c e -> y * (g c e)                                                                         
   (CVEV f) |*| (CVCV g) = CVCV $ \c e -> (f e) * (g c e)
@@ -299,7 +299,7 @@ instance (Eq c, RealFrac a, q ~ CValued c a, ProdT (SValued c a) q ~ q)=>HasMult
   (CVEV f) |*| (CVMV x c h) = CVCV $ \c' e -> (f e) * (h e c' c x)
   {-# INLINABLE (|*|) #-}
 
-instance (Eq c, RealFrac a, q ~ CValued c a, ProdT q (SValued c a) ~ q)=>HasMultiplication (CValued c a) (SValued c a) (CValued c a) where
+instance (RealFrac a, q ~ CValued c a, ProdT q (SValued c a) ~ q)=>HasMultiplication (CValued c a) (SValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasMultiplication (CValued Currency Double) (SValued Currency Double) (CValued Currency Double) #-}
   cv |*| sc = sc |*| cv                                                                        
   {-# INLINABLE (|*|) #-}
@@ -383,7 +383,7 @@ class HasMinMax a where
   cvMin,cvMax::a->a->a
 
 
-instance (Eq c,Eq a, Ord a,HasOneValue c)=>HasEqOrdering (SValued c a) where
+instance (Eq a, Ord a)=>HasEqOrdering (SValued c a) where
   {-# SPECIALIZE instance HasEqOrdering (SValued Currency Double) #-}
   type ReturnType (SValued c a) = SValued c Bool
   (|>|)  = scBinOp (>)
@@ -399,7 +399,7 @@ instance (Eq c,Eq a, Ord a,HasOneValue c)=>HasEqOrdering (SValued c a) where
   (|/=|) = scBinOp (/=)
   {-# INLINABLE (|/=|) #-}
 
-instance (Eq c, Eq a, Ord a)=>HasMinMax (SValued c a) where
+instance Ord a=>HasMinMax (SValued c a) where
   {-# SPECIALIZE instance HasMinMax (SValued Currency Double) #-}
   cvMin = scBinOp min
   {-# INLINABLE cvMin #-}                                                                            
@@ -430,7 +430,7 @@ cvOrdOp ordOp a@(CVMV x cx hx) b@(CVMV y cy hy)
 cvOrdOp ordOp a b = cvBinOp ordOp a b
 {-# INLINABLE cvOrdOp #-}
 
-instance (Eq c, Eq a, Ord a)=>HasMinMax (CValued c a) where
+instance (Eq c, Ord a)=>HasMinMax (CValued c a) where
   {-# SPECIALIZE instance HasMinMax (CValued Currency Double) #-}
   cvMin = cvOrdOp min
   {-# INLINABLE cvMin #-}                                                                            

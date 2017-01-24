@@ -1,9 +1,13 @@
-{-# LANGUAGE MultiParamTypeClasses,FlexibleInstances,FunctionalDependencies,UndecidableInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module FinancialMC.Core.Result 
        (
-         Result(..),
-         MonadResult(returnOnly,appendAndReturn,adjust),
-         ResultT(..),runResultT
+         Result(..)
+       , MonadResult(returnOnly,appendAndReturn,adjust)
+       , ResultT(..)
+       , runResultT
        ) where
 
 
@@ -58,14 +62,14 @@ instance Monad m=>Functor (ResultT o m) where
     result <- unResultT r o
     return $! fmap f result
 
-instance (Monad m, Monoid o)=>Applicative (ResultT o m) where
+instance Monad m=>Applicative (ResultT o m) where
   pure x = ResultT $ \o->return (Result x o)
   rf <*> ra = ResultT $ \o -> do
     Result f o' <- unResultT rf o
     Result a o'' <- unResultT ra o'
     return $! Result (f a)  o'' 
     
-instance (Monad m, Monoid o)=>Monad (ResultT o m) where
+instance Monad m=>Monad (ResultT o m) where
   return x = ResultT $ \o->return (Result x o)
 
   ma >>= f = ResultT $ \o-> do 
@@ -84,21 +88,21 @@ instance (Monad m,Monoid o)=>MonadResult o (ResultT o m) where
     return $! Result a o'
     
     
-instance Monoid o=>MonadTrans (ResultT o) where
+instance MonadTrans (ResultT o) where
   lift m = ResultT $ \o-> do
     a <- m
     return $! Result a o
   
-instance Monoid o=>MFunctor (ResultT o) where
+instance MFunctor (ResultT o) where
     hoist m2n rtm = ResultT (m2n . unResultT rtm)
 
-instance (Monoid o,MonadReader r m)=>MonadReader r (ResultT o m) where
+instance MonadReader r m=>MonadReader r (ResultT o m) where
   ask = lift ask
   local f x = ResultT (local f . unResultT x) 
             
-instance (Monoid o, MonadState s m)=>MonadState s (ResultT o m) where
+instance MonadState s m=>MonadState s (ResultT o m) where
   get = lift get
   put k = lift $ put k
 
-instance (Monoid o,MonadThrow m)=>MonadThrow (ResultT o m) where
+instance MonadThrow m=>MonadThrow (ResultT o m) where
   throwM = lift . throwM

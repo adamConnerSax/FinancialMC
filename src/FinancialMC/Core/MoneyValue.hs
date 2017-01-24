@@ -1,5 +1,9 @@
-{-# LANGUAGE TemplateHaskell,BangPatterns #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module FinancialMC.Core.MoneyValue where
 
 import Text.Printf (printf)

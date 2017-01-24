@@ -14,7 +14,6 @@ module FinancialMC.Core.Rule
        , RuleApp
        ) where
 
-import           Data.Aeson                       (ToJSON (..))
 import           FinancialMC.Core.Asset           (AccountGetter, AccountName,
                                                    IsAsset)
 import           FinancialMC.Core.Rates           (IsRateModel)

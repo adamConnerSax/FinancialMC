@@ -1,4 +1,6 @@
-{-# LANGUAGE FlexibleContexts,RankNTypes,KindSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE KindSignatures #-}
 module FinancialMC.Core.Analysis 
          (
            summariesToHistogram
@@ -10,7 +12,7 @@ module FinancialMC.Core.Analysis
 
 import FinancialMC.Core.MCState (FSSummary(..),HasFSSummary(..),netWorthBreakout)
 import FinancialMC.Core.MoneyValue (MoneyValue(..),HasMoneyValue(..))
-import FinancialMC.Core.LifeEvent (IsLifeEvent(..),LifeEventConverters)
+import FinancialMC.Core.LifeEvent (LifeEventConverters)
 import FinancialMC.Core.Asset (IsAsset)
 import FinancialMC.Core.Flow (IsFlow)
 import qualified FinancialMC.Core.MoneyValueOps as MV

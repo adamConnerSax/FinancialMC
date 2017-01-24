@@ -11,20 +11,25 @@
 {-# LANGUAGE UndecidableInstances   #-}
 module FinancialMC.Core.Asset
        (
-         TradeType,TradeFunction,
-         TradeResult,TradeApp,
-         AssetRevaluation(..),
-         AssetName,
-         AssetCore(..),
-         revalueAssetCore,
-         IsAsset(..),
-         assetName,assetValue,assetCostBasis,assetCurrency,
-         AccountName,
-         Account(Account),HasAccount(..),
-         accountValue,
-         accountValueCV,
---         accountValueCEMV,
-         AccountGetter
+         TradeType
+       , TradeFunction
+       , TradeResult
+       , TradeApp
+       , AssetRevaluation(..)
+       , AssetName
+       , AssetCore(..)
+       , revalueAssetCore
+       , IsAsset(..)
+       , assetName
+       , assetValue
+       , assetCostBasis
+       , assetCurrency
+       , AccountName
+       , Account(Account)
+       , HasAccount(..)
+       , accountValue
+       , accountValueCV
+       , AccountGetter
        ) where
 
 
@@ -44,7 +49,6 @@ import           Control.Lens                     (makeClassy, (^.))
 import           Data.Aeson                       (FromJSON (..), ToJSON (..),
                                                    genericParseJSON,
                                                    genericToJSON)
-import           Data.Aeson.TH                    (deriveJSON)
 import           Data.Aeson.Types                 (Options (fieldLabelModifier),
                                                    defaultOptions)
 

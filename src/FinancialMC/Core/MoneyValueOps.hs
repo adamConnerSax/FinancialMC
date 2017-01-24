@@ -6,23 +6,24 @@
 
 module FinancialMC.Core.MoneyValueOps 
        (
-         convert,
-         FinancialMC.Core.MoneyValueOps.negate,
-         isPositive,
-         isNonNegative,
-         isZero,
-         multiply,
-         divide,
-         ratio,
-         lt,
-         gt,
-         inFirst,
-         binaryOp,
-         unaryOp,
-         total,
-         zero,
-         ER,CR,ERK
---       , ED, AERK, CER
+         convert
+       , FinancialMC.Core.MoneyValueOps.negate
+       , isPositive
+       , isNonNegative
+       , isZero
+       , multiply
+       , divide
+       , ratio
+       , lt
+       , gt
+       , inFirst
+       , binaryOp
+       , unaryOp
+       , total
+       , zero
+       , ER
+       , CR
+       , ERK
        ) where
 
 

@@ -1,8 +1,12 @@
-{-# LANGUAGE FunctionalDependencies,MultiParamTypeClasses, FlexibleInstances, TypeFamilies, RankNTypes #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
 module FinancialMC.Core.MapLike 
        (
-         IsMap(..),
-         IndexedList(..),
+         IsMap(..)
+       , IndexedList(..)
        ) where
        
 import qualified Data.Map as M

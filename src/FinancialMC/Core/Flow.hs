@@ -1,37 +1,35 @@
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
 module FinancialMC.Core.Flow
        (
-         flowingAt,
-         FlowName,
-         FlowCore(..),
-         FlowDirection(..),
-         revalueFlowCore,
-         flowName,
-         flowAmount,
-         flowFrequency,
-         flowDateRange,
-         annualFlowAmount,
-         flowCurrency,
-         IsFlow(..),
---         Flow(..),
-         between
+         flowingAt
+       , FlowName
+       , FlowCore(..)
+       , FlowDirection(..)
+       , revalueFlowCore
+       , flowName
+       , flowAmount
+       , flowFrequency
+       , flowDateRange
+       , annualFlowAmount
+       , flowCurrency
+       , IsFlow(..)
+       , between
        ) where
 
 
 import           FinancialMC.Core.MoneyValue (MoneyValue,mCurrency,Currency(..))
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Evolve (Evolvable(..))
---import           FinancialMC.Core.Result ()
 import           FinancialMC.Core.Utilities (Frequency,DateRange,between,frequencyMultiplier)
 
 import           Control.Lens ((^.))
-import           Control.Monad (liftM)
-import  GHC.Generics (Generic)
-import           Data.Aeson (ToJSON(..))
-import Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON)
+import           GHC.Generics (Generic)
+import           Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON)
 import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions)
 import qualified Data.Text as T
 

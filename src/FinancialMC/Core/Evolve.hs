@@ -1,37 +1,43 @@
-{-# LANGUAGE Rank2Types, FlexibleContexts, ConstraintKinds, TypeFamilies,BangPatterns, MultiParamTypeClasses, FlexibleInstances #-}
+{-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 module FinancialMC.Core.Evolve 
        (
-         Evolver,
-         EvolveApp,
-         Evolvable(..),
-         EvolveOutput(..),
-         EvolveResult,TaxAmount(..),FlowResult(..),AccumResult(..),
-         liftER, -- to match ReaderT ExchangeRateFunction Identity to Evolver
-         applyAccums, --for Rules
-         applyFlows, 
-         evolveWithin,evolveAndApply,
+         Evolver
+       , EvolveApp
+       , Evolvable(..)
+       , EvolveOutput(..)
+       , EvolveResult
+       , TaxAmount(..)
+       , FlowResult(..)
+       , AccumResult(..)
+       , liftER -- to match ReaderT ExchangeRateFunction Identity to Evolver
+       , applyAccums --for Rules
+       , applyFlows
+       , evolveWithin
+       , evolveAndApply
        ) where
 
-import           FinancialMC.Core.FinApp (LoggableStepApp(..),toStepApp,
-                                          taxDataApp2StepAppFS,taxDataApp2StepApp,taxDataApp2StepAppFSER,magnifyStepApp,zoomStepApp)
+import           FinancialMC.Core.FinApp (LoggableStepApp(..),toStepApp,taxDataApp2StepAppFSER,magnifyStepApp)
 
-import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,HasFinState(..),AccumName,addToAccumulator,addToAccumulator',
-                                                   zeroAccumulator,addCashFlow)
+import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,AccumName,addToAccumulator',zeroAccumulator,addCashFlow)
 import           FinancialMC.Core.MoneyValue (MoneyValue,ExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps as MV
-import           FinancialMC.Core.Tax (TaxType,TaxDataAppC,addTaxableFlow,addDeductibleFlow)
-import           FinancialMC.Core.Result (MonadResult,Result(Result),ResultT,runResultT)
+import           FinancialMC.Core.Tax (TaxType,addTaxableFlow,addDeductibleFlow)
+import           FinancialMC.Core.Result (Result(Result),ResultT,runResultT)
 import           FinancialMC.Core.Utilities (FMCException(..))
 import           FinancialMC.Core.Rates (IsRateModel)
 import           Data.Monoid ((<>))
 
-import           Control.Monad.Trans (MonadTrans)
-import           Control.Monad.Reader (ReaderT,lift,MonadReader)
-import           Control.Monad.State (MonadState)
+import           Control.Monad.Reader (ReaderT,lift)
 import           Control.Monad.Catch (SomeException,MonadThrow,throwM)
 
-import           Control.Lens (zoom,magnify,Lens',mapMOf)
+import           Control.Lens (magnify,Lens',mapMOf)
 import qualified Data.Traversable as TR
 --import qualified Data.Text as T
 
@@ -78,13 +84,13 @@ evolveWithin::IsRateModel rm=>(Evolvable a,TR.Traversable t)=>b->Lens' b (t a)->
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
 
 
-applyTax::(MonadThrow app,LoggableStepApp FinState ExchangeRateFunction app)=>TaxAmount->app ()  
+applyTax::(LoggableStepApp FinState ExchangeRateFunction app)=>TaxAmount->app ()  
 applyTax (TaxAmount tt y) = stepLift $ if MV.isNonNegative y 
                 then taxDataApp2StepAppFSER $ addTaxableFlow tt y 
                 else throwM $ Other "Can't call applyTax with a -ve number."
 
 
-applyDeduction::(MonadThrow app,LoggableStepApp FinState ExchangeRateFunction app)=>TaxAmount->app ()
+applyDeduction::(LoggableStepApp FinState ExchangeRateFunction app)=>TaxAmount->app ()
 applyDeduction (TaxAmount tt y) = stepLift $ if MV.isNonNegative y 
                       then taxDataApp2StepAppFSER $ addDeductibleFlow tt y                      
                       else throwM $ Other "Cant call applyDeduction with a -ve number"
@@ -99,7 +105,7 @@ applyFlowAndDeduction x ta = addCashFlow x >> applyDeduction ta
 
 
 
-applyFlow::(MonadThrow app, LoggableStepApp FinState ExchangeRateFunction app)=>FlowResult -> app ()
+applyFlow::(LoggableStepApp FinState ExchangeRateFunction app)=>FlowResult -> app ()
 applyFlow (UnTaxed x) = addCashFlow x
 applyFlow (AllTaxed ta@(TaxAmount _ x)) = applyFlowAndTax x ta   
 applyFlow (AllDeductible ta@(TaxAmount _ x)) = applyFlowAndDeduction (MV.negate x) ta
@@ -113,7 +119,7 @@ applyFlows::(MonadThrow app, LoggableStepApp FinState ExchangeRateFunction app)=
 applyFlows = mapM_ applyFlow
   
 
-applyAccum::(MonadThrow app, LoggableStepApp FinState ExchangeRateFunction app)=>AccumResult->app ()
+applyAccum::(LoggableStepApp FinState ExchangeRateFunction app)=>AccumResult->app ()
 applyAccum (AddTo name amt) = addToAccumulator' name amt 
 applyAccum (Zero name) = zeroAccumulator name
 

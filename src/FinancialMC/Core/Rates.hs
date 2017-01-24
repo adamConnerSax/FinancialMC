@@ -38,7 +38,7 @@ import           FinancialMC.Core.MoneyValue (Currency(..))
 import           Data.Random.Source.PureMT (PureMT)
 import           Data.Maybe (fromJust)
 import           Control.Monad.State.Strict (runStateT,MonadState)
-import           Control.Monad.Reader (ReaderT(ReaderT),MonadReader(reader,ask),runReaderT,withReaderT)
+import           Control.Monad.Reader (MonadReader(ask))
 import           Control.Monad.Catch (MonadThrow)
 import qualified Data.Map.Lazy as M
 import           Text.Printf (printf,PrintfArg)

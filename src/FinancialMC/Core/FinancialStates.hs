@@ -28,14 +28,14 @@ module FinancialMC.Core.FinancialStates
 import FinancialMC.Core.MoneyValue (ExchangeRateFunction,Currency,MoneyValue) 
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import FinancialMC.Core.Tax (TaxRules,TaxData,defaultTaxData)
-import FinancialMC.Core.Rates (Rate,RateTable(..),IsRateModel,RateTag(Exchange))
+import FinancialMC.Core.Rates (Rate,RateTable(..),RateTag(Exchange))
 import FinancialMC.Core.Utilities (Year,FMCException(FailedLookup,Other),noteM)
 
 import qualified Data.Map.Strict as M
 import Data.Maybe (fromJust)
 import Control.Monad (when)
 import Control.Monad.Reader (Reader,reader,MonadReader,ask)
-import Control.Monad.State.Strict (State,MonadState,modify)
+import Control.Monad.State.Strict (State,MonadState)
 import Control.Monad.Catch (MonadThrow,throwM)
 import Control.Lens (makeClassy,use,view,(.=),(^.),(%=))
 import qualified Data.Text as T
@@ -46,7 +46,7 @@ makeClassy ''FinEnv
 
 
 instance Show rm=>Show (FinEnv rm) where
-  show (FinEnv rates _ cd ccy tr rm) = "rates: " ++ show rates ++ "\nmodel: " ++ "(unShowable)" ++ "\ndate: " ++ show cd ++ "\ncurrency: " ++ show ccy ++ "\ntax: " ++ show tr
+  show (FinEnv rates _ cd ccy tr rm) = "rates: " ++ show rates ++ "\nmodel: " ++ show rm ++ "\ndate: " ++ show cd ++ "\ncurrency: " ++ show ccy ++ "\ntax: " ++ show tr
 
 currentDate::Reader (FinEnv rm) Year
 currentDate = reader $ \e->e ^. feCurrentDate
@@ -118,8 +118,8 @@ addToAccumulator' name amount = do
 
 getAccumulatedValue::(MonadThrow m, MonadReader FinState m)=>AccumName->m MoneyValue
 getAccumulatedValue accumName = do
-  (Accumulators accumulators) <- view fsAccumulators
-  noteM (FailedLookup ("Couldn't find accum named " ++ show accumName)) $ M.lookup accumName accumulators
+  (Accumulators as) <- view fsAccumulators
+  noteM (FailedLookup ("Couldn't find accum named " ++ show accumName)) $ M.lookup accumName as
 
 zeroAccumulator::MonadState FinState m=>AccumName->m ()
 zeroAccumulator accumName = fsAccumulators.accums %= M.delete accumName

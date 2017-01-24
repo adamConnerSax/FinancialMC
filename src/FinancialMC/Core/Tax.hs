@@ -11,24 +11,28 @@
 
 module FinancialMC.Core.Tax 
        (
-         TaxType(..),
-         TaxData,defaultTaxData,
-         TaxDataApp,TaxDataAppC,
-         addTaxableFlow,addDeductibleFlow,
-         carryForwardTaxData,
-         fullTaxCV,
-         TaxBracket(..),
-         TaxBrackets,
-         FedCapitalGains(..),
-         CapGainBand(..),
-         MedicareSurtax(..),
-         makeTaxBrackets,
-         zeroTaxBrackets,
-         buildTaxBracketsFromTops,
-         FilingStatus(..),
-         TaxRules(TaxRules),HasTaxRules(..),
-         safeCapGainRateCV,
-         updateTaxRules
+         TaxType(..)
+       , TaxData
+       , defaultTaxData
+       , TaxDataApp
+       , TaxDataAppC
+       , addTaxableFlow
+       , addDeductibleFlow
+       , carryForwardTaxData
+       , fullTaxCV
+       , TaxBracket(..)
+       , TaxBrackets
+       , FedCapitalGains(..)
+       , CapGainBand(..)
+       , MedicareSurtax(..)
+       , makeTaxBrackets
+       , zeroTaxBrackets
+       , buildTaxBracketsFromTops
+       , FilingStatus(..)
+       , TaxRules(TaxRules)
+       , HasTaxRules(..)
+       , safeCapGainRateCV
+       , updateTaxRules
        ) where
 
 
@@ -160,10 +164,10 @@ makeTaxBrackets tbs = TaxBrackets $ sortBy (comparing g) tbs where
 
 
 buildTaxBracketsFromTops::Currency->[(Double,Double)]->Double->TaxBrackets
-buildTaxBracketsFromTops ccy bktTops topRate = makeTaxBrackets $ regBrackets++[topBracket] where 
+buildTaxBracketsFromTops ccy bktTops tR = makeTaxBrackets $ regBrackets++[topBracket] where 
   f (t,r) (pT,bkts) = (t,bkts++[Bracket (MoneyValue pT ccy) (MoneyValue t ccy) r])
   (bottomTop, regBrackets)=  foldr f (0,[]) bktTops 
-  topBracket = TopBracket (MoneyValue bottomTop ccy) topRate
+  topBracket = TopBracket (MoneyValue bottomTop ccy) tR
 
                                              
 -- CValued versions
@@ -218,8 +222,8 @@ computeIncomeTaxCV'' ccy e (TaxBrackets bkts) incomeCV =
 
 marginalRateCV::CV.CVD->TaxBrackets->CV.SVD
 marginalRateCV v' (TaxBrackets its) = foldl f (CV.toSVD 0) its where
-  f cmr (Bracket b _ rate) = CV.cvIf (v' |>| CV.fromMoneyValue b) (CV.toSVD rate) cmr
-  f cmr (TopBracket b rate) = CV.cvIf (v' |>| CV.fromMoneyValue b) (CV.toSVD rate) cmr
+  f cmr (Bracket b _ r) = CV.cvIf (v' |>| CV.fromMoneyValue b) (CV.toSVD r) cmr
+  f cmr (TopBracket b r) = CV.cvIf (v' |>| CV.fromMoneyValue b) (CV.toSVD r) cmr
 
 trueMarginalRateCV::MoneyValue->TaxBrackets->CV.SVD                                 
 trueMarginalRateCV mv@(MoneyValue _ c) tb = 
@@ -261,9 +265,9 @@ fedCapitalGainRateCV margRate'  = CV.cvCase [(margRate' |<| CV.toSVD 0.25, CV.to
                                   (CV.toSVD 0.2)
 
 fedCapitalGainRateCV'::FedCapitalGains->CV.SVD->CV.SVD
-fedCapitalGainRateCV' (FedCapitalGains topRate bands) margRate' =
-  let cases = (\(CapGainBand mr cgr)->(margRate' |<| CV.toSVD mr, CV.toSVD cgr)) <$> bands
-  in CV.cvCase cases (CV.toSVD topRate)
+fedCapitalGainRateCV' (FedCapitalGains tRate rateBands) margRate' =
+  let cases = (\(CapGainBand mr cgr)->(margRate' |<| CV.toSVD mr, CV.toSVD cgr)) <$> rateBands
+  in CV.cvCase cases (CV.toSVD tRate)
 
 maxFedCapGainCV::CV.SVD
 maxFedCapGainCV = fedCapitalGainRateCV (CV.toSVD 1)
@@ -309,8 +313,8 @@ fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm 
 
 
 inflateTaxBrackets::Double->TaxBrackets->TaxBrackets    
-inflateTaxBrackets rate (TaxBrackets tbs) = makeTaxBrackets tbs' where
-  r = 1.0 + rate
+inflateTaxBrackets rt (TaxBrackets tbs) = makeTaxBrackets tbs' where
+  r = 1.0 + rt
   inflateBracket (Bracket bb bt br) = Bracket (MV.multiply bb r) (MV.multiply bt r) br 
   inflateBracket (TopBracket bb br) = TopBracket (MV.multiply bb r) br
   tbs' = map inflateBracket tbs

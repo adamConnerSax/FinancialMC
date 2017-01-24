@@ -14,7 +14,7 @@ module FinancialMC.Core.Engine
          -- Only for Benchmarking
        ) where
 
-import           FinancialMC.Core.Evolve (Evolvable,applyAccums,applyFlows)
+import           FinancialMC.Core.Evolve (applyAccums,applyFlows)
 import           FinancialMC.Core.Result (ResultT,Result(Result),runResultT)
 import           FinancialMC.Core.Asset (IsAsset)
 import           FinancialMC.Core.Flow (IsFlow)
@@ -119,7 +119,7 @@ doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do
   sequence eMap
   
     
-doPath::(EngineC a fl le ru rm,IsRateModel rm,LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) app)=>
+doPath::(EngineC a fl le ru rm,LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) app)=>
   LifeEventConverters a fl le->PureMT->Int->app PureMT
 doPath convertLE pMT years = foldM (\a _->doOneStepOnPath convertLE a) pMT [1..years]
 
@@ -130,7 +130,7 @@ lensFinEnv = _2
 lensToEmpty::Lens' a ()
 lensToEmpty q x = const x <$> q ()
 
-doOneStepOnPath::(EngineC a fl le ru rm,IsRateModel rm,LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) app)=>
+doOneStepOnPath::(EngineC a fl le ru rm,LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) app)=>
   LifeEventConverters a fl le->PureMT->app PureMT
 doOneStepOnPath convertLE pMT = pathLift $ do
   let feUpdater = toPathApp . zoom lensFinEnv
@@ -171,7 +171,7 @@ updateTaxBrackets' = do
   feTaxRules %= flip updateTaxRules taxBracketInflationRate
 -}
 
-doOneYear::(EngineC a fl le ru rm,IsRateModel rm,LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>
+doOneYear::(EngineC a fl le ru rm,LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>
   LifeEventConverters a fl le->app (MoneyValue,Double)
 doOneYear convertLE = do
   year <- view feCurrentDate
@@ -227,7 +227,7 @@ doRules w = do
   Result _ ruleOutput <- runResultT $ mapM_ f liveRules -- can/should move zoom/hoist to here?  Does it matter?
   doRuleResult ruleOutput
   
-doRuleResult::(IsAsset a,Show a,IsFlow fl, Show fl,Show ru,
+doRuleResult::(IsAsset a,Show a,
                LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>RuleOutput->app ()
 doRuleResult (RuleOutput trades accs) = do
   stepLog Debug ("Resulting in trades:" ++ show trades ++ " and accums=" ++ show accs)
@@ -245,7 +245,7 @@ doLifeEvents convertLE = do
       happeningThisYear le = (lifeEventYear le == curDate)
       liveEvents = filter happeningThisYear (mcs ^. mcsLifeEvents)
       getA name = getAccount name (mcs ^. mcsBalanceSheet) 
-      f::LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>le->ResultT (LifeEventOutput a fl) app () 
+      f::le->ResultT (LifeEventOutput a fl) app () 
       f x = do
         lift $ stepLog Debug ("Doing " ++ show (lifeEventName x))
         morphResultStack (doLifeEvent x convertLE getA)
@@ -272,7 +272,7 @@ doTax = stepLift $ do
     return (tax',rate')
 
 
-doTaxTrade::(IsAsset a,Show a,IsFlow fl,Show fl,IsRule ru,Show ru, IsRateModel rm,
+doTaxTrade::(IsAsset a,Show a,IsRule ru, IsRateModel rm,
               LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>app ()
 doTaxTrade = stepLift $ do
   mcs <- use csMC
@@ -299,7 +299,7 @@ doSweepTrades = stepLift $ do
   doRuleResult result
 
 
-doAccountTransaction::(IsAsset a,Show a,IsFlow fl,Show fl,
+doAccountTransaction::(IsAsset a,Show a,
                        LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction app)=>Transaction->app ()
 doAccountTransaction tr@(Transaction target typ amt)= stepLift $ do
   mcs <- use csMC
@@ -320,7 +320,7 @@ doAccountTransaction tr@(Transaction target typ amt)= stepLift $ do
 isNonZeroTransaction::Transaction->Bool
 isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
 
-doTransactions::(IsAsset a,Show a,IsFlow fl, Show fl,
+doTransactions::(IsAsset a,Show a,
                  LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction app)=>[Transaction]->app ()
 doTransactions ts = stepLift $ mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
 

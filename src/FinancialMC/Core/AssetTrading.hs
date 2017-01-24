@@ -3,11 +3,11 @@
 {-# LANGUAGE RankNTypes       #-}
 module FinancialMC.Core.AssetTrading
        (
-         nullAssetTradeF,
-         defaultAssetBuySellF,
-         defaultNonCapitalAssetBuySellF,
-         liquidateOnlyBuySellF,
-         tradeAccount,
+         nullAssetTradeF
+       , defaultAssetBuySellF
+       , defaultNonCapitalAssetBuySellF
+       , liquidateOnlyBuySellF
+       , tradeAccount
        ) where
 
 import           FinancialMC.Core.Asset         (Account (..),
@@ -40,7 +40,7 @@ import           Data.Monoid                    ((<>))
 
 --refuses all trades, current default for liabilities
 -- gives back original asset and zero spent, zero cap gain
-noTrade::IsAsset a=>a->TradeApp a
+noTrade::a->TradeApp a
 noTrade = return
 
 type AssetTrader a = IsAsset a=>TradeFunction a

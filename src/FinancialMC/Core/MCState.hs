@@ -1,27 +1,45 @@
-{-# LANGUAGE UndecidableInstances, FunctionalDependencies #-}
-{-# LANGUAGE TemplateHaskell,BangPatterns, GADTs, FlexibleContexts, FlexibleInstances, MultiParamTypeClasses #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, OverloadedStrings #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE OverloadedStrings #-}
 module FinancialMC.Core.MCState 
        (
-         BalanceSheet(BalanceSheet),
-         getAccountNames,
-         makeNewBalanceSheet,
-         insertAccount, --NB: replaces if already present, like Map.insert
-         CashFlows,makeNewCashFlows,
-         addFlow,
-         MCState(MCState),HasMCState(..),
-         makeMCState,
-         getAccount,--putAccount,
-         addRule,
-         addLifeEvent,
-         CombinedState(CombinedState),HasCombinedState(..),
-         evolveMCS,
-         netWorth,netWorthBreakout,grossFlows,
-         PathSummary(..),isZeroNW,NetWorthMap,FSSummary(FSSummary),HasFSSummary(..),summarize,computeFlows
+         BalanceSheet(BalanceSheet)
+       , getAccountNames
+       , makeNewBalanceSheet
+       , insertAccount --NB: replaces if already present, like Map.insert
+       , CashFlows
+       , makeNewCashFlows
+       , addFlow
+       , MCState(MCState)
+       , HasMCState(..)
+       , makeMCState
+       , getAccount
+       , addRule
+       , addLifeEvent
+       , CombinedState(CombinedState)
+       , HasCombinedState(..)
+       , evolveMCS
+       , netWorth
+       , netWorthBreakout
+       , grossFlows
+       , PathSummary(..)
+       , isZeroNW
+       , NetWorthMap
+       , FSSummary(FSSummary)
+       , HasFSSummary(..)
+       , summarize
+       , computeFlows
        ) where
 
 
-import           FinancialMC.Core.LifeEvent (IsLifeEvent)
 import           FinancialMC.Core.Asset (IsAsset,AccountName,Account(Account),HasAccount(..),accountValueCV)
 import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
@@ -32,7 +50,6 @@ import           FinancialMC.Core.MapLike (IsMap(..))
 import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),HasMoneyValue(..))
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import qualified FinancialMC.Core.CValued as CV
-import           FinancialMC.Core.Rule (IsRule)
 import           FinancialMC.Core.TradingTypes (LiquidityType(NearCash),liquidityType)
 import           FinancialMC.Core.Utilities (noteM,FMCException(Other),Year)
 
