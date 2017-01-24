@@ -13,11 +13,10 @@ import Control.Lens (makeClassy)
 
 import GHC.Generics (Generic)
 import Data.Aeson (FromJSON,ToJSON)
-import Data.Aeson.Existential.EnvParser (EnvFromJSON)
 import qualified Data.Text as T
 
 type TradeResult a = Result [FlowResult] a
-data TradeType = Normal | OverFund | EarlyWithdrawal deriving (Eq,Show,Read,Generic,ToJSON,FromJSON)
+data TradeType = NormalTrade | OverFund | EarlyWithdrawal deriving (Eq,Show,Read,Generic,ToJSON,FromJSON)
 
 data AccountType = Bank 
                  | Brokerage 
@@ -31,7 +30,6 @@ data AccountType = Bank
                  deriving (Eq,Show,Read,Enum,Bounded,Generic,FromJSON,ToJSON)
 
 
-instance EnvFromJSON e AccountType
 
 data LiquidityType = NearCash | 
                      DeferredIncome | 

@@ -52,9 +52,6 @@ import           Control.Monad (when)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State.Strict (State,MonadState,get)
 
-import           Data.Aeson.Existential.EnvParser (EnvFromJSON(..))
-import           Data.Aeson.Existential.Generic (genericEnvParseJSON)
-
 --import qualified Data.Text as T 
 
 type MyMap k v = M.Map k v
@@ -81,16 +78,11 @@ instance ToJSON a=>ToJSON (BalanceSheet a) where
 instance FromJSON a=>FromJSON (BalanceSheet a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance EnvFromJSON e (AccountMap a)=> EnvFromJSON e (BalanceSheet a) where
-  envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 3}
-
 getAccountNames::BalanceSheet a->[AccountName]                           
 getAccountNames bs = mKeys (bs ^. bsAccountMap)
                            
 data CashFlows fl = CashFlows { _cfdFlowMap:: !(FlowMap fl) } deriving (Generic)
 makeClassy ''CashFlows
-
-instance (FromJSON fl, EnvFromJSON e fl)=>EnvFromJSON e (CashFlows fl)
 
 instance Functor CashFlows where
   fmap f (CashFlows cfm) = CashFlows (f <$> cfm)
@@ -106,10 +98,6 @@ instance ToJSON fl=>ToJSON (CashFlows fl) where
 instance FromJSON fl=>FromJSON (CashFlows fl) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 4}
 
-{-  
-instance EnvFromJSON e FlowMap => EnvFromJSON e CashFlows where
-  envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 4}
--}
 -- NB: These are unsafe adds and could overwrite if the names are the same 
     
 makeNewBalanceSheet::BalanceSheet a

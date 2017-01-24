@@ -24,7 +24,6 @@ module FinancialMC.Parsers.Configuration
        , InitialFS(..)
        , IFSMap
        , FMCComponentConverters(..)
---       , FMCConvertible(..)
        , convertComponentsInitialFS
        , convertComponentsIFSMap
        , getFinancialState
@@ -49,7 +48,6 @@ module FinancialMC.Parsers.Configuration
 
 import           FinancialMC.Core.MoneyValue (Currency,MoneyValue)
 import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..))
---import           FinancialMC.Core.Rates (RateModel)
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
 import           FinancialMC.Core.Rule (IsRule)
 import           FinancialMC.Core.LifeEvent (IsLifeEvent)
@@ -62,7 +60,6 @@ import           Data.Aeson.TH (deriveJSON,Options(..),defaultOptions)
 import           Control.Applicative ((<|>))
 import qualified Control.Lens as Lens
 import           Control.Monad.State.Strict (State,get,put)
-import           Data.Aeson.Existential (genericEnvParseJSON,EnvFromJSON(..))
 
 import           Data.List.Split (splitOn)
 import qualified Data.Map as M
@@ -169,7 +166,6 @@ instance FromJSON ConfigurationInputs where
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ConfigurationInputs) -}
 
-instance EnvFromJSON e ConfigurationInputs
 
 instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
@@ -207,18 +203,7 @@ instance (ToJSON a, ToJSON fl, ToJSON le, ToJSON ru)=>ToJSON (InitialFS a fl le 
 instance (FromJSON a, FromJSON fl, FromJSON le, FromJSON ru)=>FromJSON (InitialFS a fl le ru) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance (FromJSON a,FromJSON fl,FromJSON le, FromJSON ru)=>EnvFromJSON e (InitialFS a fl le ru)
 
-{-
-instance (FromJSON a, FromJSON le, FromJSON fl, FromJSON ru,
-          EnvFromJSON e le,
-          EnvFromJSON e fl,
-          EnvFromJSON e ru,
-          EnvFromJSON e (BalanceSheet a),
-          EnvFromJSON e (CashFlows fl),
-          EnvFromJSON e Rule) => EnvFromJSON e (InitialFS a fl le) where
-  envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 3}
--}
                  
 type IFSMap a fl le ru = M.Map String (InitialFS a fl le ru)
 
@@ -301,8 +286,6 @@ instance FromJSON TaxStructure where
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''TaxStructure) -}
 
-instance EnvFromJSON e TaxStructure
-
 lookupTS::M.Map String a->String->String->Either E.SomeException a
 lookupTS taxMap key taxLevelString =
   noteM (FailedLookup ("Couldn't find " ++ show key ++ " in loaded " ++ taxLevelString ++ " tax structures.")) $ M.lookup key taxMap
@@ -358,9 +341,6 @@ convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (Mo
 instance (ToJSON le, ToJSON fl, ToJSON a, ToJSON ru, ToJSON rm) => ToJSON (ModelConfiguration a fl le ru rm) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
-instance (FromJSON a, FromJSON le, FromJSON fl, EnvFromJSON e (InitialFS a fl le ru),
-          FromJSON rm,EnvFromJSON e rm,EnvFromJSON e TaxRules) => EnvFromJSON e (ModelConfiguration a fl le ru rm) where
-  envParseJSON = genericEnvParseJSON defaultOptions {fieldLabelModifier = drop 5}
 
 data SimConfiguration = SimConfiguration { _scfgYears::Int
                                          , _scfgPaths::Int
@@ -378,4 +358,4 @@ instance FromJSON SimConfiguration where
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier = drop 5} ''SimConfiguration) -}
 
-instance EnvFromJSON e SimConfiguration 
+

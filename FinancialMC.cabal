@@ -41,7 +41,6 @@ library
     FinancialMC.Parsers.XML.Utilities
     FinancialMC.Parsers.XML.All            
     FinancialMC.Parsers.JSON.Utilities
-    FinancialMC.Parsers.JSON.BaseTypes
     FinancialMC.PersistentTypes
   other-modules:
     FinancialMC.Core.CValued_Internal
@@ -97,7 +96,7 @@ library
                 , transformers
                 , unordered-containers
                 , vector
-                , aeson-existential
+                , yaml
   ghc-options: -O2 -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-matches -funbox-small-strict-fields
   ghc-prof-options: -fprof-auto -auto-all -fprof-cafs 
 

@@ -31,8 +31,6 @@ import           Control.Lens ((^.))
 import           Control.Monad (liftM)
 import  GHC.Generics (Generic)
 import           Data.Aeson (ToJSON(..))
---import           Data.Aeson.Existential (TypeNamed(..),JSON_Existential(..),EnvFromJSON(..),HasParsers,existentialToJSON,parseJSON_Existential)
---import           Data.Aeson.TH (deriveJSON)
 import Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON)
 import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions)
 import qualified Data.Text as T

@@ -23,13 +23,6 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
 import           FinancialMC.Core.Result          (ResultT)
 import           FinancialMC.Core.TradingTypes    (Transaction)
 
-import           Data.Aeson.Existential           (HasParsers,
-                                                   JSON_Existential (..),
-                                                   TypeNamed (..),
-                                                   existentialToJSON,
-                                                   parseJSON_Existential)
-import           Data.Aeson.Existential.EnvParser (EnvFromJSON (..))
-
 import           Control.Exception                (SomeException)
 import           Control.Monad.Reader             (ReaderT)
 import           Data.Monoid                      ((<>))

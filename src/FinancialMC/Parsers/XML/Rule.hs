@@ -9,7 +9,7 @@ import           FinancialMC.Parsers.XML.Utilities (FMCXmlArrow,
 
 import           FinancialMC.Core.Asset            (AccountName)
 import           FinancialMC.Core.Rule             (IsRule)
-import           FinancialMC.Core.TradingTypes     (TradeType (Normal))
+import           FinancialMC.Core.TradingTypes     (TradeType (NormalTrade))
 import           FinancialMC.Core.Utilities        (DateRange (..))
 
 import qualified FinancialMC.Builders.Rules        as R
@@ -47,7 +47,7 @@ getContributionRule::ArrowXml a=>a XmlTree (Maybe R.BaseRule)
 getContributionRule = proc l -> do
   amount <- readAttrValue "amount" -< l
   account <- getAttrValue "account" -< l
-  tradeT <- readAttrValueElse "trade_type" Normal -< l
+  tradeT <- readAttrValueElse "trade_type" NormalTrade -< l
   dRange <- readAttrValue "when" -< l
   name <- getAttrValue "name" -< l
   returnA -< Just $ R.BaseRule (T.pack name) (R.Contribution  (T.pack account) amount tradeT dRange)
@@ -71,9 +71,9 @@ getPreTaxContributionRule = proc l -> do
 getTransferRule::ArrowXml a=>a XmlTree (Maybe R.BaseRule)
 getTransferRule = proc l -> do
   fAccount <- getAttrValue "from" -< l
-  fTradeType <- readAttrValueElse "from_trade" Normal -< l
+  fTradeType <- readAttrValueElse "from_trade" NormalTrade -< l
   tAccount <- getAttrValue "to" -< l
-  tTradeType <- readAttrValueElse "to_trade" Normal -< l
+  tTradeType <- readAttrValueElse "to_trade" NormalTrade -< l
   amount <- readAttrValue "amount" -< l
   dRange <- readAttrValue "when" -< l
   name <- getAttrValue "name" -< l

@@ -44,7 +44,6 @@ import           Control.Lens                     (makeClassy, (^.))
 import           Data.Aeson                       (FromJSON (..), ToJSON (..),
                                                    genericParseJSON,
                                                    genericToJSON)
-import           Data.Aeson.Existential.EnvParser (EnvFromJSON (..), liftToEnv)
 import           Data.Aeson.TH                    (deriveJSON)
 import           Data.Aeson.Types                 (Options (fieldLabelModifier),
                                                    defaultOptions)
@@ -63,7 +62,10 @@ data AssetCore = AssetCore { aName:: !AssetName, aValue:: !MoneyValue, aCostBasi
 instance Show AssetCore where
   show (AssetCore n v cb) = show n ++ ": value=" ++ show v ++ " (cost basis of " ++ show cb ++ ")"
 
-$(deriveJSON defaultOptions{fieldLabelModifier= drop 1} ''AssetCore)
+instance ToJSON AssetCore where
+  toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 1}
+instance FromJSON AssetCore where
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 1}
 
 revalueAssetCore::AssetCore->AssetRevaluation->AssetCore
 revalueAssetCore (AssetCore n _ cb) (NewValue v') = AssetCore n v' cb
@@ -100,8 +102,6 @@ instance ToJSON a=>ToJSON (Account a) where
 
 instance FromJSON a=>FromJSON (Account a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
-
-instance FromJSON a=>EnvFromJSON e (Account a)
 
 instance Show a=>Show (Account a) where
   show (Account n aType ccy as) = show n ++ "(" ++ show aType ++ " in " ++ show ccy ++ ")"

@@ -11,13 +11,11 @@ import Data.List.Split (splitOn,chunksOf)
 
 import Data.Aeson (ToJSON(..),FromJSON(..))
 import Data.Aeson.Types (genericToJSON,genericParseJSON,defaultOptions,Options(..))
-import Data.Aeson.Existential.EnvParser (EnvFromJSON)
 import GHC.Generics (Generic)
 
 
 data Currency = USD | EUR deriving (Eq,Ord,Enum,Bounded,Show,Read,Generic,ToJSON,FromJSON)
 
-instance EnvFromJSON e Currency
 
 
 instance NFData Currency where

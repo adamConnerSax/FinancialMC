@@ -39,7 +39,6 @@ import           Control.Lens                     (magnify, view)
 import           Control.Monad.Reader             (ReaderT, lift)
 
 import           Data.Aeson                       (FromJSON, ToJSON)
-import           Data.Aeson.Existential           (EnvFromJSON)
 import           Data.Aeson.Types                 (Options (fieldLabelModifier),
                                                    defaultOptions)
 --import           Data.Aeson.Existential (TypeNamed)
@@ -65,8 +64,6 @@ data BaseFlowDetails =
   SalaryPayment |
   RentalIncome !MoneyValue {- max annual deduction -} deriving (Generic,ToJSON,FromJSON)
 
-instance EnvFromJSON e BaseFlowDetails
-
 baseFlowDirection::BaseFlowDetails->FlowDirection
 baseFlowDirection Expense = OutFlow
 baseFlowDirection DeductibleExpense = OutFlow
@@ -87,7 +84,6 @@ instance Show BaseFlowDetails where
 
 data BaseFlow = BaseFlow !FlowCore !BaseFlowDetails deriving (Generic,ToJSON,FromJSON)
 
-instance EnvFromJSON e BaseFlow
 
 instance Show BaseFlow where
   show (BaseFlow fc fdet) = show fdet ++ show fc
@@ -117,7 +113,6 @@ expenseWithInflation deductible accumName iType f = do
       flowResult = if deductible then AllDeductible (TaxAmount OrdinaryIncome expense) else UnTaxed cashFlow
       accums = if T.null accumName then [] else [AddTo accumName cashFlow]
   appendAndReturn (EvolveOutput [flowResult] accums) newExpense
-
 
 paymentEvolve::Evolver rm BaseFlow
 paymentEvolve p@(BaseFlow _ (Payment growth_rate)) = do

@@ -52,7 +52,6 @@ import Control.Monad.Catch (MonadThrow(throwM))
 
 import Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON)
 import Data.Aeson.Types (Options(..),defaultOptions)
-import Data.Aeson.Existential (EnvFromJSON)
 import GHC.Generics (Generic)
 
 
@@ -252,8 +251,6 @@ instance ToJSON TaxRules where
 
 instance FromJSON TaxRules where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
-
-instance EnvFromJSON e TaxRules
 
 safeCapGainRateCV::TaxRules->CV.SVD
 safeCapGainRateCV tr = (CV.toSVD (tr ^. trStateCapGain)) |+| maxFedCapGainCV

@@ -11,15 +11,17 @@
 {-# LANGUAGE TupleSections #-}
 module FinancialMC.Builders.RateModels (
     IsRateModelFactor
-    , BaseRateModelFactor (Fixed,Normal)
-    , makeLogNormalFactor
-    , BaseRateModel(..)
+  , BaseRateModelFactor (Fixed,Normal)
+  , makeLogNormalFactor
+  , BaseRateModel(..)
+  , BaseRateModelT -- for ease of use
+  , RateModelFactorC
   ) where
 
 import FinancialMC.Core.Utilities (eitherToIO)
 import FinancialMC.Core.Rates (IsRateModel(..),RateType(..),
                                applyModel, RSource, ReturnType(Stock),
-                               Rate,RateType(..),isRateType,RateTag(..),RateTable(..),defaultRateTable,RateModelC)
+                               Rate,showRateAsPct,RateType(..),isRateType,RateTag(..),RateTable(..),defaultRateTable,RateModelC)
 
 
 import Control.Monad (foldM)
@@ -30,23 +32,26 @@ import GHC.Generics (Generic)
 
 import Data.Aeson (ToJSON(toJSON),FromJSON(parseJSON),genericToJSON,Value(Object),object,(.:),(.=))
 
-import Data.Aeson.Existential (TypeNamed(typeName),JSON_Existential(..),parseJSON_Existential,HasParsers,existentialToJSON)
-import Data.Aeson.Existential.EnvParser (EnvFromJSON(envParseJSON))
-import Data.Aeson.Existential.Generic (genericEnvParseJSON)
 import Data.Aeson.Types (defaultOptions,Options(..))
 import Data.Maybe (fromMaybe)
 
 type RateModelFactorC m = (MonadState RSource m, Rand.MonadRandom m)
 
+type BaseRateModelT = BaseRateModel BaseRateModelFactor
 
 -- factors
 class IsRateModelFactor a where
   rateModelFactorF::RateModelFactorC m=>a->m (Rate,a)
 
 
-data BaseRateModelFactor = Fixed !Double |
-                           Normal !Double !Double |
-                           LogNormal !Double !Double !(Maybe (Double,Double)) deriving (Generic,ToJSON,FromJSON)
+data BaseRateModelFactor = Fixed !Rate |
+                           Normal !Rate !Rate |
+                           LogNormal !Rate !Rate !(Maybe (Double,Double)) deriving (Generic,ToJSON,FromJSON)
+
+instance Show BaseRateModelFactor where
+  show (Fixed rate) = "Fixed: " ++ showRateAsPct rate
+  show (Normal mean var) = "Normal: mean=" ++ showRateAsPct mean ++ "; var=" ++ showRateAsPct var
+  show (LogNormal mean var _) = "LogNormal: mean=" ++ showRateAsPct mean ++ "; var=" ++ showRateAsPct var
 
 instance IsRateModelFactor BaseRateModelFactor where
   rateModelFactorF f@(Fixed rate) = return (rate, f)
@@ -88,6 +93,12 @@ data BaseRateModel rmf = SingleFactorModel RateTag rmf |
                          SameModel RateType rmf |
                          GroupedModel RateType rmf deriving (Generic,ToJSON,FromJSON)
 
+
+instance Show rmf=>Show (BaseRateModel rmf) where
+  show (SingleFactorModel tag factor) = "Single Factor for " ++ show tag ++ "=>" ++ show factor
+  show (ListModel models) = "List: " ++ show models
+  show (SameModel rType factor) = "Same single-factor model for type=" ++ show rType ++"=>" ++ show factor
+  show (GroupedModel rType factor) = "Same single-factor for type=" ++ show rType ++ "=>" ++ show factor
 
 instance IsRateModelFactor rmf=>IsRateModel (BaseRateModel rmf) where
   rateModelF = baseRateModelF 

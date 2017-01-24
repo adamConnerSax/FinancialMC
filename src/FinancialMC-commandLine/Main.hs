@@ -30,6 +30,7 @@ import           OptionParser                            (FinMCOptions (..),
 import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseLifeEvent,
                                                           BaseRule,
+                                                          BaseRateModelT,
                                                           CombinedState,
                                                           FSSummary (..),
                                                           FinEnv,
@@ -38,7 +39,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           HasMCState (..),
                                                           LiquidityType (..),
                                                           PathSummary,
-                                                          baseParsers, doPaths,
+                                                          doPaths,
                                                           doPathsIO, grossFlows,
                                                           isZeroNW, netWorth)
 
@@ -50,16 +51,14 @@ import           FinancialMC.Core.LifeEvent              (IsLifeEvent (..), Life
 import           FinancialMC.Core.MoneyValue             (MoneyValue (MoneyValue))
 import           FinancialMC.Core.Utilities              (Year, eitherToIO)
 
---import FinancialMC.Builders.Assets (FMCBaseAsset)
---import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 
-ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseFlow BaseFlow BaseLifeEvent BaseLifeEvent BaseRule BaseRule
-ccs = C.FMCComponentConverters id id id id
+ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseFlow BaseFlow BaseLifeEvent BaseLifeEvent BaseRule BaseRule BaseRateModelT BaseRateModelT
+ccs = C.FMCComponentConverters id id id id id
 
 lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 lec = LEC id id
 
-runWithOptions::FinEnv->CombinedState BaseAsset BaseFlow BaseLifeEvent BaseRule->FinMCOptions->IO [(PathSummary,Word64)]
+runWithOptions::FinEnv BaseRateModelT->CombinedState BaseAsset BaseFlow BaseLifeEvent BaseRule->FinMCOptions->IO [(PathSummary,Word64)]
 runWithOptions fe0 cs0 options = do
   let showFS = optShowFinalStates options -- NB: if showFinalStates is true, paths will be run serially rather than in parallel
       logLevels = optLogLevels options
@@ -88,7 +87,7 @@ runAndOutput::Bool->FinMCOptions->IO ()
 runAndOutput doOutput options = do
   let writeIf x = when doOutput $ putStrLn x
   writeIf ("Running configs from " ++ optConfigFile options)
-  (configInfo,configMap) <- loadConfigurations ccs (optSchemaPath options) baseParsers (C.UnparsedFile (optConfigFile options))
+  (configInfo,configMap) <- loadConfigurations ccs (optSchemaPath options) (C.UnparsedFile (optConfigFile options))
   writeIf ("Loaded " ++ show (M.keys configMap))
   let runConfig::String->IO ()
       runConfig cfgName = do

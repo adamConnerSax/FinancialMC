@@ -10,11 +10,13 @@ module FinancialMC.Base
        , module FinancialMC.Core.MapLike
        , module FinancialMC.Core.Tax
        , module FinancialMC.Core.TradingTypes
-       , module FinancialMC.Parsers.JSON.BaseTypes
        , BaseAsset
        , BaseLifeEvent
        , BaseFlow
        , BaseRule
+       , BaseRateModelT -- use this one
+       , BaseRateModel  -- use if you want specify your own factors
+       , BaseRateModelFactor 
        ) where
 
 import           FinancialMC.Core.Asset             (accountValue)
@@ -39,10 +41,8 @@ import           FinancialMC.Core.MoneyValue        (HasMoneyValue (..),
 import           FinancialMC.Core.Tax               (TaxBrackets)
 import           FinancialMC.Core.TradingTypes      (LiquidityType (..))
 import           FinancialMC.Core.Utilities         (FMCException (..), Year)
-import           FinancialMC.Parsers.JSON.BaseTypes (FMC_ParserMaps, addParser,
-                                                     baseParsers)
-
 import           FinancialMC.Builders.Assets        (BaseAsset)
 import           FinancialMC.Builders.Flows         (BaseFlow)
 import           FinancialMC.Builders.LifeEvents    (BaseLifeEvent)
 import           FinancialMC.Builders.Rules         (BaseRule)
+import           FinancialMC.Builders.RateModels    (BaseRateModel,BaseRateModelFactor,BaseRateModelT)

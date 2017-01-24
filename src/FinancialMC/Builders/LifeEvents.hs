@@ -29,7 +29,6 @@ import           Control.Monad.Reader (ReaderT)
 
 import Data.Aeson (genericToJSON, genericParseJSON)
 import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions,FromJSON(..),ToJSON(..))
-import Data.Aeson.Existential (EnvFromJSON)
 import qualified Data.Text as T
 import           GHC.Generics (Generic)
 
@@ -45,13 +44,10 @@ instance ToJSON BaseLifeEvent where
 instance FromJSON BaseLifeEvent where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2}
 
-instance EnvFromJSON e BaseLifeEvent
-
 -- Here we can add new constructors for new types of event (Retirement?  Child?)
 data BaseLifeEventDetails = BuyProperty PropertyPurchase deriving (Generic)
 instance ToJSON BaseLifeEventDetails
 instance FromJSON BaseLifeEventDetails
-instance EnvFromJSON e BaseLifeEventDetails
 
 -- purchase real estate and take out a mortgage.  
 -- Creates an account to house the real estate asset as well as the mortgage.
@@ -74,27 +70,21 @@ instance ToJSON PropertyPurchase where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2}
 instance FromJSON PropertyPurchase where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2}
-instance EnvFromJSON e PropertyPurchase
-
-
 
 instance IsLifeEvent BaseLifeEvent where
   type AssetType BaseLifeEvent = BaseAsset
   type FlowType BaseLifeEvent = BaseFlow
   lifeEventCore (BaseLifeEvent lec _) = lec
-  doLifeEvent ble@(BaseLifeEvent lec (BuyProperty pp)) = buyProperty lec pp
-
+  doLifeEvent = doBaseLifeEvent
 
 instance Show BaseLifeEvent where
   show (BaseLifeEvent lec (BuyProperty pp)) = printPropertyPurchase lec pp
 
-
+doBaseLifeEvent::BaseLifeEvent->LifeEventConverters a fl BaseLifeEvent->AccountGetter a->LifeEventApp a fl rm ()
 -- should this get fixed to run underneath ResultT until the end?
-buyProperty::LifeEventCore->PropertyPurchase->LifeEventConverters a fl BaseLifeEvent->
-             AccountGetter a->LifeEventApp a fl rm ()
-buyProperty (LifeEventCore name y)
-  (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint)
-  (LEC convertA convertF) _ = do
+doBaseLifeEvent (BaseLifeEvent (LifeEventCore name y)
+                 (BuyProperty (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint)))
+                 (LEC convertA convertF) _ = do
   let propertyA = convertA $ BaseAsset (AssetCore pName pValue pValue) ResidentialRE
       ccy = pValue ^. mCurrency
       borrowedF val dp c = CV.cvNegate (val |-| dp |+| c)

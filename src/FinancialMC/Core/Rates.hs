@@ -25,6 +25,7 @@ module FinancialMC.Core.Rates
        , rateRequest
        , RSource
        , Rate
+       , showRateAsPct
        , IsRateModel(..)
        , applyModel
        , RateModelC
@@ -33,8 +34,6 @@ module FinancialMC.Core.Rates
 
 import           FinancialMC.Core.Utilities (noteM,FMCException(FailedLookup))
 import           FinancialMC.Core.MoneyValue (Currency(..))
-
-import Data.Aeson.Existential (EnvFromJSON(..),JSON_Existential(..),TypeNamed(..),HasParsers,parseJSON_Existential,existentialToJSON)
 
 import           Data.Random.Source.PureMT (PureMT)
 import           Data.Maybe (fromJust)
@@ -57,7 +56,6 @@ data RateTag = Interest !InterestType |
                Inflation !InflationType | 
                Exchange !Currency deriving (Ord,Eq,Read,Show,Generic,FromJSON,ToJSON)
 
-instance EnvFromJSON e RateTag
 
 allTags::[RateTag]
 allTags = [Interest x | x<-[(minBound::InterestType)..]] ++ 
@@ -67,7 +65,6 @@ allTags = [Interest x | x<-[(minBound::InterestType)..]] ++
           
 data RateType = IsInterest | IsReturn | IsInflation | IsExchange  deriving (Enum,Eq,Ord,Show,Read,Generic,ToJSON,FromJSON)
 
-instance EnvFromJSON e RateType
 
 isRateType::RateType->RateTag->Bool
 isRateType IsInterest (Interest _) = True
@@ -85,11 +82,13 @@ defaultRates (Return _) = 0.05
 defaultRates (Inflation _) = 0.015
 defaultRates (Exchange _) = 1.0
 
+showRateAsPct::Rate->String
+showRateAsPct r = (printf "%.2f" (r*100)) ++ "%"
+
 data RateTable a = RateTable { rLookup::RateTag->Maybe a, 
                                rSet::RateTag->a->RateTable a, 
                                rToList::[(RateTag,a)],
                                rKeys::[RateTag] }
-                   
                    
                    
 instance (PrintfArg a,Num a)=>Show (RateTable a) where

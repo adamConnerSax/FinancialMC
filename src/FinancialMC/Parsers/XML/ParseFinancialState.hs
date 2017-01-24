@@ -33,13 +33,13 @@ import qualified Data.Map as M
 
 loadFinancialStatesFromFile::Maybe FilePath->FilePath->StateT (IFSMap BaseAsset BaseFlow BaseLifeEvent BaseRule) IO ()
 loadFinancialStatesFromFile mSchemaDir file = 
-  lift (readFile file) >>= loadFinancialStatesFromString fcc mSchemaDir
+  lift (readFile file) >>= loadFinancialStatesFromString mSchemaDir
 
 loadFinancialStatesFromString::Maybe FilePath->String->StateT (IFSMap BaseAsset BaseFlow BaseLifeEvent BaseRule) IO () 
 loadFinancialStatesFromString mSchemaDir content = do
   let opts = buildOpts mSchemaDir [withRemoveWS yes] "FinancialStates.rng"
   let xml = readString opts content
-  loadFinancialStates' fcc xml
+  loadFinancialStates' xml
   
 
 loadFinancialStates'::(MonadTrans t, MonadState (IFSMap BaseAsset BaseFlow BaseLifeEvent BaseRule) (t IO)) =>

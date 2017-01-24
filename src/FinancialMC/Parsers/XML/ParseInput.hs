@@ -20,7 +20,7 @@ import           FinancialMC.Builders.Assets                 (BaseAsset)
 import           FinancialMC.Builders.Flows                  (BaseFlow)
 import           FinancialMC.Builders.LifeEvents             (BaseLifeEvent)
 import           FinancialMC.Builders.Rules                  (BaseRule)
-import           FinancialMC.Builders.RateModels             (BaseRateModel, BaseRateModelFactor)
+import           FinancialMC.Builders.RateModels             (BaseRateModelT)
 
 import           FinancialMC.Parsers.XML.Utilities           (FMCXmlArrow,
                                                               atTag,
@@ -79,18 +79,18 @@ getConfigurations = atTag "Configurations" >>>
     returnA -< M.fromList configs
 
 
-type FCC a fl le ru rm = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le BaseRule ru (BaseRateModel BaseRateModelFactor) rm
+--type FCC a fl le ru rm = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le BaseRule ru BaseRateModelT rm
 
-loadConfigurations'::FCC a fl le ru rm->Maybe String->FilePath->IO (C.LoadedModels a fl le ru rm,C.ModelDescriptionMap)
-loadConfigurations' fcc@(FMCComponentConverters _ _ _ _ rmF) mSchema path = do
+loadConfigurations'::Maybe String->FilePath->IO (C.LoadedModels BaseAsset BaseFlow BaseLifeEvent BaseRule BaseRateModelT,C.ModelDescriptionMap)
+loadConfigurations' mSchema path = do
   let configXML = parseXML path
   result <- runFMCX (configXML >>> getXMLDataSources)
   let (taxXMLs,rateXMLs,finStateXMLs) = head result
       f::[String]->(String->StateT a IO ())->a->IO a
       f list load = execStateT (mapM_ load list)
   taxStructure <- f taxXMLs (loadTaxDataFromFile mSchema) emptyTaxStructure
-  rateModels <-   f rateXMLs (loadRateModelsFromFile rmF mSchema) M.empty
-  finStates <-    f finStateXMLs (loadFinancialStatesFromFile fcc mSchema) M.empty
+  rateModels <-   f rateXMLs (loadRateModelsFromFile mSchema) M.empty
+  finStates <-    f finStateXMLs (loadFinancialStatesFromFile mSchema) M.empty
   configs <- runFMCX (configXML >>> getConfigurations)
   return ((C.LoadedModels finStates rateModels taxStructure),head configs)
 

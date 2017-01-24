@@ -53,7 +53,6 @@ import           Control.Monad.Trans.Class        (lift)
 import           Data.Aeson                       (FromJSON, ToJSON,
                                                    genericParseJSON,
                                                    genericToJSON)
-import           Data.Aeson.Existential           (EnvFromJSON)
 import           Data.Aeson.Types                 (Options (fieldLabelModifier),
                                                    defaultOptions)
 --import           Data.Aeson.TH (deriveJSON)
@@ -108,7 +107,6 @@ instance Show BaseRuleDetails where
 
 data BaseRule = BaseRule !RuleName BaseRuleDetails deriving (Generic,FromJSON,ToJSON)
 
-instance EnvFromJSON e BaseRule
 
 instance Show BaseRule where
   show (BaseRule rn rd) = show rn ++ " [" ++ show rd ++ "]"
@@ -148,7 +146,7 @@ doBaseRule (PayFrom acctName accumName) getA = do
         accountBal' = accountValueCV acct
     accumulated <- getAccumulatedValue accumName
     toTrade <- laERMV ccy $ CV.cvMax (CV.fromMoneyValue accumulated) (CV.cvNegate accountBal')
-    let trade = Transaction acctName Normal toTrade
+    let trade = Transaction acctName NormalTrade toTrade
         accumR = AddTo accumName (MV.negate toTrade)
     mvLift . CV.asERFReader $ cvIf (CV.fromMoneyValue toTrade |/=| CV.mvZero ccy) (CV.toSV $ RuleOutput [trade] [accumR]) (CV.toSV $ RuleOutput [] [])
   appendAndReturn output ()
@@ -170,7 +168,7 @@ doBaseRule (RequiredDistribution acctName yearTurning70) getA = do
     let fraction = distributionFraction lifeExpectancyFrom70 curDate yearTurning70
     acct <- liftGetA getA acctName
     amount <- laERMV (acct ^. acCurrency) $ accountValueCV acct |*| (-1.0*fraction)
-    return [Transaction acctName Normal amount]
+    return [Transaction acctName NormalTrade amount]
   appendAndReturn (RuleOutput trades []) ()
 
 --rule to keep one account balance between limits by transferring to another.  E.g., keep cash position bounded by buying/selling investments
@@ -183,8 +181,8 @@ doBaseRule (CashToInvestmentSweep cashAcctName invAcctName minCash maxCash) getA
                                            (x CV.|>| maxC, maxC CV.|-| x)]
                                 (CV.mvZero ccy)
     toBank <- laERMV ccy $ toBankF (CV.fromMoneyValue minCash) (CV.fromMoneyValue maxCash) (accountValueCV cashAcct) (accountValueCV invAcct)
-    let cashTrade = Transaction cashAcctName Normal toBank
-        invTrade = Transaction invAcctName Normal (MV.negate toBank)
+    let cashTrade = Transaction cashAcctName NormalTrade toBank
+        invTrade = Transaction invAcctName NormalTrade (MV.negate toBank)
     return (cashTrade, invTrade)
   appendAndReturn (RuleOutput [cashTrade',invTrade'] []) ()
 
@@ -201,7 +199,7 @@ doBaseRule (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip ac
           let bal' = accountValueCV acct
               need' = CV.fromMoneyValue need
               toSell' = CV.cvMin need' bal'
-              tt = if between curDate range then Normal else EarlyWithdrawal
+              tt = if between curDate range then NormalTrade else EarlyWithdrawal
           toSell <- CV.asERMV ccy (CV.cvNegate toSell')
           let makeT = Transaction name tt toSell
           remainingNeed <- CV.asERMV ccy $ need' |-| toSell'
@@ -222,14 +220,14 @@ doBaseRule (TaxTrade acctName) _ = do
         needed' = CV.cvMin tax' (tax' |-| cashOnHand')
         amt' = CV.cvNegate $ needed' |/| (CV.toSVD 1.0 |-| safeR')
     amt <- mvLift $ CV.asERMV ccy amt'
-    let trade = Transaction acctName Normal amt
+    let trade = Transaction acctName NormalTrade amt
     mvLift . CV.asERFReader $ cvIf (cvOr (tax' |<=| CV.mvZero ccy) (tax' |<| cashOnHand')) (CV.toSV []) (CV.toSV [trade])
   appendAndReturn (RuleOutput trades [Zero (T.pack "TaxOwed")]) ()
 
 --rule to sweep remaining cashPos into given account.  Last rule executed
 doBaseRule (Sweep acctName) _ = do
     cashPos <- liftFS $ view fsCashFlow
-    let trade = Transaction acctName Normal cashPos
+    let trade = Transaction acctName NormalTrade cashPos
     appendAndReturn (RuleOutput [trade] []) ()
 
 makeCashToInvestmentSweepRule::AccountName->AccountName->MoneyValue->MoneyValue->BaseRule
@@ -245,7 +243,7 @@ makeSweepRule::AccountName->BaseRule
 makeSweepRule an = BaseRule "Sweep" (Sweep an)
 
 makePreTaxContributionRule::AccountName->MoneyValue->DateRange->RuleName->BaseRule
-makePreTaxContributionRule acctName amount dateRange rName = BaseRule rName (Contribution acctName amount Normal dateRange)
+makePreTaxContributionRule acctName amount dateRange rName = BaseRule rName (Contribution acctName amount NormalTrade dateRange)
 
 makeAfterTaxContributionRule::AccountName->MoneyValue->DateRange->RuleName->BaseRule
 makeAfterTaxContributionRule acctName amount dateRange rName = BaseRule rName (Contribution acctName amount OverFund dateRange)
