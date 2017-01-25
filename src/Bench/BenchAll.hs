@@ -3,7 +3,7 @@ import Criterion.Main
 import BenchMoneyOps
 import BenchPath
 import BenchMapLike
-import BenchEngine
+--import BenchEngine
 
 benchesIO::IO [Benchmark]
 benchesIO = sequence [benchMoneyOpsIO,benchMapLikeIO,benchPathsIO]

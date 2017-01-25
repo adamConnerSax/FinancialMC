@@ -11,30 +11,44 @@ import Control.Lens ((^.))
 import Data.Maybe (fromJust)
 import System.Random.Mersenne.Pure64 (pureMT)
 import Data.Word (Word64)
+import FinancialMC.Core.LifeEvent (LifeEventConverters(..))
 
-import FinancialMC.Base (CombinedState,HasCombinedState(..),FinEnv,HasMCState(..),PathSummary,execOnePathPure,doPaths)
+import FinancialMC.Base (CombinedState,HasCombinedState(..),FinEnv,HasMCState(..),PathSummary,execOnePathPure,doPaths,
+                        BaseAsset,BaseFlow,BaseLifeEvent,BaseRule,BaseRateModelT)
 
 import qualified FinancialMC.Parsers.Configuration as C
 import FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,buildInitialStateFromConfig)
-import FinancialMC.Parsers.JSON.BaseTypes (baseParsers)
+
 
 import FinancialMC.Core.Utilities (eitherToIO)
 
+type BenchAsset = BaseAsset
+type BenchFlow = BaseFlow
+type BenchLifeEvent = BaseLifeEvent
+type BenchRule = BaseRule
+type BenchRateModel = BaseRateModelT
 
-getSummaryS::Either SomeException (CombinedState,FinEnv)->Maybe PathSummary
+ccs::C.FMCComponentConverters BaseAsset BenchAsset BaseFlow BenchFlow BaseLifeEvent BenchLifeEvent BaseRule BenchRule BaseRateModelT BenchRateModel
+ccs = C.FMCComponentConverters id id id id id
+
+lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
+lec = LEC id id
+
+
+getSummaryS::Either SomeException (CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule,FinEnv BenchRateModel)->Maybe PathSummary
 getSummaryS x = case x of
   Left _ -> Nothing
   Right (cs,_) -> Just $ cs ^. csMC.mcsPathSummary
 
-setupEnv::FilePath->String->IO (CombinedState,FinEnv)
+setupEnv::FilePath->String->IO (CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule,FinEnv BenchRateModel)
 setupEnv cFile cfgName = do
-  (configInfo, configMap) <- loadConfigurations Nothing baseParsers (C.UnparsedFile cFile)
+  (configInfo, configMap) <- loadConfigurations ccs Nothing (C.UnparsedFile cFile)
   (_,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
   return (cs0,fe0)
 
-benchPathF::CombinedState->FinEnv->Int->PathSummary
+benchPathF::CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule->FinEnv BenchRateModel->Int->PathSummary
 benchPathF cs0 fe0  years = do
-  fromJust . getSummaryS  $ execOnePathPure cs0 fe0 1 years
+  fromJust . getSummaryS  $ execOnePathPure lec cs0 fe0 1 years
 
 
 benchSinglePath::[(FilePath,[(String,String,[Int])])]->IO [Benchmark]
@@ -52,9 +66,9 @@ getSummaryM x = case x of
   Left _ -> Nothing
   Right result -> Just . fst . unzip $ result
 
-benchMultiPathF::Bool->CombinedState->FinEnv->Int->Int->[PathSummary]
+benchMultiPathF::Bool->CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule->FinEnv BenchRateModel->Int->Int->[PathSummary]
 benchMultiPathF singleThreaded cs0 fe0 years paths =
-  fromJust . getSummaryM $ doPaths cs0 fe0 singleThreaded (pureMT 1) years paths
+  fromJust . getSummaryM $ doPaths lec cs0 fe0 singleThreaded (pureMT 1) years paths
 
 
 benchMultiPath::Bool->[(FilePath,[(String,String,[Int],[Int])])]->IO [Benchmark]
@@ -73,17 +87,17 @@ benchPathsIO::IO Benchmark
 benchPathsIO = bgroup "Paths" <$> sequence 
                [ bgroup "Singles" <$> benchSinglePath
                  [
-                   ("Configs/Tests/AssetTestConfigurations.yaml",[("BankTest","BankTest",[1,10])])
-                 , ("/Users/adam/Documents/Planning/FMC/APConfig.yaml",[("Conservative","APCons",[1,50])])
+                   ("Configs/Tests/AssetTestConfigurations.xml",[("BankTest","BankTest",[1,10])])
+                 , ("/Users/adam/Documents/Planning/FMC/APConfig.xml",[("Conservative","APCons",[1,50])])
                  ]
                , bgroup "Multis/SingleThreaded" <$> benchMultiPath True
                  [
-                   ("Configs/Tests/AssetTestConfigurations.yaml",[("BankTest","BankTest",[1,50],[1,100])])
-                 , ("/Users/adam/Documents/Planning/FMC/APConfig.yaml",[("Conservative","APCons",[1,50],[1,100])])
+                   ("Configs/Tests/AssetTestConfigurations.xml",[("BankTest","BankTest",[1,50],[1,100])])
+                 , ("/Users/adam/Documents/Planning/FMC/APConfig.xml",[("Conservative","APCons",[1,50],[1,100])])
                  ]
                , bgroup "Multis/MultiThreaded" <$> benchMultiPath False
                  [
-                   ("Configs/Tests/AssetTestConfigurations.yaml",[("BankTest","BankTest",[1,50],[1,100])])
-                 , ("/Users/adam/Documents/Planning/FMC/APConfig.yaml",[("Conservative","APCons",[1,50],[1,100])])
+                   ("Configs/Tests/AssetTestConfigurations.xml",[("BankTest","BankTest",[1,50],[1,100])])
+                 , ("/Users/adam/Documents/Planning/FMC/APConfig.xml",[("Conservative","APCons",[1,50],[1,100])])
                  ]
                ]
