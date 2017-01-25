@@ -1,9 +1,9 @@
 {-# LANGUAGE Arrows #-}
 module FinancialMC.Parsers.XML.ParseInput
        (
-         loadConfigurations,
-         getConfiguration,
-         getXMLDataSources,
+         loadConfigurations
+       , getConfiguration
+       , getXMLDataSources,
        ) where
 
 
@@ -26,7 +26,6 @@ import           FinancialMC.Parsers.XML.Utilities           (FMCXmlArrow,
                                                               atTag,
                                                               getAttrValueIf,
                                                               parseXML,
-                                                              readAttrValue,
                                                               readAttrValueDef,
                                                               runFMCX)
 
@@ -100,9 +99,9 @@ loadConfigurations mSchema path = do
   result <- runFMCX (configXML >>> getXMLDataSources)
   let (taxXMLs,rateXMLs,finStateXMLs) = head result
       toXMLDS contentType xmlPath = C.DataSource (C.Parseable (C.UnparsedFile xmlPath) C.XML) contentType
-      taxDS = map (toXMLDS C.TaxStructureS) taxXMLs
-      rateDS = map (toXMLDS C.RateModelS) rateXMLs
-      fsDS = map (toXMLDS C.FinancialStateS) finStateXMLs
+      taxDS = (toXMLDS C.TaxStructureS) <$> taxXMLs
+      rateDS = (toXMLDS C.RateModelS) <$> rateXMLs
+      fsDS = (toXMLDS C.FinancialStateS) <$> finStateXMLs
   configs <- runFMCX (configXML >>> getConfigurations)
   return (taxDS ++ rateDS ++ fsDS,head configs)
 

@@ -18,7 +18,7 @@ enumFromString s =
       valueMap = (\x->(show x,x)) <$> enumValues
       in fromJust $ lookup s valueMap
 
-toJSONEnumMap::(Show k, Enum k, Bounded k,Ord k,ToJSON a)=>M.Map k a->Value
+toJSONEnumMap::(Show k, ToJSON a)=>M.Map k a->Value
 toJSONEnumMap m = toJSON (M.mapKeys show m)
 
 fromJSONEnumMap::(Show k,Enum k, Bounded k, Ord k, FromJSON a)=>Value->Parser (M.Map k a)
@@ -26,7 +26,7 @@ fromJSONEnumMap v = M.mapKeys enumFromString <$> parseJSON v
 
 newtype EnumKeyMap k a = EnumKeyMap { unEnumKeyMap::M.Map k a } deriving (Show)
 
-instance (Show k, Enum k, Bounded k, Ord k, ToJSON a)=>ToJSON (EnumKeyMap k a) where
+instance (Show k, ToJSON a)=>ToJSON (EnumKeyMap k a) where
   toJSON = toJSONEnumMap . unEnumKeyMap
 
 instance (Show k, Enum k, Bounded k, Ord k, FromJSON a)=>FromJSON (EnumKeyMap k a) where

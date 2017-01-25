@@ -11,7 +11,6 @@ import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.Yaml as Y
 import qualified Data.Aeson as A
-import Data.Monoid ((<>))
 import Data.Aeson.Encode.Pretty (encodePretty)
 
 import           Options.Applicative (Parser,optional,long,metavar,str,argument,execParser,ParserInfo,
@@ -25,7 +24,7 @@ import           FinancialMC.Parsers.XML.All (loadFinancialStatesFromFile,
                                               loadTaxDataFromFile,emptyTaxStructure)
 import           FinancialMC.Parsers.XML.Utilities (XmlParseInfos,runFMCX,buildOpts)
 
-import           FinancialMC.Base (BaseAsset,BaseFlow,BaseLifeEvent,BaseRule,BaseRateModelT)
+--import           FinancialMC.Base (BaseAsset,BaseFlow,BaseLifeEvent,BaseRule,BaseRateModelT)
 
 
 data XmlType = FinStates | RModels | TData | Configs deriving (Show,Enum,Bounded,Ord,Eq)
@@ -45,7 +44,7 @@ data XmlToJSONOptions = XmlToJSONOptions
 parseBoundedEnum::(Enum e, Bounded e, Show e) => String -> ReadM e
 parseBoundedEnum s = do
   let enumValues = [minBound..]  
-      valueMap = map (\x -> (show x,x)) enumValues
+      valueMap = (\x -> (show x,x)) <$> enumValues
       val = lookup s valueMap
       r (Nothing) = readerError ("Couldn't parse \"" ++ s ++ "\" as a member of " ++ show enumValues)  
       r (Just x) = return x 
@@ -82,9 +81,9 @@ xmlToJSONOptionParser = info (helper <*> xmlToJSONOptionParser')
 
 xmlSourcesToDS::([String],[String],[String]) -> [C.DataSource]
 xmlSourcesToDS (taxL,rateL,finL) = taxDS ++ rateDS ++ finDS where
-  taxDS = map (\fn -> C.DataSource (C.Parseable (C.UnparsedFile fn) C.XML) C.TaxStructureS) taxL
-  rateDS = map (\fn -> C.DataSource (C.Parseable (C.UnparsedFile fn) C.XML) C.RateModelS) rateL
-  finDS = map (\fn -> C.DataSource (C.Parseable (C.UnparsedFile fn) C.XML) C.FinancialStateS) finL
+  taxDS = (\fn -> C.DataSource (C.Parseable (C.UnparsedFile fn) C.XML) C.TaxStructureS) <$> taxL
+  rateDS = (\fn -> C.DataSource (C.Parseable (C.UnparsedFile fn) C.XML) C.RateModelS) <$> rateL
+  finDS = (\fn -> C.DataSource (C.Parseable (C.UnparsedFile fn) C.XML) C.FinancialStateS) <$> finL
 
 -- This one isn't present in main code since we never load just a set of configs
 loadConfigurations'::(MonadTrans t, MonadState C.ConfigurationInputs (t IO))=>
@@ -119,7 +118,6 @@ main = do
              RModels -> outputTypeToEncoder ot <$> execStateT (loadRateModelsFromFile mSchemaDir fileName) M.empty 
              TData -> outputTypeToEncoder ot <$> execStateT (loadTaxDataFromFile mSchemaDir fileName) emptyTaxStructure
              Configs -> outputTypeToEncoder ot <$> execStateT (loadConfigurationsFromFile mSchemaDir fileName) (C.ConfigurationInputs [] M.empty)
-             _ -> return B.empty
            B.putStr jsonPretty
      parseXml (optSchemaDir options) (optFileToConvert options)                    
                                            

@@ -1,15 +1,24 @@
 {-# LANGUAGE Arrows #-}
 module FinancialMC.Parsers.XML.Utilities 
-       (parseXML, buildOpts,
-        atTag,
-        readAttrValue,readAttrValueIf,readAttrValueElse,
-        getAttrValueIf,getAttrValueElse,
-        readAttrValueDef,
-        catMaybes,
-        XmlParseInfo(..),XmlParseInfos(..),
-        addInfoA,
-        FMCXmlArrow,runFMCX,
-        getXmlParseInfos,split,xmlParseError
+       (
+         parseXML
+       , buildOpts
+       , atTag
+       , readAttrValue
+       , readAttrValueIf
+       , readAttrValueElse
+       , getAttrValueIf
+       , getAttrValueElse
+       , readAttrValueDef
+       , catMaybes
+       , XmlParseInfo(..)
+       , XmlParseInfos(..)
+       , addInfoA
+       , FMCXmlArrow
+       , runFMCX
+       , getXmlParseInfos
+       , split
+       , xmlParseError
        ) where
 
 import Text.XML.HXT.Core (SysConfig,withValidate,no,yes,hasName,changeUserState,(>>>),constA,returnA,getUserState,arr,withRemoveWS,
@@ -29,7 +38,7 @@ import Safe (readNote)
 
 data XmlParseInfo = Info String | Error String deriving (Show)
 
-newtype XmlParseInfos = XmlParseInfos [XmlParseInfo]
+newtype XmlParseInfos = XmlParseInfos { infoList::[XmlParseInfo] }
 
 instance Show XmlParseInfos where
   show (XmlParseInfos is) = show is
@@ -117,10 +126,10 @@ isXmlParseError (Info _) = False
 isXmlParseError (Error _) = True
 
 xmlParseError::XmlParseInfos->Bool
-xmlParseError (XmlParseInfos infos) = not (null (filter isXmlParseError infos))
+xmlParseError (XmlParseInfos infos) = any isXmlParseError infos --not (null (filter isXmlParseError infos))
 
 xpiMerge::[XmlParseInfos]->XmlParseInfos
-xpiMerge li = XmlParseInfos $ concatMap (\(XmlParseInfos is)->is) li
+xpiMerge li = XmlParseInfos $ li >>= infoList --concatMap (\(XmlParseInfos is)->is) li
 
 runFMCX::FMCXmlArrow XmlTree b->IO [b] 
 runFMCX fa = do

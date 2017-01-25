@@ -1,4 +1,6 @@
-{-# LANGUAGE Arrows, NoMonomorphismRestriction,FlexibleContexts #-}
+{-# LANGUAGE Arrows #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 
 module FinancialMC.Parsers.XML.ParseTax 
@@ -9,10 +11,10 @@ module FinancialMC.Parsers.XML.ParseTax
        , loadTaxDataFromString
        ) where
 
-import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),Currency(USD))
+import           FinancialMC.Core.MoneyValue (MoneyValue)
 -- import           FinancialMC.Core.MoneyValueOps (zero)
 import           FinancialMC.Core.Tax (FilingStatus(..),TaxBrackets,buildTaxBracketsFromTops,TaxBracket(Bracket,TopBracket),makeTaxBrackets,
-                                      FedCapitalGains(..),CapGainBand(..),MedicareSurtax(..))
+                                      FedCapitalGains(..),CapGainBand(..))
 
 import           FinancialMC.Parsers.XML.Utilities (atTag,readAttrValue,buildOpts,XmlParseInfos,runFMCX)
 import           FinancialMC.Parsers.Configuration (MapByFS,makeFSMap,FederalTaxStructure(..),StateTaxStructure(..),CityTaxStructure(..),TaxStructure(..),
@@ -25,7 +27,7 @@ import           Data.Ord (comparing)
 -- import           Data.Maybe (fromMaybe)
 import qualified Data.Map as M
 import           Control.Monad.Trans (MonadTrans,lift)
-import           Control.Monad.State.Strict (MonadState,StateT,State,get,put,execState)
+import           Control.Monad.State.Strict (MonadState,StateT,get,put,execState)
 
 loadTaxDataFromFile::Maybe FilePath->FilePath->StateT TaxStructure IO ()
 loadTaxDataFromFile mSchemaDir file =
@@ -49,14 +51,14 @@ parseBracket::ArrowXml a=>a XmlTree TaxBracket
 parseBracket = proc l -> do 
     bottom <- readAttrValue "bottom" -< l
     top    <- readAttrValue "top"    -< l
-    rate   <- readAttrValue "rate"   -< l
-    returnA -< Bracket bottom top (rate/100) 
+    rt   <- readAttrValue "rate"   -< l
+    returnA -< Bracket bottom top (rt/100) 
 
 parseTopBracket::ArrowXml a=>a XmlTree TaxBracket
 parseTopBracket = proc l -> do 
   bottom <- readAttrValue "bottom" -< l
-  rate   <- readAttrValue "rate"   -< l
-  returnA -< TopBracket bottom (rate/100)
+  rt   <- readAttrValue "rate"   -< l
+  returnA -< TopBracket bottom (rt/100)
 
 parseFullBracket::(ArrowXml a,ArrowChoice a)=>a XmlTree TaxBracket
 parseFullBracket = getChildren >>> 
@@ -77,16 +79,16 @@ parseBracketTops::ArrowXml a=>a XmlTree (Double,Double)
 parseBracketTops = atTag "BracketTop" >>>
   proc l -> do
     top <- readAttrValue "top" -< l
-    rate <- readAttrValue "rate" -< l
-    returnA -< (top,rate/100)
+    rt <- readAttrValue "rate" -< l
+    returnA -< (top,rt/100)
 
 parseSimpleBrackets::ArrowXml a=>a XmlTree TaxBrackets
 parseSimpleBrackets = atTag "SimpleBrackets" >>>
   proc l -> do
-    topRate <- readAttrValue "top_rate" -< l
+    topRt <- readAttrValue "top_rate" -< l
     currency <- readAttrValue "currency" -< l
     bktTops <- listA parseBracketTops -< l
-    returnA -< buildTaxBracketsFromTops currency (sortBy (flip (comparing fst)) bktTops) (topRate/100)
+    returnA -< buildTaxBracketsFromTops currency (sortBy (flip (comparing fst)) bktTops) (topRt/100)
     
 parseIncomeTaxStructure::ArrowXml a=>a XmlTree (FilingStatus,TaxBrackets)
 parseIncomeTaxStructure = atTag "IncomeTaxStructure" >>>
@@ -109,23 +111,23 @@ parseFedCapitalGains = atTag "CapitalGains" >>> parseRateBands
 parseRateBands::ArrowXml a=>a XmlTree FedCapitalGains
 parseRateBands = atTag "RateBands" >>>
   proc l -> do
-    topRate <- readAttrValue "topRate" -< l
+    topRt <- readAttrValue "topRate" -< l
     bands <- listA parseRateBand -< l
-    returnA -< FedCapitalGains (topRate/100) bands
+    returnA -< FedCapitalGains (topRt/100) bands
 
 parseRateBand::ArrowXml a=>a XmlTree CapGainBand
 parseRateBand = atTag "Band" >>>
   proc l -> do
     top <- readAttrValue "top" -< l
-    rate <- readAttrValue "rate" -< l
-    returnA -< CapGainBand (top/100) (rate/100)
+    rt <- readAttrValue "rate" -< l
+    returnA -< CapGainBand (top/100) (rt/100)
 
 parseMedicareSurtax::ArrowXml a=>a XmlTree (Double,MapByFS MoneyValue)
 parseMedicareSurtax = atTag "MedicareSurtax" >>>
   proc l -> do
-    rate <- readAttrValue "rate" -< l
+    rt <- readAttrValue "rate" -< l
     thresholds <- listA parseThreshold -< l
-    returnA -< (rate/100, makeFSMap $ M.fromList thresholds)
+    returnA -< (rt/100, makeFSMap $ M.fromList thresholds)
 
 parseThreshold::ArrowXml a=>a XmlTree (FilingStatus,MoneyValue)
 parseThreshold = atTag "Threshold" >>>
@@ -150,8 +152,8 @@ parseFederalTaxStructure = atTag "FederalTaxStructure" >>>
 parseStateCapitalGains::ArrowXml a=>a XmlTree Double
 parseStateCapitalGains = atTag "CapitalGains" >>>
   proc l -> do
-    rate <- readAttrValue "rate" -< l
-    returnA -< rate/100
+    rt <- readAttrValue "rate" -< l
+    returnA -< rt/100
 
 parseStateTaxStructure::ArrowXml a=>a XmlTree (String,String,StateTaxStructure)
 parseStateTaxStructure = atTag "StateTaxStructure" >>>

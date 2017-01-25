@@ -1,8 +1,12 @@
-{-# LANGUAGE Arrows, NoMonomorphismRestriction, FlexibleContexts, RankNTypes, KindSignatures #-}
+{-# LANGUAGE Arrows #-}
+{-# LANGUAGE NoMonomorphismRestriction #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE KindSignatures #-}
 module FinancialMC.Parsers.XML.ParseRateModel 
        (
-         loadRateModelsFromFile,
-         loadRateModelsFromString,
+         loadRateModelsFromFile
+       , loadRateModelsFromString,
        ) where
                        
 --import FinancialMC.Core.Rates (RateModel(MkRateModel))
@@ -17,7 +21,7 @@ import Text.XML.HXT.Core (withRemoveWS,yes,readString,IOSLA,XIOState,XmlTree,(>>
 
 import qualified Data.Map as M
 
-import Control.Monad.State.Strict (put,get,modify,MonadState,StateT,MonadTrans,lift,evalStateT)
+import Control.Monad.State.Strict (put,get,MonadState,StateT,MonadTrans,lift,evalStateT)
 
 type RateModel = RM.BaseRateModel RM.BaseRateModelFactor
 

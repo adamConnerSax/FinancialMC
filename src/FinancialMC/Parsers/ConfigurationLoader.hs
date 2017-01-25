@@ -89,7 +89,7 @@ loadDataSource (C.FMCComponentConverters _ _ _ _ rmF) mSchemaDir (C.DataSource (
 
 loadDataSource _ _ (C.DataSource (C.Parseable up encoding) C.FinancialStateS) = do
   newStates <- lift $ decodeUnparsed up encoding
-  mapM_ (\(confName,x)-> lift $ eitherToIO $ validateFinancialState x confName) (M.toList newStates)
+  mapM_ (\(confName,x)-> lift . eitherToIO $ validateFinancialState x confName) (M.toList newStates)
   C.lmFS %= M.union newStates
 
 loadDataSource _ _ (C.DataSource (C.Parseable up encoding) C.RateModelS) = do
@@ -98,11 +98,11 @@ loadDataSource _ _ (C.DataSource (C.Parseable up encoding) C.RateModelS) = do
 
 loadDataSource _ _ (C.DataSource (C.Parseable up encoding) C.TaxStructureS) = do
   newTS <- lift $ decodeUnparsed up encoding
-  zoom C.lmTax $ hoist generalize $ C.mergeTaxStructures newTS
+  zoom C.lmTax . hoist generalize $ C.mergeTaxStructures newTS
 
-loadDataSource _ _ (C.DataSource C.DBQuery _) = lift $ E.throwIO $ BadParse "DBQuery data source not yet implemented!"
+loadDataSource _ _ (C.DataSource C.DBQuery _) = lift . E.throwIO $ BadParse "DBQuery data source not yet implemented!"
 
-loadDataSource _ _ _ = lift $ E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
+loadDataSource _ _ _ = lift . E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
 
 decodeUnparsed::FromJSON a=>C.Unparsed->C.Encoding->IO a
 decodeUnparsed _ C.XML = E.throwIO $ BadParse "XML handled specifically! Should not get to decodeUnparsed with an XML source."
@@ -131,14 +131,14 @@ loadXMLConfigs fcc mSchema (C.UnparsedFile fp) = do
   (sources,configM) <- lift $ XML.loadConfigurations mSchema fp
   zoom _1 $ loadDataSources fcc mSchema sources
   hoist generalize $ _2 %= M.union configM
-loadXMLConfigs _ _ _ = lift $ E.throwIO $ BadParse "loadXMLConfigs called with Unparsed of sort other than UnparsedFile"
+loadXMLConfigs _ _ _ = lift . E.throwIO $ BadParse "loadXMLConfigs called with Unparsed of sort other than UnparsedFile"
 
 loadJSONConfigs::(FJ a fl le ru rm,IsRule ru)=>BaseFCC a fl le ru rm->Maybe FilePath->C.Unparsed->
                  StateT (C.LoadedModels a fl le ru rm,C.ModelDescriptionMap) IO ()
 loadJSONConfigs fcc mSchema up = do
   configLBS <- lift $ C.asIOLazyByteString up
   case eitherDecode configLBS of
-    Left err -> lift $ E.throwIO $ BadParse err
+    Left err -> lift . E.throwIO $ BadParse err
     Right (C.ConfigurationInputs sources configM) -> do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
@@ -149,7 +149,7 @@ loadYAMLConfigs::(FJ a fl le ru rm,IsRule ru)=>
 loadYAMLConfigs fcc mSchema up = do
   configBS <- lift $ C.asIOByteString up
   case YAML.decodeEither configBS of
-    Left err -> lift $ E.throwIO $ BadParse err
+    Left err -> lift . E.throwIO $ BadParse err
     Right (C.ConfigurationInputs sources configM) -> do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
@@ -162,9 +162,9 @@ loadConfigurationsS fcc mSchemaP up@(C.UnparsedFile configP) = loadC fcc mSchema
     C.XML -> loadXMLConfigs
     C.JSON -> loadJSONConfigs
     C.YAML -> loadYAMLConfigs
-    C.UnkEncoding -> \_ _ _ -> lift $ E.throwIO $ Other "Bad file type specified as config.  Only .xml .json and .yaml supported"
+    C.UnkEncoding -> \_ _ _ -> lift . E.throwIO $ Other "Bad file type specified as config.  Only .xml .json and .yaml supported"
 
-loadConfigurationsS _ _ _ = lift $ E.throwIO $ BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
+loadConfigurationsS _ _ _ = lift . E.throwIO $ BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
 
 
 loadConfigurations::(FJ a fl le ru rm,IsRule ru)=>

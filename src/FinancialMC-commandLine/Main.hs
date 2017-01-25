@@ -47,7 +47,7 @@ import           FinancialMC.Core.Analysis               (addReturns,
                                                           analyzeBankruptcies,
                                                           historiesFromSummaries,
                                                           nwHistFromSummaries)
-import           FinancialMC.Core.LifeEvent              (IsLifeEvent (..), LifeEventConverters (LEC))
+import           FinancialMC.Core.LifeEvent              (LifeEventConverters (LEC))
 import           FinancialMC.Core.MoneyValue             (MoneyValue (MoneyValue))
 import           FinancialMC.Core.Utilities              (Year, eitherToIO)
 
@@ -95,7 +95,7 @@ runAndOutput doOutput options = do
         let nw =  netWorth cs0 fe0
             (inFlow,outFlow) = grossFlows (cs0 ^. (csMC.mcsCashFlows)) fe0
         writeIf $ "Running config=" ++ cfgName
-        when (optShowFinalStates options) $ writeIf $ "Initial State: " ++ show cs0
+        when (optShowFinalStates options) . writeIf $ "Initial State: " ++ show cs0
         writeIf $ "Initial Net Worth: " ++ show nw
         writeIf $ "Initial positive cashflow: " ++ show inFlow
         writeIf $ "Initial gross spending: " ++ show outFlow
@@ -111,7 +111,7 @@ runAndOutput doOutput options = do
         (histories,medianHist) <- eitherToIO $ historiesFromSummaries lec summaries (fe0,cs0)
                                   (optSingleThreaded options) (optQuantiles options) (optYears options)
         let medianFS = snd (last medianHist)
-            mOPath = flip outputPath mOPrefix (optOutPath options)
+            mOPath = outputPath (optOutPath options) mOPrefix
         writeIf ("Median Final Summary=" ++ show medianFS)
         case mOPath of
              Nothing -> writeIf "No saved output."
@@ -180,7 +180,7 @@ formatHistogramOutput (lowerBound,count) = str where
 formatHistoryOutput::[[(Year,MoneyValue)]]->String
 formatHistoryOutput hists = str where
   days = (fst . unzip . head) hists
-  hists' = zip days (transpose  (map (snd . unzip) hists))
+  hists' = zip days (transpose  ((snd . unzip) <$> hists))
   header = foldl (\s n-> s ++ "Net Worth " ++ show n ++ "\t") "#Date\t" [1..length hists] ++ "\n"
   fmtNWs = foldl (\s (MoneyValue x _) -> s ++ printf "%.0f" x ++ "\t") ""
   str = foldl (\s (d,nw)-> s ++ show d ++ "\t" ++ fmtNWs nw ++ "\n") header hists'

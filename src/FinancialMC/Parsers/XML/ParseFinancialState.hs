@@ -3,14 +3,14 @@
 {-# LANGUAGE FlexibleContexts #-}
 module FinancialMC.Parsers.XML.ParseFinancialState 
        (
-         loadFinancialStatesFromFile,
-         loadFinancialStatesFromString,
-         InitialFS(..),
-         IFSMap
+         loadFinancialStatesFromFile
+       , loadFinancialStatesFromString
+       , InitialFS(..)
+       , IFSMap
        ) where
 
 
-import FinancialMC.Parsers.Configuration (InitialFS(..),IFSMap,FMCComponentConverters(..),convertComponentsInitialFS)
+import FinancialMC.Parsers.Configuration (InitialFS(..),IFSMap)
 import FinancialMC.Parsers.XML.Utilities (buildOpts,XmlParseInfos,runFMCX,FMCXmlArrow,atTag)
 import FinancialMC.Parsers.XML.Account (getBalanceSheet)
 import FinancialMC.Parsers.XML.Flow (getCashFlows)
@@ -21,7 +21,6 @@ import FinancialMC.Builders.Assets (BaseAsset)
 import FinancialMC.Builders.LifeEvents (BaseLifeEvent)
 import FinancialMC.Builders.Flows (BaseFlow)
 import FinancialMC.Builders.Rules (BaseRule)
-import FinancialMC.Builders.RateModels (BaseRateModel,BaseRateModelFactor)
 
 import Text.XML.HXT.Core (withRemoveWS,yes,readString,IOSLA,XIOState,XmlTree,(>>>),getAttrValue,returnA)
 import Control.Monad.State.Strict (StateT,lift,MonadTrans,MonadState,get,put)

@@ -1,5 +1,9 @@
 {-# LANGUAGE Arrows #-}
-module FinancialMC.Parsers.XML.Rule (getRules,getSweepRule,getTaxTradeRule) where
+module FinancialMC.Parsers.XML.Rule (
+    getRules
+  , getSweepRule
+  , getTaxTradeRule
+  ) where
 
 import           FinancialMC.Parsers.XML.Utilities (FMCXmlArrow,
                                                     XmlParseInfo (Error),
@@ -8,7 +12,6 @@ import           FinancialMC.Parsers.XML.Utilities (FMCXmlArrow,
                                                     readAttrValueElse)
 
 import           FinancialMC.Core.Asset            (AccountName)
-import           FinancialMC.Core.Rule             (IsRule)
 import           FinancialMC.Core.TradingTypes     (TradeType (NormalTrade))
 import           FinancialMC.Core.Utilities        (DateRange (..))
 

@@ -10,15 +10,12 @@ import           FinancialMC.Parsers.XML.Utilities (FMCXmlArrow,
 
 import           FinancialMC.Builders.Flows        (BaseFlow (..),
                                                     BaseFlowDetails (..))
-import           FinancialMC.Core.Flow             (FlowCore (..), IsFlow)
+import           FinancialMC.Core.Flow             (FlowCore (..))
 import           FinancialMC.Core.MCState          (CashFlows, addFlow,
                                                     makeNewCashFlows)
 import           FinancialMC.Core.MoneyValue       (Currency (USD),
                                                     MoneyValue (MoneyValue))
 import           FinancialMC.Core.Utilities        (DateRange (Always), Frequency (Annually, Monthly))
-
-
-import           Data.Aeson                        (ToJSON)
 
 import           Control.Monad.State.Strict        (execState)
 import qualified Data.Text                         as T

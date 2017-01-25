@@ -209,7 +209,7 @@ doChecks = do
 morphInnerRuleStack::LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)) b->app b
 morphInnerRuleStack = stepLift.toStepApp.zoom csFinancial.readOnly
   
-morphResultStack::(Monoid o,LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>
+morphResultStack::(LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>
                   ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException))) b->ResultT o app b  
 morphResultStack =  hoist morphInnerRuleStack 
   

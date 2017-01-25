@@ -1,7 +1,7 @@
 module OptionParser 
        (
-         FinMCOptions(..),
-         finMCOptionParser
+         FinMCOptions(..)
+       , finMCOptionParser
        ) where
 
 
@@ -35,7 +35,7 @@ data FinMCOptions = FinMCOptions
 parseBoundedEnum::(Enum e, Bounded e, Show e) => String -> ReadM e
 parseBoundedEnum s = do
   let enumValues = [minBound..]  
-      valueMap = map (\x -> (show x,x)) enumValues
+      valueMap = (\x -> (show x,x)) <$> enumValues
       val = lookup s valueMap
       r (Nothing) = readerError ("Couldn't parse \"" ++ s ++ "\" as a member of " ++ show enumValues)  
       r (Just x) = return x 

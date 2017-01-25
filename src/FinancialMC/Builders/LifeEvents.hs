@@ -1,4 +1,8 @@
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, TemplateHaskell, FlexibleContexts, TypeFamilies #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module FinancialMC.Builders.LifeEvents (

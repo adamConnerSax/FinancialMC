@@ -6,7 +6,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DeriveAnyClass #-}
 module FinancialMC.Builders.Assets (
-  BaseAssetDetails(..)
+    BaseAssetDetails(..)
   , BaseAsset(..)
   ) where
 
