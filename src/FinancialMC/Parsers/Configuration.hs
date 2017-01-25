@@ -341,6 +341,8 @@ convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (Mo
 instance (ToJSON le, ToJSON fl, ToJSON a, ToJSON ru, ToJSON rm) => ToJSON (ModelConfiguration a fl le ru rm) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
+instance (FromJSON le, FromJSON fl, FromJSON a, FromJSON ru, FromJSON rm) => FromJSON (ModelConfiguration a fl le ru rm) where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 5}
 
 data SimConfiguration = SimConfiguration { _scfgYears::Int
                                          , _scfgPaths::Int
