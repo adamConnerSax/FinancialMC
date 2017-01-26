@@ -1,9 +1,9 @@
+{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE RankNTypes             #-}
-{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE TypeFamilies           #-}
 module FinancialMC.Core.LifeEvent
        (
@@ -28,10 +28,10 @@ import           FinancialMC.Core.Utilities       (Year)
 import           Control.Exception                (SomeException)
 import           Control.Monad.Reader             (ReaderT)
 import           Data.Aeson                       (FromJSON (..), ToJSON (..),
-                                                   defaultOptions,
                                                    genericParseJSON,
                                                    genericToJSON)
-import           Data.Aeson.Types                 (fieldLabelModifier)
+import           Data.Aeson.Types                 (defaultOptions,
+                                                   fieldLabelModifier)
 import           Data.Bifunctor                   (Bifunctor (..))
 import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
