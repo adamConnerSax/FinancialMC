@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module FinancialMC.Parsers.JSON.Utilities
        (
          toJSONEnumMap
@@ -10,7 +11,7 @@ import           Data.Aeson.Types (Parser)
 
 import qualified Data.Map         as M
 import           Data.Maybe       (fromJust)
-
+import GHC.Generics
 
 enumFromString::(Show a,Enum a,Bounded a)=>String->a
 enumFromString s =
@@ -24,7 +25,7 @@ toJSONEnumMap m = toJSON (M.mapKeys show m)
 fromJSONEnumMap::(Show k,Enum k, Bounded k, Ord k, FromJSON a)=>Value->Parser (M.Map k a)
 fromJSONEnumMap v = M.mapKeys enumFromString <$> parseJSON v
 
-newtype EnumKeyMap k a = EnumKeyMap { unEnumKeyMap::M.Map k a } deriving (Show)
+newtype EnumKeyMap k a = EnumKeyMap { unEnumKeyMap::M.Map k a } deriving (Show,Generic)
 
 instance (Show k, ToJSON a)=>ToJSON (EnumKeyMap k a) where
   toJSON = toJSONEnumMap . unEnumKeyMap
