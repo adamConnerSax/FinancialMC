@@ -33,8 +33,10 @@ module FinancialMC.Core.MCState
        , PathSummary(..)
        , isZeroNW
        , NetWorthMap
-       , FSSummary(FSSummary)
-       , HasFSSummary(..)
+       , FSSummary (FSSummary)
+       , HasFSSummary (..)
+       , DatedSummary (DatedSummary)
+       , HasDatedSummary (..)
        , summarize
        , computeFlows
        ) where
@@ -169,38 +171,48 @@ data FSSummary = FSSummary { _fssNW:: !MoneyValue,
                              _fssOutFlow:: !MoneyValue,
                              _fssTax:: !MoneyValue,
                              _fssTaxRate:: !Double }
-makeClassy ''FSSummary
+
+
 
 instance Show FSSummary where
   show (FSSummary nw nwbo i o t tr) = "NW=" ++ show nw ++ " (" ++ show nwbo ++ "); in=" ++ show i 
                                  ++ "; out=" ++ show o ++ "; tax=" ++ show t 
                                  ++ "; tax rate=" ++ show (100*tr) ++ "%"  
 
-data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a), _mcsCashFlows:: !(CashFlows fl), 
-                                    _mcsLifeEvents:: ![le],
-                                    _mcsRules:: ![ru], _mcsSweep:: !ru, _mcsTaxTrade:: !ru, 
-                                    _mcsPathSummary:: !PathSummary, _mcsNWHistory:: ![(Year,MoneyValue)],
-                                    _mcsHistory:: ![(Year,FSSummary)]}
 
 
+data DatedSummary = DatedSummary { _dsYear :: !Year, _dsSummary :: !FSSummary } deriving (Show)
+
+
+data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
+                                  , _mcsCashFlows:: !(CashFlows fl)
+                                  , _mcsLifeEvents:: ![le]
+                                  , _mcsRules:: ![ru]
+                                  , _mcsSweep:: !ru
+                                  , _mcsTaxTrade:: !ru
+                                  , _mcsPathSummary:: !PathSummary
+                                  , _mcsHistory:: ![DatedSummary]
+                                  }
+
+makeClassy ''FSSummary
+makeClassy ''DatedSummary
 makeClassy ''MCState
 
 instance (Evolvable a, Evolvable fl)=>Evolvable (MCState a fl le ru) where
-  evolve (MCState bs cfd les rs sr ttr ps nws hist) = do 
+  evolve (MCState bs cfd les rs sr ttr ps hist) = do 
     newBS <- evolve bs
     newCFD <- evolve cfd
-    let newMCS = MCState newBS newCFD les rs sr ttr ps nws hist 
+    let newMCS = MCState newBS newCFD les rs sr ttr ps hist
     return $! newMCS 
       
 instance (Show le,Show fl, Show ru, Show a)=>Show (MCState a fl le ru) where
-  show (MCState bs cfd les rs sr ttr ps nws history) = 
+  show (MCState bs cfd les rs sr ttr ps history) = 
     show bs ++ "\n" ++ show cfd ++ "\n" ++ 
     "LifeEvents:\n " ++ foldl (\s e->s++ show e ++ "\n") "" les ++ 
     "Rules:\n " ++ foldl (\s r->s++ show r ++ "\n") "" rs ++ 
     "\nSweep Rule: " ++ show sr ++
     "\nTax Trade Rule:" ++ show ttr ++
     "\nSummary: " ++ show ps ++
-    "\nNWHistory: " ++ show nws ++
     "\nHistory: " ++ show history
                                                          
     
@@ -269,7 +281,7 @@ grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy
 
 
 makeMCState::BalanceSheet a->CashFlows fl->FinEnv rm->[le]->[ru]->ru->ru->MCState a fl le ru
-makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] [] where
+makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] where
   z = MV.zero  (fe ^. feDefaultCCY)
 
 --NB: this is where all the evolution flows and accums finally get applied
@@ -322,6 +334,5 @@ addHistory inF outF tax effRate  = do
   let nw = netWorth cs fe
       nwbo = netWorthBreakout cs fe
       endDate = (fe ^. feCurrentDate) + 1
-  csMC.mcsNWHistory <>= [(endDate,nw)]    
-  csMC.mcsHistory <>= [(endDate,FSSummary nw nwbo inF outF tax effRate)]
+  csMC.mcsHistory <>= [DatedSummary endDate (FSSummary nw nwbo inF outF tax effRate)]
   

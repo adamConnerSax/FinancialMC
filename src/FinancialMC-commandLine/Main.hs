@@ -3,7 +3,7 @@
 {-# LANGUAGE QuasiQuotes         #-}
 module Main where
 
-import           Control.Lens                            ((^.))
+import           Control.Lens                            (view, (^.))
 import           Control.Monad                           (when)
 import           Options.Applicative                     (execParser)
 
@@ -29,21 +29,29 @@ import           OptionParser                            (FinMCOptions (..),
 
 import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseLifeEvent,
-                                                          BaseRule,
                                                           BaseRateModelT,
+                                                          BaseRule,
                                                           CombinedState,
+                                                          DatedSummary (..),
                                                           FSSummary (..),
                                                           FinEnv,
                                                           HasCombinedState (..),
+                                                          HasDatedSummary (..),
                                                           HasFSSummary (..),
                                                           HasMCState (..),
+                                                          HasPathSummaryAndSeed (..),
                                                           LiquidityType (..),
                                                           PathSummary,
-                                                          doPaths,
+                                                          PathSummaryAndSeed (..),
+                                                          RandomSeed, doPaths,
                                                           doPathsIO, grossFlows,
                                                           isZeroNW, netWorth)
 
-import           FinancialMC.Core.Analysis               (addReturns,
+import           FinancialMC.Core.Analysis               (DatedMoneyValue (..), DatedSummaryWithReturns (..),
+                                                          HasDatedMoneyValue (..),
+                                                          HasSimHistories (..),
+                                                          SimHistories (..),
+                                                          addReturns,
                                                           analyzeBankruptcies,
                                                           historiesFromSummaries,
                                                           nwHistFromSummaries)
@@ -51,20 +59,19 @@ import           FinancialMC.Core.LifeEvent              (LifeEventConverters (L
 import           FinancialMC.Core.MoneyValue             (MoneyValue (MoneyValue))
 import           FinancialMC.Core.Utilities              (Year, eitherToIO)
 
-
 ccs::C.FMCComponentConverters BaseAsset BaseAsset BaseFlow BaseFlow BaseLifeEvent BaseLifeEvent BaseRule BaseRule BaseRateModelT BaseRateModelT
 ccs = C.FMCComponentConverters id id id id id
 
 lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 lec = LEC id id
 
-runWithOptions::FinEnv BaseRateModelT->CombinedState BaseAsset BaseFlow BaseLifeEvent BaseRule->FinMCOptions->IO [(PathSummary,Word64)]
+runWithOptions::FinEnv BaseRateModelT->CombinedState BaseAsset BaseFlow BaseLifeEvent BaseRule->FinMCOptions->IO [PathSummaryAndSeed]
 runWithOptions fe0 cs0 options = do
   let showFS = optShowFinalStates options -- NB: if showFinalStates is true, paths will be run serially rather than in parallel
       logLevels = optLogLevels options
       srcF::Maybe Word64->IO PureMT
       srcF (Just x) = return (pureMT x) -- if seed is present in options, use it.
-      srcF Nothing = newPureMT  -- otherwise, get pseudo-random seed via IO
+      srcF Nothing  = newPureMT  -- otherwise, get pseudo-random seed via IO
       needsIO = not (null logLevels) || showFS
   src <- srcF (optSeed options)
   let runW x = x cs0 fe0 (optSingleThreaded options) src (optYears options) (optPaths options)
@@ -102,19 +109,19 @@ runAndOutput doOutput options = do
 
         summaries <- runWithOptions fe0 cs0 options
         let histData = nwHistFromSummaries summaries (optBins options)
-            bankruptcies = fst.unzip $ filter (isZeroNW.fst) summaries
+            bankruptcies = view psasSummary <$> filter (isZeroNW . view psasSummary) summaries
             (numB,medianB,modeB) = analyzeBankruptcies bankruptcies
             pctB = (100*fromIntegral numB::Double)/fromIntegral (length summaries)
             strB1 = (show numB ++ " (" ++ printf "%0.2f" pctB ++ "%) paths result in bankruptcy.")
         writeIf strB1
         when (numB > 0) $ writeIf ("Median bankruptcy year=" ++ show (fromJust medianB) ++ "; mode=" ++ show (fromJust modeB))
-        (histories,medianHist) <- eitherToIO $ historiesFromSummaries lec summaries (fe0,cs0)
-                                  (optSingleThreaded options) (optQuantiles options) (optYears options)
-        let medianFS = snd (last medianHist)
+        SimHistories histories medianHist <- eitherToIO $ historiesFromSummaries lec summaries (fe0,cs0)
+                                             (optSingleThreaded options) (optQuantiles options) (optYears options)
+        let DatedSummary _ medianFS = V.last medianHist
             mOPath = outputPath (optOutPath options) mOPrefix
         writeIf ("Median Final Summary=" ++ show medianFS)
         case mOPath of
-             Nothing -> writeIf "No saved output."
+             Nothing   -> writeIf "No saved output."
              Just path -> writeIf ("Saving output in " ++ path ++ "...")
         output mOPath histData histories (medianFS ^. fssNW) medianHist
 
@@ -142,7 +149,7 @@ main::IO ()
 main = normalMain
 
 
-output::Maybe String->(V.Vector Double,V.Vector Int)->[[(Year,MoneyValue)]]->MoneyValue->[(Year,FSSummary)]->IO ()
+output::Maybe String->(V.Vector Double,V.Vector Int)->[V.Vector DatedMoneyValue] ->MoneyValue->V.Vector DatedSummary->IO ()
 output Nothing histData _ medianNW _ = do
   let histTSV = formatHistogramOutput histData
   putStrLn ("\n" ++ histTSV)
@@ -177,26 +184,28 @@ formatHistogramOutput (lowerBound,count) = str where
   str = foldl (\s n->s ++ fmtLB (lowerBound V.! n) ++ "\t" ++ show (count V.! n) ++ "\t" ++ show (divFloat (sumL !! n) sm) ++ "\n") "#k$\tcount\tCum Density\n" [0..(V.length lowerBound - 1)]
 
 
-formatHistoryOutput::[[(Year,MoneyValue)]]->String
+formatHistoryOutput::[V.Vector DatedMoneyValue]->String
 formatHistoryOutput hists = str where
-  days = (fst . unzip . head) hists
-  hists' = zip days (transpose  ((snd . unzip) <$> hists))
-  header = foldl (\s n-> s ++ "Net Worth " ++ show n ++ "\t") "#Date\t" [1..length hists] ++ "\n"
+  histsL = V.toList <$> hists
+  days = view dmYear <$> head histsL
+  hists' = zip days (transpose (fmap (view dmValue) <$> histsL))
+  header = foldl (\s n-> s ++ "Net Worth " ++ show n ++ "\t") "#Date\t" [1..length histsL] ++ "\n"
   fmtNWs = foldl (\s (MoneyValue x _) -> s ++ printf "%.0f" x ++ "\t") ""
   str = foldl (\s (d,nw)-> s ++ show d ++ "\t" ++ fmtNWs nw ++ "\n") header hists'
 
 
-formatMedianSummaryOutput::[(Year,FSSummary)]->String
+formatMedianSummaryOutput::V.Vector DatedSummary->String
 formatMedianSummaryOutput medianHist = str where
   wrs = addReturns medianHist
   header = "Date\t\tNet Worth($)\tReturn($)\tReturn(%)\tNear Cash\tInflow($)\tOutflow($)\tTax($)\tTax Rate(%)\n"
   g = printf "%.2f"
   f (MoneyValue x _) = printf "%.0f" x
   l lt nwm = f (fromJust $ M.lookup lt nwm)
-  h (d,FSSummary nw nwbo i o t tr,ret,retR) = show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t\t" ++ g (100*retR) ++ "%\t\t"
-                                                ++ l NearCash nwbo ++ "\t\t"
-                                                ++ f i ++ "\t\t" ++ f o ++ "\t\t" ++ f t ++ "\t" ++ g (100*tr) ++ "\n"
-  str = foldl (\s x -> s ++ h x) header wrs
+  h (DatedSummaryWithReturns d (FSSummary nw nwbo i o t tr)  ret retR)  =
+    show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t\t" ++ g (100*retR) ++ "%\t\t"
+    ++ l NearCash nwbo ++ "\t\t"
+    ++ f i ++ "\t\t" ++ f o ++ "\t\t" ++ f t ++ "\t" ++ g (100*tr) ++ "\n"
+  str = V.foldl' (\s x -> s ++ h x) header wrs
 
 
 formatGnuplotOutput::String->Int->Int->String
@@ -204,7 +213,7 @@ formatGnuplotOutput prefix paths quantiles = str where
   x = elemIndex '/' (reverse prefix)
   prefixWOPath = case x of
     Nothing -> prefix
-    Just n -> (reverse . fst) $ splitAt n (reverse prefix)
+    Just n  -> (reverse . fst) $ splitAt n (reverse prefix)
   f1 = "histogramFile=\"" ++ prefixWOPath ++ "_histogram.tsv\"\n"
   f2 = "historyFile=\"" ++ prefixWOPath ++ "_history.tsv\"\n"
   mpLayout = [r|set multiplot layout 2,1|] ++ "\n"

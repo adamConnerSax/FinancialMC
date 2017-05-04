@@ -2,9 +2,13 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module FinancialMC.Core.Engine 
        (
-         doOneYear
+         RandomSeed
+       , PathSummaryAndSeed (..)
+       , HasPathSummaryAndSeed (..)       
+       , doOneYear
        , doPath
        , execOnePathIO
        , execOnePathPure
@@ -47,7 +51,7 @@ import           Prelude hiding (log)
 import qualified Data.Text as T
 
 import           System.Random.Mersenne.Pure64 (PureMT,randomWord64,pureMT)
-import           Control.Lens (use,zoom,view,magnify,(^.),(+=),(.=),(%=),Lens',_2)
+import           Control.Lens (use,zoom,view,magnify,(^.),(+=),(.=),(%=),Lens',_2,makeClassy)
 import           Control.Monad (foldM,when,unless)
 import           Control.Monad.Reader (ReaderT,ask)
 import           Control.Monad.State.Strict (MonadState,get,execState)
@@ -58,17 +62,25 @@ import qualified Control.Monad.Parallel as CMP
 import           Control.DeepSeq (deepseq)
 import           Control.Parallel.Strategies (using,parList,rseq,rpar)
 import           Data.Word (Word64)
+--import qualified Data.Vector as V
+
+-- types for analysis
+type RandomSeed = Word64
+data PathSummaryAndSeed = PathSummaryAndSeed { _psasSummary :: !PathSummary, _psasSeed :: !RandomSeed }
+makeClassy ''PathSummaryAndSeed
 
 -- the "drop 1" is to get rid of the (0,pMT) entry
-makeAllTheSeeds::PureMT->[Word64]
+makeAllTheSeeds::PureMT->[RandomSeed]
 makeAllTheSeeds pMT = drop 1 . fst . unzip $ iterate (randomWord64 . snd) (0,pMT)
 
-getNSeeds::PureMT->Int->[Word64]
+getNSeeds::PureMT->Int->[RandomSeed]
 getNSeeds pMT n = take n $ makeAllTheSeeds pMT
 
-getNSeedsStrict::PureMT->Int->[Word64]
+{-
+getNSeedsStrict::PureMT->Int->[RandomSeed]
 getNSeedsStrict pMT n = (head l)  `deepseq` l where
  l = getNSeeds pMT n
+-}
 
 type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
                            IsAsset a, Show a,
@@ -77,42 +89,42 @@ type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
                            IsRateModel rm)
 
 execOnePathIO::EngineC a fl le ru rm=>LifeEventConverters a fl le->[LogLevel]->
-  CombinedState a fl le ru->FinEnv rm->Word64->Int->IO (CombinedState a fl le ru,FinEnv rm)
+  CombinedState a fl le ru->FinEnv rm->RandomSeed->Int->IO (CombinedState a fl le ru,FinEnv rm)
 execOnePathIO convertLE logDetails cs fe seed years = do
   let newSource = pureMT seed
   execPPathApp (doPath convertLE newSource years) logDetails cs fe  
   
 doPathsIO::EngineC a fl le ru rm=>
            LifeEventConverters a fl le->[LogLevel]->Bool->CombinedState a fl le ru->
-           FinEnv rm->Bool->PureMT->Int->Int->IO [(PathSummary,Word64)]
+           FinEnv rm->Bool->PureMT->Int->Int->IO [PathSummaryAndSeed] --[(PathSummary,RandomSeed)]
 doPathsIO convertLE logDetails showFinalStates cs0 fe0 singleThreaded pMT yearsPerPath paths = do
   let seeds = getNSeeds pMT paths
   let g seed = do
         (cs',_) <- execOnePathIO convertLE logDetails cs0 fe0 seed yearsPerPath
         when showFinalStates $ print cs'
         let q = cs' ^. csMC.mcsPathSummary 
-        q `seq` return (cs' ^. csMC.mcsPathSummary,seed)
+        q `seq` (return $ PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
   if showFinalStates || singleThreaded || not (null logDetails) --parallelism doesn't play well with logging
     then mapM g seeds 
     else CMP.mapM g seeds
 
 
 execOnePathPure::EngineC a fl le ru rm=>LifeEventConverters a fl le->CombinedState a fl le ru->
-                 FinEnv rm->Word64->Int->Either SomeException (CombinedState a fl le ru,FinEnv rm)  
+                 FinEnv rm->RandomSeed->Int->Either SomeException (CombinedState a fl le ru,FinEnv rm)  
 execOnePathPure convertLE cs fe seed years = do
   let newSource = pureMT seed
   execPathApp (doPath convertLE newSource years) cs fe
   
 doPaths::EngineC a fl le ru rm=>
          LifeEventConverters a fl le->CombinedState a fl le ru->
-         FinEnv rm->Bool->PureMT->Int->Int->Either SomeException [(PathSummary,Word64)]
+         FinEnv rm->Bool->PureMT->Int->Int->Either SomeException [PathSummaryAndSeed]
 doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do  
   let seeds =  getNSeeds pMT paths
-      g::Word64->Either SomeException (PathSummary,Word64)
+      g::RandomSeed->Either SomeException PathSummaryAndSeed
       g seed = do
         (cs',_) <-  execOnePathPure convertLE cs0 fe0 seed yearsPerPath
         let q = cs' ^. csMC.mcsPathSummary
-        q `seq` Right (cs' ^. csMC.mcsPathSummary,seed)
+        q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
 
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds 
                              else g <$> seeds `using` parList rseq

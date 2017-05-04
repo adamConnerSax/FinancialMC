@@ -1,103 +1,143 @@
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE KindSignatures #-}
-module FinancialMC.Core.Analysis 
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE KindSignatures        #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE TemplateHaskell       #-}
+module FinancialMC.Core.Analysis
          (
-           summariesToHistogram
+           DatedMoneyValue (..)
+         , HasDatedMoneyValue (..)
+         , SimHistories (..)
+         , HasSimHistories (..)
+         , DatedSummaryWithReturns (..)
+         , summariesToHistogram
          , nwHistFromSummaries
          , historiesFromSummaries
          , addReturns
          , analyzeBankruptcies
          ) where
 
-import FinancialMC.Core.MCState (FSSummary(..),HasFSSummary(..),netWorthBreakout)
-import FinancialMC.Core.MoneyValue (MoneyValue(..),HasMoneyValue(..))
-import FinancialMC.Core.LifeEvent (LifeEventConverters)
-import FinancialMC.Core.Asset (IsAsset)
-import FinancialMC.Core.Flow (IsFlow)
-import qualified FinancialMC.Core.MoneyValueOps as MV
+import           FinancialMC.Core.Asset           (IsAsset)
+import           FinancialMC.Core.Flow            (IsFlow)
+import           FinancialMC.Core.LifeEvent       (LifeEventConverters)
+import           FinancialMC.Core.MCState         (DatedSummary (..),
+                                                   FSSummary (..),
+                                                   HasDatedSummary (..),
+                                                   HasFSSummary (..),
+                                                   netWorthBreakout)
+import           FinancialMC.Core.MoneyValue      (HasMoneyValue (..),
+                                                   MoneyValue (..))
+import qualified FinancialMC.Core.MoneyValueOps   as MV
 
-import FinancialMC.Core.Engine (execOnePathPure,EngineC)
+import           FinancialMC.Core.Engine          (EngineC,
+                                                   HasPathSummaryAndSeed (..),
+                                                   PathSummaryAndSeed (..),
+                                                   RandomSeed, execOnePathPure)
 
 --import FinancialMC.Core.Flow (FlowDirection(..))
-import FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..))
-import FinancialMC.Core.MCState (HasMCState(..),PathSummary(..),CombinedState,HasCombinedState(..),netWorth,grossFlows)
-import FinancialMC.Core.Utilities (Year)
+import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
+import           FinancialMC.Core.MCState         (CombinedState,
+                                                   HasCombinedState (..),
+                                                   HasMCState (..),
+                                                   PathSummary (..), grossFlows,
+                                                   netWorth)
+import           FinancialMC.Core.Utilities       (Year)
 
-import Control.Parallel.Strategies (using,parList,rseq)
-import Statistics.Sample.Histogram (histogram)
-import qualified Data.Vector as V
-import qualified Data.Vector.Generic.Base  as VGB
-import Control.Lens ((^.),(.~),(&))
-import Data.Word (Word64)
-import Control.Exception (SomeException)
-import Data.List (foldl',sort,sortBy)
-import Data.Ord (comparing)
-import qualified Data.Map as M
+import           Control.Exception                (SomeException)
+import           Control.Lens                     (makeClassy, view, (&), (.~),
+                                                   (^.), _1, _2)
+import           Control.Parallel.Strategies      (parList, rseq, using)
+import           Data.List                        (foldl', sort, sortBy)
+import qualified Data.Map                         as M
+import           Data.Ord                         (comparing)
+import qualified Data.Vector                      as V
+import qualified Data.Vector.Generic.Base         as VGB
+import           Data.Word                        (Word64)
+import           Statistics.Sample.Histogram      (histogram)
 
-psToNumber::PathSummary->Double  
-psToNumber (FinalNW mv) = mv ^. mAmount 
-psToNumber (ZeroNW _) = 0
+psasToNumber :: PathSummaryAndSeed -> Double
+psasToNumber (PathSummaryAndSeed (FinalNW mv) _) = mv ^. mAmount
+psasToNumber (PathSummaryAndSeed (ZeroNW _) _)   = 0
 
-getHistory::CombinedState a fl le ru->[(Year,FSSummary)]
-getHistory cs = cs ^. csMC.mcsHistory  
+sortSummaries::[PathSummaryAndSeed] -> [PathSummaryAndSeed]
+sortSummaries = sortBy (\x y-> compare (psasToNumber x) (psasToNumber y))
 
-sortSummaries::[(PathSummary,a)]->[(PathSummary,a)]     
-sortSummaries = sortBy (\(x,_) (y,_)-> compare (psToNumber x) (psToNumber y))
+{-
+getHistory::CombinedState a fl le ru->V.Vector DatedSummary
+getHistory cs = cs ^. csMC.mcsHistory
+-}
 
 qIndices::Int->Int->[Int]
-qIndices len quantiles = map (\n-> (2*n - 1)*len `div` (2 * quantiles)) [1..quantiles] 
+qIndices len quantiles = map (\n -> (2*n - 1) * len `div` (2 * quantiles)) [1..quantiles]
 
 qSubSet::[Int]->[a]->[a]
 qSubSet is xs = map (\n -> xs !! n) is
 
-historiesFromSummaries::EngineC a fl le ru rm=>
-  LifeEventConverters a fl le->[(PathSummary,Word64)]->(FinEnv rm,CombinedState a fl le ru)->Bool->Int->Int->
-  (Either SomeException) ([[(Year,MoneyValue)]],[(Year,FSSummary)])
+data DatedMoneyValue = DatedMoneyValue { _dmYear :: !Year, _dmValue :: !MoneyValue } deriving (Show)
+
+data SimHistories = SimHistories { _simQuartilesNW :: [V.Vector DatedMoneyValue]
+                                 , _simMedianDetails :: V.Vector DatedSummary
+                                 } deriving (Show)
+
+makeClassy ''DatedMoneyValue
+makeClassy ''SimHistories
+
+historiesFromSummaries::EngineC a fl le ru rm
+  => LifeEventConverters a fl le
+  -> [PathSummaryAndSeed]
+  -> (FinEnv rm,CombinedState a fl le ru)
+  -> Bool -- single threaded ?
+  -> Int -- number of quantiles
+  -> Int -- years per path
+  -> Either SomeException SimHistories
 historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles years = do
   let year0 = fe0 ^. feCurrentDate
       nw0 = netWorth cs0 fe0
       sorted = sortSummaries summaries
-      (_,medianSeed) = sorted !! (length sorted `div` 2)
+      PathSummaryAndSeed  _ medianSeed = sorted !! (length sorted `div` 2)
       csHist = cs0 & (csNeedHistory .~ True)
-      getH seed = (getHistory . fst) <$> execOnePathPure convertLE csHist fe0 seed years 
-      getNW::[(Year,FSSummary)]->[(Year,MoneyValue)]
-      getNW x = (year0,nw0):map (\(d,FSSummary nw _ _ _ _ _)->(d,nw)) x
+      getH seed = V.fromList . view (_1 . csMC . mcsHistory) <$> execOnePathPure convertLE csHist fe0 seed years
+      getNW :: V.Vector DatedSummary -> V.Vector DatedMoneyValue
+      getNW = V.cons (DatedMoneyValue year0 nw0) . fmap (\(DatedSummary d (FSSummary nw _ _ _ _ _))->DatedMoneyValue d nw)
       inds = qIndices (length sorted) quantiles
-      seeds = (snd. unzip) (qSubSet inds sorted)
-  histories' <- sequence $ if singleThreaded then map getH seeds else map getH seeds `using` parList rseq
+      quartileSeeds = view psasSeed <$> (qSubSet inds sorted)
+  histories' <- sequence $ if singleThreaded
+                           then map getH quartileSeeds
+                           else map getH quartileSeeds `using` parList rseq
   let histories = map getNW histories'
       median0 = initialSummary cs0 fe0
   medianHist <- getH medianSeed
-  return (histories,median0:medianHist)
-  
-  
-nwHistFromSummaries::(VGB.Vector v1 Int,VGB.Vector v1 Double)=>[(PathSummary,Word64)]->Int->(v1 Double, v1 Int)
+  return $ SimHistories histories $ V.cons median0 medianHist
+
+
+nwHistFromSummaries::(VGB.Vector v1 Int,VGB.Vector v1 Double)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
 nwHistFromSummaries summaries bins = summariesToHistogram (sortSummaries summaries) bins
 
 
-summariesToHistogram::(VGB.Vector v1 Double, VGB.Vector v1 Int)=>[(PathSummary,Word64)]->Int->(v1 Double, v1 Int)
-summariesToHistogram summaries numBins = 
-  let nws = V.fromList $ map (\(x,_)->psToNumber x) summaries
-  in histogram numBins  nws 
+summariesToHistogram::(VGB.Vector v1 Double, VGB.Vector v1 Int)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
+summariesToHistogram summaries numBins =
+  let nws = V.fromList $ map psasToNumber summaries
+  in histogram numBins nws
 
-initialSummary::(IsAsset a,IsFlow fl)=>CombinedState a fl le ru->FinEnv rm->(Year,FSSummary)                     
+initialSummary::(IsAsset a,IsFlow fl)=>CombinedState a fl le ru->FinEnv rm->DatedSummary
 initialSummary cs0 fe0 =
   let nw =  netWorth cs0 fe0
       nwbo = netWorthBreakout cs0 fe0
       (inFlow,outFlow) = grossFlows (cs0 ^. (csMC.mcsCashFlows)) fe0
-      in (fe0 ^. feCurrentDate,FSSummary nw nwbo inFlow outFlow (MV.zero (fe0 ^. feDefaultCCY)) 0) 
+      in DatedSummary (fe0 ^. feCurrentDate) (FSSummary nw nwbo inFlow outFlow (MV.zero (fe0 ^. feDefaultCCY)) 0)
 
-addReturns::[(Year,FSSummary)]->[(Year,FSSummary,MoneyValue,Double)]  
-addReturns fs = result where 
-  ccy = snd (head fs) ^. fssNW.mCurrency
+data DatedSummaryWithReturns = DatedSummaryWithReturns !Year !FSSummary !MoneyValue !Double
+
+addReturns::V.Vector DatedSummary->V.Vector DatedSummaryWithReturns --[(Year,FSSummary,MoneyValue,Double)]
+addReturns fs = result where
+  ccy = (V.head fs) ^. dsSummary.fssNW.mCurrency
   z = MV.zero ccy
-  (dE,fsE) = last fs
+  DatedSummary dE fsE = V.last fs
   FSSummary nwF nwboF _ _ _ _ = fsE
-  final = (dE, FSSummary nwF nwboF z z z 0, z, 0)
-  l = zip fs (tail fs)
+  final = DatedSummaryWithReturns dE (FSSummary nwF nwboF z z z 0) z 0
+  l = V.zip fs (V.tail fs)
   f::FSSummary->FSSummary->(MoneyValue,Double)
-  f (FSSummary nw0 _ _ _ _ _) (FSSummary nw1 _ in1 out1 tax1 _) = (retM,rate) where  
+  f (FSSummary nw0 _ _ _ _ _) (FSSummary nw1 _ in1 out1 tax1 _) = (retM,rate) where
     nw0A = nw0 ^. mAmount
     nw1A = nw1 ^. mAmount
     inA = in1 ^. mAmount
@@ -106,19 +146,19 @@ addReturns fs = result where
     returnA = (nw1A - nw0A) - (inA - outA) + tax1A
     rate = returnA / nw0A
     retM = MoneyValue returnA ccy
-  g::((Year,FSSummary),(Year,FSSummary))->(Year,FSSummary,MoneyValue,Double)
-  g ((d,fs0),(_,fs1)) = (d,fs',retM,rate) where
+  g :: (DatedSummary,DatedSummary)->DatedSummaryWithReturns --(Year,FSSummary,MoneyValue,Double)
+  g (DatedSummary d fs0, DatedSummary _ fs1) = DatedSummaryWithReturns d fs' retM rate where
     (retM,rate) = f fs0 fs1
     FSSummary nw0 nwbo0 _ _ _ _ = fs0
     FSSummary _ _ in1 out1 tax1 tr1 = fs1
     fs' = FSSummary nw0 nwbo0 in1 out1 tax1 tr1
-  result = map g l ++ [final] 
+  result = V.snoc (V.map g l) final -- Ick.  That snoc is O(n)
 
 
 medianMode::[PathSummary]->(Maybe Year,Maybe Year)
 medianMode sbs = (Just a, Just b) where
-  (ZeroNW a) = sbs !! (length sbs `div` 2) -- NB: Not the median for even number. Returns earlier of central pair         
-  countsM = foldl' (\m (ZeroNW d)->M.insertWith (+) d (1::Int) m) M.empty sbs 
+  (ZeroNW a) = sbs !! (length sbs `div` 2) -- NB: Not the median for even number. Returns earlier of central pair
+  countsM = foldl' (\m (ZeroNW d)->M.insertWith (+) d (1::Int) m) M.empty sbs
   countsL = sortBy (comparing snd) $ M.toList countsM
   b = fst (last countsL)
 
@@ -126,7 +166,7 @@ analyzeBankruptcies::[PathSummary]->(Int,Maybe Year,Maybe Year)
 analyzeBankruptcies bs = (num,median,mode) where
   sbs = sort bs
   num = length sbs
-  (median,mode) = if num > 0 
+  (median,mode) = if num > 0
                   then medianMode sbs
                   else (Nothing,Nothing)
-  
+
