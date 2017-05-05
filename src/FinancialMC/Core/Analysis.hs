@@ -75,7 +75,7 @@ qSubSet is xs = map (\n -> xs !! n) is
 
 data DatedMoneyValue = DatedMoneyValue { _dmYear :: !Year, _dmValue :: !MoneyValue } deriving (Show)
 
-data SimHistories = SimHistories { _simQuartilesNW :: [V.Vector DatedMoneyValue]
+data SimHistories = SimHistories { _simQuantilesNW :: [V.Vector DatedMoneyValue]
                                  , _simMedianDetails :: V.Vector DatedSummary
                                  } deriving (Show)
 
