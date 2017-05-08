@@ -2,6 +2,7 @@
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes            #-}
+{-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 module FinancialMC.Core.Analysis
          (
@@ -12,6 +13,7 @@ module FinancialMC.Core.Analysis
          , DatedSummaryWithReturns (..)
          , summariesToHistogram
          , nwHistFromSummaries
+         , multiSummariesToHistograms
          , historiesFromSummaries
          , addReturns
          , analyzeBankruptcies
@@ -43,6 +45,7 @@ import           FinancialMC.Core.MCState         (CombinedState,
                                                    netWorth)
 import           FinancialMC.Core.Utilities       (Year)
 
+import           Control.Arrow                    ((&&&), (***))
 import           Control.Exception                (SomeException)
 import           Control.Lens                     (makeClassy, view, (&), (.~),
                                                    (^.), _1, _2)
@@ -53,7 +56,8 @@ import           Data.Ord                         (comparing)
 import qualified Data.Vector                      as V
 import qualified Data.Vector.Generic.Base         as VGB
 import           Data.Word                        (Word64)
-import           Statistics.Sample.Histogram      (histogram)
+import qualified Safe                             as Safe
+import           Statistics.Sample.Histogram      (histogram, histogram_, range)
 
 psasToNumber :: PathSummaryAndSeed -> Double
 psasToNumber (PathSummaryAndSeed (FinalNW mv) _) = mv ^. mAmount
@@ -61,11 +65,6 @@ psasToNumber (PathSummaryAndSeed (ZeroNW _) _)   = 0
 
 sortSummaries::[PathSummaryAndSeed] -> [PathSummaryAndSeed]
 sortSummaries = sortBy (\x y-> compare (psasToNumber x) (psasToNumber y))
-
-{-
-getHistory::CombinedState a fl le ru->V.Vector DatedSummary
-getHistory cs = cs ^. csMC.mcsHistory
--}
 
 qIndices::Int->Int->[Int]
 qIndices len quantiles = map (\n -> (2*n - 1) * len `div` (2 * quantiles)) [1..quantiles]
@@ -110,14 +109,26 @@ historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles ye
   return $ SimHistories histories $ V.cons median0 medianHist
 
 
-nwHistFromSummaries::(VGB.Vector v1 Int,VGB.Vector v1 Double)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
+--nwHistFromSummaries::(VGB.Vector v1 Int,VGB.Vector v1 Double)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
+--nwHistFromSummaries summaries bins = summariesToHistogram (sortSummaries summaries) bins
+
+nwHistFromSummaries :: [PathSummaryAndSeed] -> Int -> (V.Vector Double, V.Vector Int)
 nwHistFromSummaries summaries bins = summariesToHistogram (sortSummaries summaries) bins
 
-
-summariesToHistogram::(VGB.Vector v1 Double, VGB.Vector v1 Int)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
+summariesToHistogram :: [PathSummaryAndSeed]->Int->(V.Vector Double, V.Vector Int)
 summariesToHistogram summaries numBins =
   let nws = V.fromList $ map psasToNumber summaries
   in histogram numBins nws
+
+multiSummariesToHistograms :: [(k, [PathSummaryAndSeed])] -> Int -> (V.Vector Double, [(k, V.Vector Int)])
+multiSummariesToHistograms taggedSummaries nBins =
+  let taggedSamples = (id *** V.fromList . fmap psasToNumber) <$> taggedSummaries
+      allNWs = V.concat $ snd <$> taggedSamples
+      (lo,hi) = range nBins allNWs
+      taggedCounts = (id *** histogram_ nBins lo hi) <$>  taggedSamples
+      d = (hi - lo) / fromIntegral nBins
+      bins = V.generate nBins (\i -> lo + d * fromIntegral i)
+  in (bins, taggedCounts)
 
 initialSummary::(IsAsset a,IsFlow fl)=>CombinedState a fl le ru->FinEnv rm->DatedSummary
 initialSummary cs0 fe0 =
