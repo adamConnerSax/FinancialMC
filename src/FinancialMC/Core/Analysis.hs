@@ -11,6 +11,7 @@ module FinancialMC.Core.Analysis
          , SimHistories (..)
          , HasSimHistories (..)
          , DatedSummaryWithReturns (..)
+         , HasDatedSummaryWithReturns (..)
          , summariesToHistogram
          , nwHistFromSummaries
          , multiSummariesToHistograms
@@ -139,7 +140,13 @@ initialSummary cs0 fe0 =
       (inFlow,outFlow) = grossFlows (cs0 ^. (csMC.mcsCashFlows)) fe0
       in DatedSummary (fe0 ^. feCurrentDate) (FSSummary nw nwbo inFlow outFlow (MV.zero (fe0 ^. feDefaultCCY)) 0)
 
-data DatedSummaryWithReturns = DatedSummaryWithReturns !Year !FSSummary !MoneyValue !Double
+data DatedSummaryWithReturns = DatedSummaryWithReturns { _dswrYear :: !Year
+                                                       , _dswrSummary :: !FSSummary
+                                                       , _dswrReturn :: !MoneyValue
+                                                       , _dswrReturnRate :: !Double
+                                                       }
+
+makeClassy ''DatedSummaryWithReturns
 
 addReturns::V.Vector DatedSummary->V.Vector DatedSummaryWithReturns --[(Year,FSSummary,MoneyValue,Double)]
 addReturns fs = result where
