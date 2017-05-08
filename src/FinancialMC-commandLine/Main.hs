@@ -115,15 +115,15 @@ runAndOutput doOutput options = do
             strB1 = (show numB ++ " (" ++ printf "%0.2f" pctB ++ "%) paths result in bankruptcy.")
         writeIf strB1
         when (numB > 0) $ writeIf ("Median bankruptcy year=" ++ show (fromJust medianB) ++ "; mode=" ++ show (fromJust modeB))
-        SimHistories histories medianHist <- eitherToIO $ historiesFromSummaries lec summaries (fe0,cs0)
-                                             (optSingleThreaded options) (optQuantiles options) (optYears options)
+        SimHistories nwHistories _ medianHist <- eitherToIO $ historiesFromSummaries lec summaries (fe0,cs0)
+                                                            (optSingleThreaded options) (optQuantiles options) (optYears options)
         let DatedSummary _ medianFS = V.last medianHist
             mOPath = outputPath (optOutPath options) mOPrefix
         writeIf ("Median Final Summary=" ++ show medianFS)
         case mOPath of
              Nothing   -> writeIf "No saved output."
              Just path -> writeIf ("Saving output in " ++ path ++ "...")
-        output mOPath histData histories (medianFS ^. fssNW) medianHist
+        output mOPath histData nwHistories (medianFS ^. fssNW) medianHist
 
   mapM_ runConfig (optConfigs options)
 

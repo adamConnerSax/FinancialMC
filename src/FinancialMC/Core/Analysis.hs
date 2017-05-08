@@ -75,6 +75,7 @@ qSubSet is xs = map (\n -> xs !! n) is
 data DatedMoneyValue = DatedMoneyValue { _dmYear :: !Year, _dmValue :: !MoneyValue } deriving (Show)
 
 data SimHistories = SimHistories { _simQuantilesNW :: [V.Vector DatedMoneyValue]
+                                 , _simQuantilesInfo :: [V.Vector DatedSummary]
                                  , _simMedianDetails :: V.Vector DatedSummary
                                  } deriving (Show)
 
@@ -103,10 +104,11 @@ historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles ye
   histories' <- sequence $ if singleThreaded
                            then map getH quartileSeeds
                            else map getH quartileSeeds `using` parList rseq
-  let histories = map getNW histories'
-      median0 = initialSummary cs0 fe0
-  medianHist <- getH medianSeed
-  return $ SimHistories histories $ V.cons median0 medianHist
+  let nwHistories = map getNW histories'
+      all0 = initialSummary cs0 fe0
+      histories = V.cons all0 <$> histories
+  medianHist <- getH medianSeed -- we could skip this if we knew median was in the set of quintiles
+  return $ SimHistories nwHistories histories $ V.cons all0 medianHist
 
 
 --nwHistFromSummaries::(VGB.Vector v1 Int,VGB.Vector v1 Double)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
