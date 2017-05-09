@@ -75,11 +75,20 @@ qSubSet is xs = map (\n -> xs !! n) is
 
 data DatedMoneyValue = DatedMoneyValue { _dmYear :: !Year, _dmValue :: !MoneyValue } deriving (Show)
 
-data SimHistories = SimHistories { _simQuantilesNW :: [V.Vector DatedMoneyValue]
-                                 , _simQuantilesInfo :: [V.Vector DatedSummary]
+data DatedSummaryWithReturns = DatedSummaryWithReturns { _dswrYear       :: !Year
+                                                       , _dswrSummary    :: !FSSummary
+                                                       , _dswrReturn     :: !MoneyValue
+                                                       , _dswrReturnRate :: !Double
+                                                       } deriving (Show)
+
+
+data SimHistories = SimHistories { _simQuantilesNW   :: [V.Vector DatedMoneyValue]
+                                 , _simQuantilesInfo :: [V.Vector DatedSummaryWithReturns]
                                  , _simMedianDetails :: V.Vector DatedSummary
                                  } deriving (Show)
 
+
+makeClassy ''DatedSummaryWithReturns
 makeClassy ''DatedMoneyValue
 makeClassy ''SimHistories
 
@@ -109,7 +118,7 @@ historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles ye
       all0 = initialSummary cs0 fe0
       histories = V.cons all0 <$> histories
   medianHist <- getH medianSeed -- we could skip this if we knew median was in the set of quintiles
-  return $ SimHistories nwHistories histories $ V.cons all0 medianHist
+  return $ SimHistories nwHistories (addReturns <$> histories) $ V.cons all0 medianHist
 
 
 --nwHistFromSummaries::(VGB.Vector v1 Int,VGB.Vector v1 Double)=>[PathSummaryAndSeed]->Int->(v1 Double, v1 Int)
@@ -140,13 +149,6 @@ initialSummary cs0 fe0 =
       (inFlow,outFlow) = grossFlows (cs0 ^. (csMC.mcsCashFlows)) fe0
       in DatedSummary (fe0 ^. feCurrentDate) (FSSummary nw nwbo inFlow outFlow (MV.zero (fe0 ^. feDefaultCCY)) 0)
 
-data DatedSummaryWithReturns = DatedSummaryWithReturns { _dswrYear :: !Year
-                                                       , _dswrSummary :: !FSSummary
-                                                       , _dswrReturn :: !MoneyValue
-                                                       , _dswrReturnRate :: !Double
-                                                       }
-
-makeClassy ''DatedSummaryWithReturns
 
 addReturns::V.Vector DatedSummary->V.Vector DatedSummaryWithReturns --[(Year,FSSummary,MoneyValue,Double)]
 addReturns fs = result where
