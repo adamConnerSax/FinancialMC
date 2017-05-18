@@ -116,7 +116,7 @@ historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles ye
                            else map getH quartileSeeds `using` parList rseq
   let nwHistories = map getNW histories'
       all0 = initialSummary cs0 fe0
-      histories = V.cons all0 <$> histories
+      histories = V.cons all0 <$> histories'
   medianHist <- getH medianSeed -- we could skip this if we knew median was in the set of quintiles
   return $ SimHistories nwHistories (addReturns <$> histories) $ V.cons all0 medianHist
 
