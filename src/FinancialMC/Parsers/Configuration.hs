@@ -327,7 +327,7 @@ data ModelConfiguration a fl le ru rm = ModelConfiguration { _mcfgInitialFS::Ini
                                                              _mcfgRateModel::rm,
                                                              _mcfgTaxRules::TaxRules,
                                                              _mcfgYear::Year,
-                                                             _mcfgCCY::Currency } deriving (Generic)
+                                                             _mcfgCCY::Currency } deriving (Show, Generic)
 
 Lens.makeClassy ''ModelConfiguration
 
