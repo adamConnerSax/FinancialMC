@@ -36,6 +36,7 @@ library
     FinancialMC.Core.Result    
     FinancialMC.Core.Utilities
     FinancialMC.Core.Analysis
+    FinancialMC.Builders.All
     FinancialMC.Parsers.Configuration
     FinancialMC.Parsers.ConfigurationLoader              
     FinancialMC.Parsers.XML.Utilities
@@ -50,7 +51,6 @@ library
     FinancialMC.Core.Engine
     FinancialMC.Core.MCState
     FinancialMC.Core.MapLike
-    FinancialMC.Builders.All
     FinancialMC.Builders.Assets
     FinancialMC.Builders.Flows
     FinancialMC.Builders.Rules
