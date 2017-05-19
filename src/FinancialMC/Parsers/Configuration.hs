@@ -186,12 +186,13 @@ class FMCConvertible f where
   fmcMap::FMCComponentConverters ab a flb fl leb le rub ru rmb rm->f ab flb leb rub rmb->f a fl le ru rm
 -}
 
-data InitialFS a fl le ru = InitialFS {ifsBS::BalanceSheet a, 
-                                       ifsCF::CashFlows fl, 
-                                       ifsLifeEvents::[le],
-                                       ifsRules::[ru],
-                                       ifsSweep::ru, 
-                                       ifsTaxTrade::ru} deriving (Show,Generic)
+data InitialFS a fl le ru = InitialFS { ifsBS :: BalanceSheet a
+                                      , ifsCF :: CashFlows fl 
+                                      , ifsLifeEvents::[le]
+                                      , ifsRules::[ru]
+                                      , ifsSweep::ru
+                                      , ifsTaxTrade::ru
+                                      } deriving (Show, Generic)
                            
 convertComponentsInitialFS::FMCComponentConverters ab a flb fl leb le rub ru rmb rm->InitialFS ab flb leb rub->InitialFS a fl le ru
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
@@ -349,7 +350,7 @@ data SimConfiguration = SimConfiguration { _scfgYears::Int
                                          , _scfgBins::Int
                                          , _scfgQuantiles::Int
                                          , _scfgSeed::Maybe Word64
-                                         } deriving (Generic)
+                                         } deriving (Show, Generic)
 
 Lens.makeClassy ''SimConfiguration
 

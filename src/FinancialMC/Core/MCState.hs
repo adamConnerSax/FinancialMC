@@ -70,7 +70,7 @@ import           Control.Lens (makeClassy,use,(^.),(%=),(.=),(<>=))
 import           Control.Monad (when)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State.Strict (State,MonadState,get)
-
+import Control.Monad.Catch (MonadThrow)
 --import qualified Data.Text as T 
 
 type MyMap k v = M.Map k v
@@ -132,7 +132,7 @@ insertAccount acct@(Account name _ _ _) = bsAccountMap %=  mInsert name acct
 addFlow::IsFlow fl=>fl->State (CashFlows fl) ()
 addFlow f = cfdFlowMap %= mInsert (flowName f) f
 
-getAccount::AccountName->BalanceSheet a->Either SomeException (Account a)
+getAccount::MonadThrow m => AccountName -> BalanceSheet a -> m (Account a) --Either SomeException (Account a)
 getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" ++ show name ++ "\"")) $ mLookup name am 
 
 putAccount::Account a->AccountName->BalanceSheet a->BalanceSheet a

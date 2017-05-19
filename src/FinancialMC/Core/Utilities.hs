@@ -103,7 +103,7 @@ frequencyMultiplier Daily    = 365
 
 type Year = Int
 
-data DateRange = Never | Always | Starting Year | Ending Year | Only Year | Between Year Year deriving (Show,Read,Generic,FromJSON,ToJSON)
+data DateRange = Never | Always | Starting Year | Ending Year | Only Year | Between Year Year deriving (Show, Read, Generic, FromJSON, ToJSON)
 
 between::Year->DateRange->Bool
 between _ Always          = True
