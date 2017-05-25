@@ -22,6 +22,7 @@ module FinancialMC.Core.Tax
        , fullTaxCV
        , TaxBracket(..)
        , TaxBrackets
+       , taxBrackets
        , FedCapitalGains(..)
        , CapGainBand(..)
        , MedicareSurtax(..)
@@ -149,6 +150,9 @@ data FilingStatus = Single | MarriedFilingJointly deriving (Show,Read,Enum,Ord,E
 data TaxBracket = Bracket !MoneyValue !MoneyValue !Double | TopBracket !MoneyValue !Double deriving (Show,Generic,FromJSON,ToJSON)
 
 data TaxBrackets = TaxBrackets ![TaxBracket] deriving (Generic,FromJSON,ToJSON) -- we don't expose this constructor 
+
+taxBrackets::TaxBrackets -> [TaxBracket]
+taxBrackets (TaxBrackets x) = x
 
 instance Show TaxBrackets where
   show (TaxBrackets tbs) = show tbs
