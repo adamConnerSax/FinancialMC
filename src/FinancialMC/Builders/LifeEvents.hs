@@ -41,8 +41,9 @@ laERMV::(MonadTrans t1, MonadTrans t2, Monad m, Monad (t2 n), n ~ ReaderT (FinEn
 laERMV c a = lift . lift . magnify feExchange $ CV.asERMV c a
 
 
-
+-- TODO: Lensify
 data BaseLifeEvent = BaseLifeEvent { leCore::LifeEventCore,  leDetails::BaseLifeEventDetails } deriving (Generic)
+
 instance ToJSON BaseLifeEvent where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2}
 instance FromJSON BaseLifeEvent where

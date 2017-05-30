@@ -80,10 +80,10 @@ defaultNonCapitalAssetBuySellF a aTp tTp am = adjust (return . nonCapital) $ def
 
 getCapGain::Currency->[FlowResult]->CV.CVD
 getCapGain ccy flows = foldl (|+|) (CV.mvZero ccy) cgs where
-  getCG (AllTaxed (TaxAmount CapitalGain x)) = x
-  getCG (OnlyTaxed (TaxAmount CapitalGain x)) = x
+  getCG (AllTaxed (TaxAmount CapitalGain x))         = x
+  getCG (OnlyTaxed (TaxAmount CapitalGain x))        = x
   getCG (PartiallyTaxed _ (TaxAmount CapitalGain y)) = y
-  getCG _ = MV.zero ccy
+  getCG _                                            = MV.zero ccy
   cgs = fmap (CV.fromMoneyValue . getCG) flows
 
 
@@ -109,9 +109,9 @@ liquidateOnlyBuySellF a aTp tTp am = do
 
 deductibleBuy::TradeType->AccountType->Bool
 deductibleBuy OverFund _ = False
-deductibleBuy _ A401k = True
-deductibleBuy _ IRA = True
-deductibleBuy _ _ = False
+deductibleBuy _ A401k    = True
+deductibleBuy _ IRA      = True
+deductibleBuy _ _        = False
 
 buyAsset::AssetTrader a
 buyAsset a aTp tTp am = do
@@ -132,28 +132,28 @@ liquidateAsset::AssetLiquidator a
 liquidateAsset a aTp tTp = sellAsset a aTp tTp (assetValue a)
 
 retirementAccount::AccountType->Bool
-retirementAccount A401k = True
-retirementAccount IRA = True
+retirementAccount A401k   = True
+retirementAccount IRA     = True
 retirementAccount RothIRA = True
-retirementAccount _ = False
+retirementAccount _       = False
 
 earlyRetirement::AccountType->TradeType->Bool
 earlyRetirement aTp EarlyWithdrawal | retirementAccount aTp = True
-earlyRetirement _ _ = False
+earlyRetirement _ _                 = False
 
 early529::AccountType->TradeType->Bool
 early529 A529 EarlyWithdrawal = True
-early529 _ _ = False
+early529 _ _                  = False
 
 taxedRetirement::AccountType->Bool
 taxedRetirement A401k = True
-taxedRetirement IRA = True
-taxedRetirement _ = False
+taxedRetirement IRA   = True
+taxedRetirement _     = False
 
 untaxed::AccountType->Bool
-untaxed A529 = True
+untaxed A529    = True
 untaxed RothIRA = True
-untaxed _ = False
+untaxed _       = False
 
 proceedsF::AccountType->TradeType->CV.CVD->CV.CVD->CV.CVD
 proceedsF aTp tTp amount capGain

@@ -33,30 +33,30 @@ module FinancialMC.Core.Asset
        ) where
 
 
-import           FinancialMC.Core.CValued         ((|+|))
-import qualified FinancialMC.Core.CValued         as CV
-import           FinancialMC.Core.Evolve          (Evolvable (..), evolveWithin)
-import           FinancialMC.Core.MoneyValue      (Currency (..),
-                                                   ExchangeRateFunction,
-                                                   MoneyValue (..), mCurrency)
-import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Result          ()
-import           FinancialMC.Core.TradingTypes    (AccountType, TradeApp,
-                                                   TradeFunction, TradeResult,
-                                                   TradeType)
+import           FinancialMC.Core.CValued       ((|+|))
+import qualified FinancialMC.Core.CValued       as CV
+import           FinancialMC.Core.Evolve        (Evolvable (..), evolveWithin)
+import           FinancialMC.Core.MoneyValue    (Currency (..),
+                                                 ExchangeRateFunction,
+                                                 MoneyValue (..), mCurrency)
+import qualified FinancialMC.Core.MoneyValueOps as MV
+import           FinancialMC.Core.Result        ()
+import           FinancialMC.Core.TradingTypes  (AccountType, TradeApp,
+                                                 TradeFunction, TradeResult,
+                                                 TradeType)
 
-import           Control.Lens                     (makeClassy, (^.))
-import           Data.Aeson                       (FromJSON (..), ToJSON (..),
-                                                   genericParseJSON,
-                                                   genericToJSON)
-import           Data.Aeson.Types                 (Options (fieldLabelModifier),
-                                                   defaultOptions)
+import           Control.Lens                   (makeClassy, (^.))
+import           Data.Aeson                     (FromJSON (..), ToJSON (..),
+                                                 genericParseJSON,
+                                                 genericToJSON)
+import           Data.Aeson.Types               (Options (fieldLabelModifier),
+                                                 defaultOptions)
 
-import qualified Data.Text                        as T
+import qualified Data.Text                      as T
 
-import           Control.Exception                (SomeException)
+import           Control.Exception              (SomeException)
 
-import           GHC.Generics                     (Generic)
+import           GHC.Generics                   (Generic)
 
 data AssetRevaluation = NewValue !MoneyValue | NewBasis !MoneyValue | NewValueAndBasis !MoneyValue !MoneyValue
 
@@ -95,7 +95,7 @@ assetCurrency a = assetValue a ^. mCurrency
 
 type AccountName = T.Text
 
-data Account a = Account { _acName:: !AccountName, _acType:: !AccountType, _acCurrency:: !Currency, _acAssets:: ![a] } deriving (Generic)
+data Account a = Account { _acName:: !AccountName,  _acType:: !AccountType, _acCurrency:: !Currency, _acAssets:: ![a] } deriving (Generic)
 makeClassy ''Account
 
 instance Functor Account where

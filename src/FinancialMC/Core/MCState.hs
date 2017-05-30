@@ -12,10 +12,12 @@
 module FinancialMC.Core.MCState 
        (
          BalanceSheet(BalanceSheet)
+       , HasBalanceSheet (..)
        , getAccountNames
        , makeNewBalanceSheet
        , insertAccount --NB: replaces if already present, like Map.insert
-       , CashFlows
+       , CashFlows (CashFlows)
+       , HasBalanceSheet (..)
        , makeNewCashFlows
        , addFlow
        , MCState(MCState)

@@ -6,8 +6,10 @@
 {-# LANGUAGE Rank2Types            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
-module FinancialMC.Builders.Flows (
+module FinancialMC.Builders.Flows
+  (
     BaseFlow(..)
+  , HasBaseFlow (..)
   , BaseFlowDetails(..)
   ) where
 
@@ -35,7 +37,7 @@ import           FinancialMC.Core.Tax             (TaxType (..))
 import           FinancialMC.Core.Utilities       (Year)
 
 import           Control.Exception                (SomeException)
-import           Control.Lens                     (magnify, view)
+import           Control.Lens                     (magnify, makeClassy, view)
 import           Control.Monad.Reader             (ReaderT, lift)
 
 import           Data.Aeson                       (FromJSON, ToJSON)
@@ -64,14 +66,14 @@ data BaseFlowDetails =
   SalaryPayment |
   RentalIncome !MoneyValue {- max annual deduction -} deriving (Generic,ToJSON,FromJSON)
 
-baseFlowDirection::BaseFlowDetails->FlowDirection
-baseFlowDirection Expense = OutFlow
-baseFlowDirection DeductibleExpense = OutFlow
-baseFlowDirection (EducationExpense _) = OutFlow
+baseFlowDirection :: BaseFlowDetails->FlowDirection
+baseFlowDirection Expense               = OutFlow
+baseFlowDirection DeductibleExpense     = OutFlow
+baseFlowDirection (EducationExpense _)  = OutFlow
 baseFlowDirection (HealthCareExpense _) = OutFlow
-baseFlowDirection (Payment _) = InFlow
-baseFlowDirection SalaryPayment = InFlow
-baseFlowDirection (RentalIncome _) = InFlow
+baseFlowDirection (Payment _)           = InFlow
+baseFlowDirection SalaryPayment         = InFlow
+baseFlowDirection (RentalIncome _)      = InFlow
 
 instance Show BaseFlowDetails where
   show fl@Expense = "Regular Expense [" ++ show (baseFlowDirection fl) ++ "]->"
@@ -82,8 +84,8 @@ instance Show BaseFlowDetails where
   show fl@SalaryPayment = "Salary [" ++ show (baseFlowDirection fl) ++ "]->"
   show fl@(RentalIncome md) = "Rental income [" ++ show (baseFlowDirection fl) ++ "; max annual deduction=" ++ show md ++ "]->"
 
-data BaseFlow = BaseFlow !FlowCore !BaseFlowDetails deriving (Generic,ToJSON,FromJSON)
-
+data BaseFlow = BaseFlow { _bfCore :: !FlowCore, _bfDetails :: !BaseFlowDetails} deriving (Generic,ToJSON,FromJSON)
+makeClassy ''BaseFlow
 
 instance Show BaseFlow where
   show (BaseFlow fc fdet) = show fdet ++ show fc

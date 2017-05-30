@@ -6,8 +6,10 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
-module FinancialMC.Builders.Rules (
+module FinancialMC.Builders.Rules
+  (
     BaseRule(..)
+  , HasBaseRule (..)
   , BaseRuleDetails(PayFrom,Transfer,RequiredDistribution,Contribution)
   , makePreTaxContributionRule
   , makeAfterTaxContributionRule
@@ -46,7 +48,8 @@ import           FinancialMC.Core.Rule            (IsRule (..), RuleApp,
 import           FinancialMC.Core.Tax             (safeCapGainRateCV)
 
 import           Control.Exception                (SomeException)
-import           Control.Lens                     (magnify, view, (^.))
+import           Control.Lens                     (magnify, makeClassy, view,
+                                                   (^.))
 import           Control.Monad.Reader             (ReaderT)
 import           Control.Monad.Trans.Class        (lift)
 
@@ -105,8 +108,8 @@ instance Show BaseRuleDetails where
   show (Sweep acct) = "Moves excess/gets necessary cash to/from " ++ show acct
 
 
-data BaseRule = BaseRule !RuleName BaseRuleDetails deriving (Generic,FromJSON,ToJSON)
-
+data BaseRule = BaseRule { _brName :: !RuleName, _brDetails ::  BaseRuleDetails } deriving (Generic,FromJSON,ToJSON)
+makeClassy ''BaseRule
 
 instance Show BaseRule where
   show (BaseRule rn rd) = show rn ++ " [" ++ show rd ++ "]"
@@ -118,24 +121,24 @@ instance IsRule BaseRule where
   doRule (BaseRule _ rd) = doBaseRule rd
 
 baseRuleAccounts::BaseRuleDetails->[AccountName]
-baseRuleAccounts (PayFrom a _) = [a]
-baseRuleAccounts (Transfer aFrom _ aTo _ _ _) = [aFrom, aTo]
-baseRuleAccounts (Contribution a _ _ _) = [a]
-baseRuleAccounts (RequiredDistribution a _) = [a]
+baseRuleAccounts (PayFrom a _)                          = [a]
+baseRuleAccounts (Transfer aFrom _ aTo _ _ _)           = [aFrom, aTo]
+baseRuleAccounts (Contribution a _ _ _)                 = [a]
+baseRuleAccounts (RequiredDistribution a _)             = [a]
 baseRuleAccounts (CashToInvestmentSweep aCash aInv _ _) = [aCash, aInv]
-baseRuleAccounts (SellAsNeeded sana) = fst <$> sana
-baseRuleAccounts (TaxTrade a) = [a]
-baseRuleAccounts (Sweep a) = [a]
+baseRuleAccounts (SellAsNeeded sana)                    = fst <$> sana
+baseRuleAccounts (TaxTrade a)                           = [a]
+baseRuleAccounts (Sweep a)                              = [a]
 
 baseRuleWhen::BaseRuleDetails->RuleWhen
-baseRuleWhen (PayFrom _ _) = BeforeTax
-baseRuleWhen (Transfer _ _ _ _ _ _) = BeforeTax
-baseRuleWhen (Contribution _ _ _ _) = BeforeTax
-baseRuleWhen (RequiredDistribution _ _) = BeforeTax
+baseRuleWhen (PayFrom _ _)                   = BeforeTax
+baseRuleWhen (Transfer _ _ _ _ _ _)          = BeforeTax
+baseRuleWhen (Contribution _ _ _ _)          = BeforeTax
+baseRuleWhen (RequiredDistribution _ _)      = BeforeTax
 baseRuleWhen (CashToInvestmentSweep _ _ _ _) = AfterSweep
-baseRuleWhen (SellAsNeeded _) = AfterSweep
-baseRuleWhen (TaxTrade _) = Special
-baseRuleWhen (Sweep _) = Special
+baseRuleWhen (SellAsNeeded _)                = AfterSweep
+baseRuleWhen (TaxTrade _)                    = Special
+baseRuleWhen (Sweep _)                       = Special
 
 doBaseRule::IsAsset a=>BaseRuleDetails->AccountGetter a->RuleApp rm ()
 --If there is spending (in "accumName"), sell assets from acctName if available to cover with tax treatment from tt
