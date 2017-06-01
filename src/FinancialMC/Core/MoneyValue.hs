@@ -1,26 +1,30 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell       #-}
 module FinancialMC.Core.MoneyValue where
 
-import Text.Printf (printf)
-import Control.Lens (makeClassy)
-import Control.DeepSeq (NFData(rnf))
+import           Control.DeepSeq  (NFData (rnf))
+import           Control.Lens     (makeClassy)
+import           Data.Char        (chr)
+import qualified Data.Text        as T
+import           Text.Printf      (printf)
 
-import Data.List (intercalate)
-import Data.List.Split (splitOn,chunksOf)
+import           Data.List        (intercalate)
+import           Data.List.Split  (chunksOf, splitOn)
 
-import Data.Aeson (ToJSON(..),FromJSON(..))
-import Data.Aeson.Types (genericToJSON,genericParseJSON,defaultOptions,Options(..))
-import GHC.Generics (Generic)
+import           Data.Aeson       (FromJSON (..), ToJSON (..))
+import           Data.Aeson.Types (Options (..), defaultOptions,
+                                   genericParseJSON, genericToJSON)
+import           GHC.Generics     (Generic)
 
 
 data Currency = USD | EUR deriving (Eq,Ord,Enum,Bounded,Show,Read,Generic,ToJSON,FromJSON)
 
-
+currencyToChar :: Currency -> Char
+currencyToChar USD = '$'
+currencyToChar EUR = chr 164 -- ?
 
 instance NFData Currency where
   rnf USD = ()
@@ -34,24 +38,24 @@ data MoneyValue = MoneyValue {_mAmount:: !Double, _mCurrency:: !Currency} derivi
 makeClassy ''MoneyValue
 
 instance ToJSON MoneyValue where
-  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2} 
- 
+  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2}
+
 instance FromJSON MoneyValue where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2}
 
 instance Eq MoneyValue where
   MoneyValue a1 c1 == MoneyValue a2 c2 = (a1 == a2) && (c1 == c2)
-  
+
 instance NFData MoneyValue where
   rnf (MoneyValue x ccy) = rnf x `seq` rnf ccy `seq` ()
 
 
-readsMoneyValue::ReadS MoneyValue 
-readsMoneyValue s = [(MoneyValue x c,r2) | 
-                     (xS,r) <- lex s, 
-                     (x,_)<-reads xS, 
-                     (cS,r2)<-lex r, 
-                     (c,_)<-reads cS]  
+readsMoneyValue :: ReadS MoneyValue
+readsMoneyValue s = [(MoneyValue x c,r2) |
+                     (xS,r) <- lex s,
+                     (x,_)<-reads xS,
+                     (cS,r2)<-lex r,
+                     (c,_)<-reads cS]
 
 instance Read MoneyValue where
   readsPrec _  = readsMoneyValue
@@ -61,19 +65,21 @@ instance Show MoneyValue where
   show (MoneyValue x ccy) = printf "%.2f" x ++ " " ++ show ccy
 
 
-prettyPrintMV::MoneyValue->String
+prettyPrintMV :: MoneyValue -> String
 prettyPrintMV (MoneyValue x ccy) = result where
-  ccy_symbol = "$" --this needs fixing
   as_string = printf "%.2f" x
   a = splitOn "." as_string
   whole = head a
   frac = a !! 1
   wps = intercalate "," $ map reverse $ reverse $ chunksOf 3 (reverse whole)
-  result = ccy_symbol ++ wps ++ "." ++ frac  ++ " " ++ show ccy
-  
+  result = [currencyToChar ccy] ++ wps ++ "." ++ frac
+
+prettyPrintMVText :: MoneyValue -> T.Text
+prettyPrintMVText = T.pack . prettyPrintMV
+
 prettyPrintMVK::MoneyValue->String
 prettyPrintMVK (MoneyValue x ccy) =  result where
   as_string = printf "%.0f" (x/1000)
   wps = intercalate "," $ map reverse $ reverse $ chunksOf 3 (reverse as_string)
   result = wps ++ " " ++ show ccy
-  
+
