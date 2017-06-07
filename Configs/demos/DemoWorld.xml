@@ -18,6 +18,21 @@
     <TypeGroup type="IsInflation"><Fixed rate="2"/></TypeGroup>
     <Simple rateType="Exchange EUR"><Fixed rate="120"/></Simple>
   </RateModel>
+
+  <RateModel name="Static Dan">
+    <TypeGroup type="IsInterest"><Fixed rate="1"/></TypeGroup>
+    <TypeGroup type="IsReturn"><Fixed rate="7"/></TypeGroup>
+    <TypeGroup type="IsInflation"><Fixed rate="2.5"/></TypeGroup>
+    <Simple rateType="Exchange EUR"><Fixed rate="120"/></Simple>
+  </RateModel>
+
+  <RateModel name="Dynamic Dan">
+    <TypeGroup type="IsInterest"><Fixed rate="1"/></TypeGroup>
+    <TypeGroup type="IsReturn"><LogNormal mean="7" vol="15"/></TypeGroup>
+    <TypeGroup type="IsInflation"><LogNormal mean="2.5" vol="0.2"/></TypeGroup>
+    <Simple rateType="Exchange EUR"><Fixed rate="120"/></Simple>
+  </RateModel>
+
   
   <RateModel name="Begin Detailed">
     <Simple rateType="Interest Savings"><Fixed rate="1"/></Simple>
