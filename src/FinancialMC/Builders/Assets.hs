@@ -9,6 +9,17 @@ module FinancialMC.Builders.Assets (
     BaseAssetDetails(..)
   , BaseAsset(..)
   , HasBaseAsset (..)
+  , MixedFundDetails (..)
+  , GuaranteedFundDetails (..)
+  , FixedRateMortgageDetails (..)
+  , HasMixedFundDetails (..)
+  , HasGuaranteedFundDetails (..)
+  , HasFixedRateMortgageDetails (..)
+  , _CashAsset
+  , _MixedFund
+  , _GuaranteedFund
+  , _ResidentialRE
+  , _FixedRateMortgage
   ) where
 
 import           Prelude                          hiding ((*>), (<*))
@@ -36,9 +47,11 @@ import           FinancialMC.Core.Rates           (InterestType (..), RateTable,
                                                    ReturnType (..), rateRequest)
 import           FinancialMC.Core.Result          (MonadResult (..))
 import           FinancialMC.Core.Tax             (TaxType (..))
+import           FinancialMC.Core.Utilities       (Year)
 
 import           Control.Exception                (SomeException)
-import           Control.Lens                     (magnify, makeClassy)
+import           Control.Lens                     (magnify, makeClassy,
+                                                   makePrisms)
 import           Control.Monad.Reader             (ReaderT, ask)
 import           Control.Monad.Trans              (lift)
 
@@ -61,23 +74,43 @@ assetCVMult x rate = laERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (a
 liftRates::ReaderT (RateTable Double) (Either SomeException) Double -> ReaderT (FinEnv rm) (Either SomeException) Double
 liftRates = magnify feRates
 
+data MixedFundDetails = MixedFundDetails { _mfdStockPercentage :: !Double
+                                         , _mfdDividendYield   :: !Double
+                                         , _mfdBondInterest    :: !Double
+                                         } deriving (Generic, ToJSON, FromJSON)
+
+makeClassy ''MixedFundDetails
+
+data GuaranteedFundDetails = GuaranteedFundDetails { _gfdRate :: !Double } deriving (Generic, ToJSON, FromJSON)
+
+makeClassy ''GuaranteedFundDetails
+
+data FixedRateMortgageDetails = FixedRateMortgageDetails { _fmdRate :: !Double
+                                                         , _fmdYearsLeft :: !Year
+                                                         } deriving (Generic, ToJSON, FromJSON)
+
+makeClassy ''FixedRateMortgageDetails
+
 data BaseAssetDetails =
   CashAsset |
-  MixedFund !Double !Double !Double  | -- stockPct divYield bondInterest
-  GuaranteedFund !Double  | -- rate
+  MixedFund MixedFundDetails | -- !Double !Double !Double  | -- stockPct divYield bondInterest
+  GuaranteedFund GuaranteedFundDetails | -- !Double  | -- rate
   ResidentialRE |
-  FixedRateMortgage !Double !Int  {- rate years -} deriving (Generic,ToJSON,FromJSON)
+  FixedRateMortgage FixedRateMortgageDetails
+  deriving (Generic,ToJSON,FromJSON)
+
+makePrisms ''BaseAssetDetails
 
 {- $(deriveJSON defaultOptions ''FMCBaseAssetDetails) -}
 
 instance Show BaseAssetDetails where
   show CashAsset = "Cash:"
-  show (MixedFund pct sYld bInt) = "Mixed Stock/Bond Fund (" ++ show pct ++ " stock; div yld=" ++ show (100*sYld)
+  show (MixedFund (MixedFundDetails pct sYld bInt)) = "Mixed Stock/Bond Fund (" ++ show pct ++ " stock; div yld=" ++ show (100*sYld)
                                       ++ "%; bond int=" ++ show (100*bInt) ++"%):"
-  show (GuaranteedFund rate) = "Guaranteed return Fund (" ++ show (100*rate) ++ "% return):"
+  show (GuaranteedFund (GuaranteedFundDetails rate)) = "Guaranteed return Fund (" ++ show (100*rate) ++ "% return):"
   show ResidentialRE = "Residential real estate:"
   -- following shouldn't be called since we special case it in FMCBaseAsset
-  show (FixedRateMortgage rate years) = "Mortgage (Fixed " ++ show rate ++ " rate, "
+  show (FixedRateMortgage (FixedRateMortgageDetails rate years)) = "Mortgage (Fixed " ++ show rate ++ " rate, "
                                       ++ show years ++ " years):"
 
 data BaseAsset = BaseAsset { _baCore :: !AssetCore, _baDetails :: !BaseAssetDetails } deriving (Generic,ToJSON,FromJSON)
@@ -86,7 +119,7 @@ makeClassy ''BaseAsset
 {- $(deriveJSON defaultOptions ''FMCBaseAsset) -}
 
 instance Show BaseAsset where
-  show (BaseAsset (AssetCore n v b) (FixedRateMortgage rate years)) =
+  show (BaseAsset (AssetCore n v b) (FixedRateMortgage (FixedRateMortgageDetails rate years))) =
     show n ++ " (Fixed " ++ show rate ++ " rate, "
     ++ show years ++ " years mortgage): "
     ++ show (MV.negate v)
@@ -101,7 +134,7 @@ instance IsAsset BaseAsset where
 
   tradeAsset a@(BaseAsset _ CashAsset) = defaultNonCapitalAssetBuySellF a
   tradeAsset a@(BaseAsset _ ResidentialRE) = liquidateOnlyBuySellF a
-  tradeAsset a@(BaseAsset _ (FixedRateMortgage _ _)) = nullAssetTradeF a
+  tradeAsset a@(BaseAsset _ (FixedRateMortgage _ )) = nullAssetTradeF a
 --  tradeAsset a@(BaseAsset _ (MixedFund _ _ _)) = defaultAssetBuySellF a
 --  tradeAsset a@(BaseAsset _ (GuaranteedFund _)) = defaultAssetBuySellF
   tradeAsset a = defaultAssetBuySellF a
@@ -119,7 +152,7 @@ baseAssetEvolve ca@(BaseAsset _ CashAsset) = do
     return (interest,v)
   appendAndReturn (EvolveOutput [OnlyTaxed (TaxAmount NonPayrollIncome interest')] []) (revalueAsset ca (NewValueAndBasis v' v'))
 
-baseAssetEvolve mf@(BaseAsset _ (MixedFund fracStock stkYield bondInterest)) = do
+baseAssetEvolve mf@(BaseAsset _ (MixedFund (MixedFundDetails fracStock stkYield bondInterest))) = do
   (flows', newA') <- lift $ do
     stockRet <- liftRates $ rateRequest (Return Stock)
     bondRet <- liftRates $ rateRequest (Return Bond)
@@ -137,7 +170,7 @@ baseAssetEvolve mf@(BaseAsset _ (MixedFund fracStock stkYield bondInterest)) = d
   appendAndReturn (EvolveOutput flows' []) newA'
 
 
-baseAssetEvolve gf@(BaseAsset _ (GuaranteedFund rate)) = do
+baseAssetEvolve gf@(BaseAsset _ (GuaranteedFund (GuaranteedFundDetails rate))) = do
   v' <- lift $ assetCVMult gf (1.0 + rate)
   returnOnly $! revalueAsset gf (NewValue v')
 
@@ -148,7 +181,7 @@ baseAssetEvolve rre@(BaseAsset _ ResidentialRE) = do
   returnOnly $! revalueAsset rre $ NewValue v
 
 
-baseAssetEvolve frm@(BaseAsset _ (FixedRateMortgage rate years)) =  do
+baseAssetEvolve frm@(BaseAsset _ (FixedRateMortgage (FixedRateMortgageDetails rate years))) =  do
   let ccy = (assetCurrency frm)
       borrowed' = CV.cvNegate $ CV.fromMoneyValue (assetCostBasis frm)
       curPrincipal' = CV.cvNegate $ CV.fromMoneyValue (assetValue frm)

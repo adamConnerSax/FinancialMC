@@ -24,7 +24,7 @@ import           FinancialMC.Core.LifeEvent (LifeEventCore(..),IsLifeEvent(..),L
 
 import           FinancialMC.Core.TradingTypes (AccountType(PrimaryHome))
 
-import           FinancialMC.Builders.Assets (BaseAsset(..),BaseAssetDetails(ResidentialRE,FixedRateMortgage))
+import           FinancialMC.Builders.Assets (BaseAsset(..), FixedRateMortgageDetails(..), BaseAssetDetails(ResidentialRE,FixedRateMortgage))
 import           FinancialMC.Builders.Flows (BaseFlow(..),BaseFlowDetails(Expense,DeductibleExpense))
 
 import           Control.Lens (magnify,(^.))
@@ -94,7 +94,7 @@ doBaseLifeEvent (BaseLifeEvent (LifeEventCore name y)
       ccy = pValue ^. mCurrency
       borrowedF val dp c = CV.cvNegate (val |-| dp |+| c)
   borrowed <- laERMV ccy $ borrowedF (CV.fromMoneyValue pValue) (CV.fromMoneyValue downPmt) (CV.fromMoneyValue finC)     
-  let mortgageA = convertA $ BaseAsset (AssetCore (T.append pName (T.pack "_mortgage")) borrowed borrowed) (FixedRateMortgage rate term) 
+  let mortgageA = convertA $ BaseAsset (AssetCore (T.append pName (T.pack "_mortgage")) borrowed borrowed) (FixedRateMortgage (FixedRateMortgageDetails rate term)) 
       pAccount = Account name PrimaryHome ccy [propertyA,mortgageA]
   cashP <- laERMV ccy $ CV.fromMoneyValue downPmt |+| CV.fromMoneyValue cashC 
   let cashExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " down payment and costs.")) cashP Annually (Only y)) Expense
