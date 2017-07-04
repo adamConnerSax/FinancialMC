@@ -1,5 +1,6 @@
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE DeriveGeneric  #-}
+{-# LANGUAGE DeriveAnyClass  #-}
+{-# LANGUAGE DeriveGeneric   #-}
+{-# LANGUAGE TemplateHaskell #-}
 module FinancialMC.Core.Utilities
        (
          readOnly
@@ -7,6 +8,7 @@ module FinancialMC.Core.Utilities
        , multR
        , note
        , FMCException(..)
+       , AsFMCException (..)
        , eitherToIO
        , noteM
        , mapSl
@@ -22,11 +24,15 @@ module FinancialMC.Core.Utilities
        ) where
 
 import           Control.Error              (note)
+import           Control.Exception          (fromException, toException)
+import           Control.Exception.Lens     (exception, throwingM)
+import           Control.Lens               (makeClassyPrisms, prism)
 import           Control.Monad.Catch        (Exception, MonadThrow,
                                              SomeException, throwM)
 import           Control.Monad.Reader       (ReaderT (ReaderT), runReaderT)
-import           Control.Monad.State.Strict (StateT (StateT), liftM)
+import           Control.Monad.State.Strict (StateT (StateT))
 import qualified Data.Foldable              as F
+import           Data.Text                  as T
 import           Data.Typeable              (Typeable)
 
 import           Data.Aeson                 (FromJSON, ToJSON)
@@ -49,13 +55,18 @@ multR (ReaderT k) = ReaderT (\(x,y) -> do
                        let (ReaderT l) = k x
                        l y)
 
-type Err = String
-data FMCException = FailedLookup String | BadParse String | Other String deriving (Show,Typeable)
+type Err = T.Text
+data FMCException = FailedLookup String | BadParse String | Other Err deriving (Show, Typeable)
 instance Exception FMCException
+
+makeClassyPrisms ''FMCException
+
+instance AsFMCException SomeException where
+  _FMCException = prism toException (\se -> maybe (Left se) Right $ fromException se)
 
 eitherToIO::Either SomeException a->IO a
 eitherToIO x = case x of
-  Left e  -> throwM e
+  Left e  -> throwingM (prism id Right) e
   Right a -> return a
 
 
@@ -63,7 +74,7 @@ noteM::MonadThrow m=>FMCException->Maybe a->m a
 noteM exc ma =
   let res = note exc ma
   in case res of
-    Left exception -> throwM exception
+    Left fmcExc -> throwingM exception fmcExc
     Right x        -> return x
 
 --functions to fold over foldable while accumulating a list of results and using another piece of state (s0).
@@ -79,7 +90,7 @@ mapMSl f s0 l = do
         (bs,s) <- mxs
         (b,s') <- h a s
         return  (bs++[b],s')
-  liftM fst $ F.foldl (g f) (return ([],s0)) l
+  fst <$> F.foldl (g f) (return ([],s0)) l
 
 mapSr::F.Foldable t=>(a->s->(b,s))->s->t a->[b]
 mapSr f s0 l = fst $ F.foldr (\a (bs,s)->g bs a s) ([],s0) l where
