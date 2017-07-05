@@ -46,11 +46,14 @@ import           Control.Monad.Catch              (MonadThrow (..),
                                                    SomeException)
 import           Control.Monad.Except             (MonadError (..))
 import           Control.Monad.Morph              (generalize, hoist)
-import           Control.Monad.Reader             (MonadReader, ReaderT)
+import           Control.Monad.Reader             (MonadReader, ReaderT, ask,
+                                                   runReaderT)
 import           Control.Monad.State.Strict       (MonadState, StateT,
-                                                   execStateT)
+                                                   execStateT, get, put,
+                                                   runStateT)
 import           Control.Monad.Trans              (MonadIO, MonadTrans, lift,
                                                    liftIO)
+import           Data.Text                        (Text)
 
 import           Pipes                            (MFunctor, Producer, Proxy, X,
                                                    await, runEffect, yield,
@@ -65,6 +68,10 @@ newtype BaseStepApp s e m a =
   BaseStepApp { unBaseStepApp :: StateT s (ReaderT e m) a }
   deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
 
+instance MonadState s (BaseStepApp s e m a) where
+
+--
+
 instance MFunctor (BaseStepApp s e) where
   hoist f (BaseStepApp bsa) = BaseStepApp $ hoist (hoist f) bsa
 --  hoist f = fmap (hoist (hoist f))
@@ -77,12 +84,12 @@ instance MonadIO m => MonadIO (BaseStepApp s e m) where
 
 -- this is all what MonadBaseControl is for, right??
 -- also, this has semantics, when and if state is updated, etc.
-instance MonadError err m => MonadError err (BaseSteppApp s e m) where
+instance MonadError err m => MonadError err (BaseStepApp s e m) where
   throwError = lift . throwError
   catchError action handler = do
     curState <- get
     curEnv <- ask
-    let bsaToMonadErr = runReaderT curEnv . runStateT curState . unBaseStepApp
+    let bsaToMonadError = runReaderT curEnv . runStateT curState . unBaseStepApp
     (a, newState)  <- lift $ do
       let action' = bsaToMonadError action
           handler' = bsaToMonadError . handler
@@ -91,7 +98,13 @@ instance MonadError err m => MonadError err (BaseSteppApp s e m) where
     return a
 
 instance MonadThrow m => MonadThrow (BaseStepApp s e m) where
-  throwM = lift . throwM x
+  throwM = lift . throwM
+
+zoomBaseStepApp :: Monad m => Lens' s2 s1 -> BaseStepApp s1 e m a -> BaseStepApp s2 e m a
+zoomBaseStepApp l = BaseStepApp . (zoom l) . unBaseStepApp
+
+magnifyBaseStepApp :: Monad m => Lens' e2 e1 -> BaseStepApp s e1 m a -> BaseStepApp s e2 m a
+magnifyBaseStepApp l = BaseStepApp . (hoist $ magnify l) . unBaseStepApp
 
 newtype StepApp err s e a =
   StepApp { unStepApp :: BaseStepApp s e (Either err) a } deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
@@ -100,7 +113,7 @@ instance MonadError err (StepApp err s e) where
   throwError = StepApp . throwError
   catchError action handler = StepApp $ catchError (unStepApp action) (unStepApp . handler)
 
-instance MonadThrow (StepApp err s e) where
+instance MonadThrow (StepApp SomeException s e) where
   throwM  = StepApp . throwM
 
 newtype PStepApp s e a =
@@ -112,17 +125,12 @@ instance MonadThrow (PStepApp s e) where
 instance MonadIO (PStepApp s e) where
   liftIO  = PStepApp . lift . liftIO
 
-zoomBaseStepApp :: Monad m => Lens' s2 s1 -> BaseStepApp s1 e m a -> BaseStepApp s2 e m a
-zoomBaseStepApp l = fmap (zoom l)
-
-magnifyBaseStepApp :: Monad m => Lens' e2 e1 -> BaseStepApp s e1 m a -> BaseStepApp s e2 m a
-magnifyBaseStepApp l = fmap (hoist $ magnify l)
 
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
-zoomStepApp l = fmap (zoomBaseStepApp l)
+zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
 
 magnifyStepApp :: Lens' e2 e1 -> StepApp err s e1 a -> StepApp err s e2 a
-magnifyStepApp l = fmap (magnifyBaseStepApp l)
+magnifyStepApp l = StepApp . (magnifyBaseStepApp l) . unStepApp
 
 toStepApp :: StateT s (ReaderT e (Either err)) a -> StepApp err s e a
 toStepApp  = StepApp . BaseStepApp
@@ -137,7 +145,7 @@ instance MonadIO m => MonadIO (BasePathApp s e m) where
 -- this is all what MonadBaseControl is for, right??
 -- also, this has semantics, when and if state is updated, etc.
 instance MonadError err m => MonadError err (BasePathApp s e m) where
-  throwErrow = lift . throwError
+  throwError = lift . throwError
   catchError action handler = do
     curState <- get
     let bpaToMonadError = runState curState
@@ -151,7 +159,7 @@ instance MonadError err m => MonadError err (BasePathApp s e m) where
 newtype PathApp err s e a =
   PathApp { unPathApp :: BasePathApp s e (Either err) a} deriving (Functor, Applicative, Monad, MonadState (s,e))
 
-instance MonadError err (PathApp err s e a) where
+instance MonadError err (PathApp err s e) where
   throwError = PathApp . throwError
   catchError action handler = PathApp $ catchError (unPathApp action) (unPathApp . handler)
 
@@ -207,7 +215,7 @@ execPathApp app = execBasePathApp (unPathApp app)
 execPPathApp :: PPathApp s e a -> [LogLevel] -> s -> e -> IO (s,e)
 execPPathApp app logDetails = execBasePathApp (runEffect (unPPathApp app >-> printLog logDetails))
 
-liftStepApp :: StepApp SomeException s e a->PStepApp s e a
+liftStepApp :: StepApp SomeException s e a -> PStepApp s e a
 liftStepApp = PStepApp . lift . hoist eitherToIO . unStepApp -- adds IO at bottom of stack and wraps in Producer
 
 liftPathApp :: PathApp SomeException s e a -> PPathApp s e a
@@ -216,44 +224,119 @@ liftPathApp = PPathApp . lift . hoist eitherToIO . unPathApp
 baseStep2basePath :: Monad m => BaseStepApp s e m a -> BasePathApp s e m a
 baseStep2basePath = BasePathApp . multS . hoist readOnly . unBaseStepApp
 
+class Loggable m where
+  log :: LogLevel -> Text -> m ()
+
+class StepLiftable err s e m where
+  stepLift :: StepApp err s e a -> m a
+
+class Monad n => BaseStepLiftable s e n m where
+  baseStepLift :: BaseStepApp s e n a -> m a
+
+type LoggableStepApp err s e m = (MonadThrow m, Loggable m, MonadState s m, MonadReader e m)
+
+{-
 class (MonadThrow m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
   stepLog :: LogLevel -> String -> m ()
   stepLift :: StepApp err s e z -> m z
   fromBaseS :: BaseStepApp s e Identity x -> m x
+-}
 
-zoomStep :: LoggableStepApp s e m => Lens' s sInner -> StepApp sInner e x -> m x
+zoomStep :: (LoggableStepApp err s e m, StepLiftable err s e m) => Lens' s sInner -> StepApp err sInner e x -> m x
 zoomStep l = stepLift . zoomStepApp l
 
+instance Loggable (StepApp err s e) where
+  log _ _ = return ()
+
+instance StepLiftable err s e (StepApp err s e) where
+  stepLift = id
+
+instance BaseStepLiftable s e Identity (StepApp err s e) where
+  baseStepLift = StepApp . hoist generalize
+
+{-
 instance LoggableStepApp s e (StepApp err s e) where
   stepLog _ _ = return ()
   stepLift = id
   fromBaseS = StepApp . hoist generalize
+-}
 
+instance Loggable (PStepApp s e) where
+  log ll = PStepApp . faLog ll
+
+instance StepLiftable SomeException s e (PStepApp s e) where
+  stepLift = liftStepApp
+
+instance BaseStepLiftable s e Identity (PStepApp s e) where
+  baseStepLift = PStepApp . lift . hoist generalize
+
+{-
 instance LoggableStepApp s e (PStepApp s e) where
   stepLog ll msg = PStepApp $ faLog ll msg
   stepLift = liftStepApp
   fromBaseS = PStepApp . lift . hoist generalize
+-}
+class PathLiftable err s e m where
+  pathLift :: PathApp err s e a -> m a
 
+class Monad n => BasePathLiftable s e n m where
+  basePathLift :: BasePathApp s e n a -> m a
+
+class StepToPath stepM pathM where
+  stepToPath :: stepM a -> pathM a
+
+type LoggablePathApp err s e m = (MonadThrow m, Loggable m, MonadState (s,e) m)
+
+{-
 class (MonadThrow m, MonadState (s,e) m) => LoggablePathApp s e m where
   type Step s e m :: * -> *
   pathLog :: LogLevel -> String -> m ()
   pathLift :: PathApp err s e z -> m z
   fromBaseP :: BasePathApp s e Identity x -> m x
   step2Path :: Step s e m x -> m x
+-}
 
+instance Loggable (PathApp err s e) where
+  log _ _ = return ()
+
+instance PathLiftable err s e (PathApp err s e) where
+  pathLift = id
+
+instance BasePathLiftable s e Identity (PathApp err s e) where
+  basePathLift = PathApp . hoist generalize
+
+instance StepToPath (StepApp err s e) (PathApp err s e) where
+  stepToPath = PathApp . baseStep2BasePath . unStepApp
+
+{-
 instance LoggablePathApp s e (PathApp err s e) where
   type Step s e (PathApp err s e)  = StepApp err s e
   pathLog _ _ = return ()
   pathLift = id
   fromBaseP = PathApp . hoist generalize
   step2Path = PathApp . baseStep2basePath . unStepApp
+-}
 
+instance Loggable (PPathApp s e) where
+  log ll = PPathApp . faLog ll
+
+instance PathLiftable SomeException s e (PPathApp s e) where
+  pathLift = liftPathApp
+
+instance BasePathLiftable s e Identity (PPathApp s e) where
+  basePathLift = PPathApp . lift . hoist generalize
+
+instance StepToPath (PStepApp s e) (PPathApp s e) where
+  stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
+
+{-
 instance LoggablePathApp s e (PPathApp s e) where
   type Step s e (PPathApp s e) = PStepApp s e
   pathLog ll = PPathApp . faLog ll
   pathLift = liftPathApp
   fromBaseP = PPathApp . lift . hoist generalize
   step2Path = PPathApp . hoist baseStep2basePath . unPStepApp
+-}
 
 faLog :: Monad m => LogLevel -> String -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
@@ -269,12 +352,13 @@ printLog lvls = do
   unless (null lvls) (printL le)
   printLog lvls
 
-taxDataApp2StepAppFSER::LoggableStepApp FinState ExchangeRateFunction app => TaxDataApp (Either SomeException) a->app a
+--taxDataApp2StepAppFSER::LoggableStepApp FinState ExchangeRateFunction app => TaxDataApp (Either SomeException) a->app a
+taxDataApp2StepAppFSER :: StepLiftable err FinState ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
 taxDataApp2StepAppFSER tda = stepLift . (zoomStepApp fsTaxData).  toStepApp $ tda
 
-
-taxDataApp2StepAppFS::TaxDataApp (Either SomeException) a->StepApp FinState (FinEnv rm) a
+taxDataApp2StepAppFS :: TaxDataApp (Either err) a -> StepApp err FinState (FinEnv rm) a
 taxDataApp2StepAppFS tda = (zoomStepApp fsTaxData) . (magnifyStepApp feExchange) . toStepApp $ tda
 
-taxDataApp2StepApp::LoggableStepApp TaxData ExchangeRateFunction app=>TaxDataApp (Either SomeException) a->app a
-taxDataApp2StepApp tda = stepLift . toStepApp $ tda
+--taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction app=>TaxDataApp (Either SomeException) a->app a
+taxDataApp2StepApp :: StepLiftable err TaxData ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
+taxDataApp2StepApp = stepLift . toStepApp
