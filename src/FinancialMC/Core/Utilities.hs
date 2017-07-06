@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveAnyClass  #-}
 {-# LANGUAGE DeriveGeneric   #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 module FinancialMC.Core.Utilities
        (
          readOnly
@@ -9,6 +10,7 @@ module FinancialMC.Core.Utilities
        , note
        , FMCException(..)
        , AsFMCException (..)
+       , HasFMCException
        , eitherToIO
        , noteM
        , mapSl
@@ -25,8 +27,9 @@ module FinancialMC.Core.Utilities
 
 import           Control.Error              (note)
 import           Control.Exception          (fromException, toException)
-import           Control.Exception.Lens     (exception, throwingM)
-import           Control.Lens               (makeClassyPrisms, prism)
+import           Control.Exception.Lens     (throwingM)
+import           Control.Lens               (makeClassyPrisms, over, prism,
+                                             _Left, iso)
 import           Control.Monad.Catch        (Exception, MonadThrow,
                                              SomeException, throwM)
 import           Control.Monad.Reader       (ReaderT (ReaderT), runReaderT)
@@ -37,6 +40,8 @@ import           Data.Typeable              (Typeable)
 
 import           Data.Aeson                 (FromJSON, ToJSON)
 import           GHC.Generics               (Generic)
+import Control.Monad.Except (MonadError)
+import Control.Monad.Error.Lens (throwing)
 
 readOnly :: Monad m => ReaderT s m r -> StateT s m r
 readOnly readerT = StateT  (\x -> do
@@ -56,26 +61,38 @@ multR (ReaderT k) = ReaderT (\(x,y) -> do
                        l y)
 
 type Err = T.Text
-data FMCException = FailedLookup String | BadParse String | Other Err deriving (Show, Typeable)
+data FMCException = FailedLookup T.Text | BadParse T.Text | Other Err deriving (Show, Typeable)
 instance Exception FMCException
 
 makeClassyPrisms ''FMCException
 
 instance AsFMCException SomeException where
   _FMCException = prism toException (\se -> maybe (Left se) Right $ fromException se)
+  _FailedLookup = _FMCException . _FailedLookup
+  _BadParse = _FMCException . _BadParse
+  _Other = _FMCException . _Other
 
-eitherToIO::Either SomeException a->IO a
-eitherToIO x = case x of
+class HasFMCException a where
+  toFMCException :: a -> FMCException
+
+instance HasFMCException FMCException where
+  toFMCException = id
+
+convertErrorType :: HasFMCException err => Either err a -> Either SomeException a
+convertErrorType = over _Left (toException . toFMCException)
+
+eitherToIO :: HasFMCException err => Either err a -> IO a
+eitherToIO x = case (convertErrorType x) of
   Left e  -> throwingM (prism id Right) e
   Right a -> return a
 
 
-noteM::MonadThrow m=>FMCException->Maybe a->m a
+noteM :: MonadError FMCException m => FMCException -> Maybe a -> m a
 noteM exc ma =
   let res = note exc ma
   in case res of
-    Left fmcExc -> throwingM exception fmcExc
-    Right x        -> return x
+    Left fmcExc -> throwing (iso id id) fmcExc
+    Right x     -> return x
 
 --functions to fold over foldable while accumulating a list of results and using another piece of state (s0).
 mapSl::F.Foldable t=>(a->s->(b,s))->s->t a->[b]

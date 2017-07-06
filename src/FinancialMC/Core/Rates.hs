@@ -39,13 +39,16 @@ import           Data.Random.Source.PureMT (PureMT)
 import           Data.Maybe (fromJust)
 import           Control.Monad.State.Strict (runStateT,MonadState)
 import           Control.Monad.Reader (MonadReader(ask))
-import           Control.Monad.Catch (MonadThrow)
+--import           Control.Monad.Catch (MonadThrow)
 import qualified Data.Map.Lazy as M
 import           Text.Printf (printf,PrintfArg)
 
 import           Data.Aeson (ToJSON(..),FromJSON(..))
 import           GHC.Generics (Generic)
-
+import Control.Monad.Except (MonadError)
+--import Control.Monad.Error.Lens (throwing)
+import Data.Monoid ((<>))
+import qualified Data.Text as T
 
 data InterestType = Savings | CreditCard deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,FromJSON,ToJSON)
 data ReturnType = Stock | Bond | RealEstate deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,FromJSON,ToJSON)
@@ -92,33 +95,33 @@ data RateTable a = RateTable { rLookup::RateTag->Maybe a,
                    
                    
 instance (PrintfArg a,Num a)=>Show (RateTable a) where
-  show rt = "[" ++ show (map f (rKeys rt)) ++ "]" where
+  show rt = "[" ++ show (fmap f (rKeys rt)) ++ "]" where
     fmtRate x = printf "%.2f" (x*100)
     f k = "(" ++ show k ++ "," ++ fmtRate (fromJust $ rLookup rt k) ++ "%)"
 
 
-fromMap::M.Map RateTag a->RateTable a   
+fromMap :: M.Map RateTag a -> RateTable a   
 fromMap m = RateTable (`M.lookup` m) (\t r->fromMap $ M.insert t r m) (M.toList m) (M.keys m)    
 
-setToDefaults::RateTable Double->RateTable Double
+setToDefaults :: RateTable Double->RateTable Double
 setToDefaults t = foldl (\tbl key-> (rSet tbl) key (defaultRates key)) t allTags 
 
-defaultRateTable::RateTable Double
+defaultRateTable :: RateTable Double
 defaultRateTable = setToDefaults $ fromMap M.empty
 
-throwingLookup::MonadThrow m=>RateTable a->RateTag->m a 
-throwingLookup rt t = noteM (FailedLookup (show t ++ ": rate not found")) $ rLookup rt t
+throwingLookup :: MonadError FMCException m => RateTable a -> RateTag -> m a 
+throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not found")) $ rLookup rt t
 
-rateRequest::(MonadReader (RateTable a) m,MonadThrow m)=>RateTag->m a
+rateRequest :: (MonadReader (RateTable a) m, MonadError FMCException m)=>RateTag->m a
 rateRequest rTag = ask >>= flip throwingLookup rTag
 
-type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadThrow m)
+type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadError FMCException m)
 
-applyModel::(IsRateModel r,MonadThrow m)=>(RateTable Rate,RSource)->r->m (r,(RateTable Rate,RSource))
+applyModel :: (IsRateModel r, MonadError FMCException m) => (RateTable Rate,RSource) -> r -> m (r, (RateTable Rate, RSource))
 applyModel (rates,src) model = runStateT (rateModelF model) (rates,src)
 
 class IsRateModel a where
-  rateModelF::(MonadState (RateTable Rate, RSource) m,MonadThrow m)=>a->m a
+  rateModelF :: (MonadState (RateTable Rate, RSource) m, MonadError FMCException m) => a-> m a
 
 {-
 data RateModel where

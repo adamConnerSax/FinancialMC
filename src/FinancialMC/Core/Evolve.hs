@@ -24,7 +24,7 @@ module FinancialMC.Core.Evolve
        , evolveAndApply
        ) where
 
-import           FinancialMC.Core.FinApp          (LoggableStepApp (..),
+import           FinancialMC.Core.FinApp          (LoggableStepApp,
                                                    StepLiftable (stepLift),
                                                    magnifyStepApp,
                                                    taxDataApp2StepAppFSER,
@@ -44,13 +44,16 @@ import           FinancialMC.Core.Result          (Result (Result), ResultT,
 import           FinancialMC.Core.Tax             (TaxDataApp, TaxType,
                                                    addDeductibleFlow,
                                                    addTaxableFlow)
-import           FinancialMC.Core.Utilities       (FMCException (..))
+import           FinancialMC.Core.Utilities       (AsFMCException (..),
+                                                   FMCException (..))
 
-import           Control.Monad.Catch              (MonadThrow, SomeException,
-                                                   throwM)
+--import           Control.Monad.Catch              (MonadThrow, SomeException,
+--                                                   throwM)
+import           Control.Monad.Except             (MonadError)
 import           Control.Monad.Reader             (ReaderT, lift)
 
 import           Control.Lens                     (Lens', magnify, mapMOf)
+import           Control.Monad.Error.Lens         (throwing)
 import qualified Data.Traversable                 as TR
 --import qualified Data.Text as T
 
@@ -82,57 +85,56 @@ instance Monoid EvolveOutput where
 
 type EvolveResult a = Result EvolveOutput a
 
-type EvolveApp err rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either err))
+type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
 
-type Evolver err rm a = a -> EvolveApp err rm a
+type Evolver rm a = a -> EvolveApp rm a
 
-liftER :: MV.ER (Either err) a -> EvolveApp err rm a
+liftER :: MV.ER (Either FMCException) a -> EvolveApp rm a
 liftER = lift . magnify feExchange
 
-class Evolvable err e where
-  evolve :: IsRateModel rm => Evolver err rm e
+class Evolvable e where
+  evolve :: IsRateModel rm => Evolver rm e
 
-
-evolveWithin :: IsRateModel rm => (Evolvable err a, TR.Traversable t)=> b -> Lens' b (t a) -> EvolveApp err rm b
+evolveWithin :: IsRateModel rm => (Evolvable a, TR.Traversable t)=> b -> Lens' b (t a) -> EvolveApp rm b
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
 
-
-applyTax :: forall err m. (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m) => TaxAmount -> m ()
+applyTax ::( MonadError FMCException m
+           , StepLiftable FMCException FinState ExchangeRateFunction m)
+  => TaxAmount -> m ()
 applyTax (TaxAmount tt y) =
-  let taxFlow :: TaxDataApp (Either err) ()
+  let taxFlow :: TaxDataApp (Either FMCException) ()
       taxFlow = addTaxableFlow tt y
-      applyAction :: StepLiftable err FinState ExchangeRateFunction m => m ()
       applyAction = taxDataApp2StepAppFSER taxFlow
-      errorAction:: MonadThrow m => m ()
-      errorAction = throwM $ Other "Can't call applyTax with a -ve number."
+      errorAction = throwing _Other "Can't call applyTax with a -ve number."
   in if MV.isNonNegative y then applyAction else errorAction
 
-
-
-applyDeduction :: forall err m. (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m) => TaxAmount -> m ()
+applyDeduction :: ( MonadError FMCException m
+                  , StepLiftable FMCException FinState ExchangeRateFunction m)
+  => TaxAmount -> m ()
 applyDeduction (TaxAmount tt y) =
-  let taxFlow :: TaxDataApp (Either err) ()
+  let taxFlow :: TaxDataApp (Either FMCException) ()
       taxFlow = addDeductibleFlow tt y
       applyAction = taxDataApp2StepAppFSER taxFlow
-      errorAction = throwM $ Other "Can't call applyTax with a -ve number."
+      errorAction = throwing _Other "Can't call applyTax with a -ve number."
   in if MV.isNonNegative y then applyAction else errorAction
 
-applyFlowAndTax :: forall err m. ( MonadThrow m
-                                 , LoggableStepApp err FinState ExchangeRateFunction m
-                                 , StepLiftable err FinState ExchangeRateFunction m)
+applyFlowAndTax :: ( MonadError FMCException m
+                   , LoggableStepApp FinState ExchangeRateFunction m
+                   , StepLiftable FMCException FinState ExchangeRateFunction m)
   => MoneyValue -> TaxAmount -> m ()
-applyFlowAndTax x ta =
-  let taxFlow :: (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m) => m ()
-      taxFlow = applyTax ta
-  in addCashFlow x >> taxFlow
+applyFlowAndTax x ta =   addCashFlow x >> applyTax ta
 
-
-applyFlowAndDeduction :: (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m) => MoneyValue -> TaxAmount -> m ()
+applyFlowAndDeduction :: ( MonadError FMCException m
+                         , LoggableStepApp FinState ExchangeRateFunction m
+                         , StepLiftable FMCException FinState ExchangeRateFunction m) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndDeduction x ta = addCashFlow x >> applyDeduction ta
 
 
 
-applyFlow :: (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m)=>FlowResult -> m ()
+applyFlow :: ( MonadError FMCException m
+             , LoggableStepApp FinState ExchangeRateFunction m
+             , StepLiftable FMCException FinState ExchangeRateFunction m)
+  =>FlowResult -> m ()
 applyFlow (UnTaxed x) = addCashFlow x
 applyFlow (AllTaxed ta@(TaxAmount _ x)) = applyFlowAndTax x ta
 applyFlow (AllDeductible ta@(TaxAmount _ x)) = applyFlowAndDeduction (MV.negate x) ta
@@ -142,26 +144,40 @@ applyFlow (PartiallyTaxed x ta) = applyFlowAndTax x ta
 applyFlow (PartiallyDeductible x ta) = applyFlowAndDeduction x ta
 
 
-applyFlows :: (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m) => [FlowResult] -> app ()
+applyFlows :: ( MonadError FMCException m
+              , LoggableStepApp FinState ExchangeRateFunction m
+              , StepLiftable FMCException FinState ExchangeRateFunction m)
+  => [FlowResult] -> m ()
 applyFlows = mapM_ applyFlow
 
 
-applyAccum :: (LoggableStepApp err FinState ExchangeRateFunction m) => AccumResult -> m ()
+applyAccum :: ( MonadError FMCException m
+              , LoggableStepApp FinState ExchangeRateFunction m) => AccumResult -> m ()
 applyAccum (AddTo name amt) = addToAccumulator' name amt
 applyAccum (Zero name)      = zeroAccumulator name
 
 
-applyAccums :: (MonadThrow m, LoggableStepApp err FinState ExchangeRateFunction m) => [AccumResult] -> m ()
+applyAccums :: ( MonadError FMCException m
+               , LoggableStepApp FinState ExchangeRateFunction m) => [AccumResult] -> m ()
 applyAccums  = mapM_ applyAccum
 
 
-applyEvolveResult :: (MonadThrow m, LoggableStepApp err FinState ExchangeRateFunction app) => EvolveResult a -> m a
+applyEvolveResult :: ( MonadError FMCException m
+                     , StepLiftable FMCException FinState ExchangeRateFunction m
+                     , LoggableStepApp FinState ExchangeRateFunction m) => EvolveResult a -> m a
 applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyFlows flows
   applyAccums accums
   return $! a
 
-evolveAndApply :: IsRateModel rm => (Evolvable err a, LoggableStepApp err FinState (FinEnv rm) app)=> a -> m a
-evolveAndApply a = stepLift $  do
-  x <- (toStepApp . lift . runResultT . evolve $ a)
-  magnifyStepApp feExchange . applyEvolveResult $ x
+evolveAndApply :: forall rm m a. ( IsRateModel rm
+                                 , MonadError FMCException m
+                                 , Evolvable a
+                                 , LoggableStepApp FinState (FinEnv rm) m
+                                 , StepLiftable FMCException FinState (FinEnv rm) m)
+  => a -> m a
+evolveAndApply x = stepLift $  do
+  let result :: ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException)) a
+      result = evolve x
+  x <- toStepApp $ lift $ runResultT result
+  magnifyStepApp feExchange $ applyEvolveResult x

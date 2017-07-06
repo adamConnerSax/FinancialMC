@@ -64,20 +64,20 @@ import qualified Data.Text                        as T
 
 import           GHC.Generics                     (Generic)
 
-mvLift::Monad m=>MV.ER m a->ReaderT FinState (ReaderT (FinEnv rm) m) a
-mvLift=lift . magnify feExchange
+mvLift :: Monad m => MV.ER m a -> ReaderT FinState (ReaderT (FinEnv rm) m) a
+mvLift = lift . magnify feExchange
 
-liftFE::ReaderT (FinEnv rm) (Either SomeException) a->ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)) a
+liftFE :: ReaderT (FinEnv rm) (Either err) a -> ReaderT FinState (ReaderT (FinEnv rm) (Either err)) a
 liftFE = lift
 
-liftFS::ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)) a->
-        ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException))) a
+liftFS :: ReaderT FinState (ReaderT (FinEnv rm) (Either err)) a->
+          ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either err))) a
 liftFS = lift
 
-laERMV::Monad m=>Currency->CV.CVD->ReaderT FinState (ReaderT (FinEnv rm) m) MoneyValue
+laERMV :: Monad m=>Currency->CV.CVD->ReaderT FinState (ReaderT (FinEnv rm) m) MoneyValue
 laERMV c = mvLift . CV.asERMV c
 
-liftGetA::AccountGetter a->AccountName->ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)) (Account a)
+liftGetA :: AccountGetter a -> AccountName -> ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) (Account a)
 liftGetA getA name = lift . lift $ getA name
 
 data BaseRuleDetails =
@@ -140,7 +140,7 @@ baseRuleWhen (SellAsNeeded _)                = AfterSweep
 baseRuleWhen (TaxTrade _)                    = Special
 baseRuleWhen (Sweep _)                       = Special
 
-doBaseRule::IsAsset a=>BaseRuleDetails->AccountGetter a->RuleApp rm ()
+doBaseRule :: IsAsset a=>BaseRuleDetails->AccountGetter a->RuleApp rm ()
 --If there is spending (in "accumName"), sell assets from acctName if available to cover with tax treatment from tt
 doBaseRule (PayFrom acctName accumName) getA = do
   output <- lift $ do

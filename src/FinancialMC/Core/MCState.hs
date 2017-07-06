@@ -17,7 +17,6 @@ module FinancialMC.Core.MCState
        , makeNewBalanceSheet
        , insertAccount --NB: replaces if already present, like Map.insert
        , CashFlows (CashFlows)
-       , HasBalanceSheet (..)
        , makeNewCashFlows
        , addFlow
        , MCState(MCState)
@@ -47,7 +46,7 @@ module FinancialMC.Core.MCState
 import           FinancialMC.Core.Asset (IsAsset,AccountName,Account(Account),HasAccount(..),accountValueCV)
 import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
-import           FinancialMC.Core.FinApp (LoggableStepApp,zoomStep)
+import           FinancialMC.Core.FinApp (LoggableStepApp,StepLiftable,zoomStep)
 import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,HasFinState(..))
 import           FinancialMC.Core.Flow (FlowName,FlowDirection(..),flowName,flowingAt,IsFlow(..),annualFlowAmount)
 import           FinancialMC.Core.MapLike (IsMap(..))
@@ -60,14 +59,16 @@ import           FinancialMC.Core.Utilities (noteM,FMCException(Other),Year)
 import qualified Data.Map as M
 --import qualified Data.HashMap.Strict as HM
 import qualified Data.Foldable as F
-
+import Data.Monoid ((<>))
+import qualified Data.Text as T
 import           Data.Aeson hiding ((.=))
 import           Data.Aeson.Types hiding ((.=))
 import           GHC.Generics (Generic)
 
 import           Control.DeepSeq (NFData(..))
-import           Control.Exception (SomeException)
+--import           Control.Exception (SomeException)
 import           Control.Lens (makeClassy,use,(^.),(%=),(.=),(<>=))
+import Control.Monad.Except (MonadError)
 
 import           Control.Monad (when)
 import           Control.Monad.Reader (ask)
@@ -134,8 +135,8 @@ insertAccount acct@(Account name _ _ _) = bsAccountMap %=  mInsert name acct
 addFlow::IsFlow fl=>fl->State (CashFlows fl) ()
 addFlow f = cfdFlowMap %= mInsert (flowName f) f
 
-getAccount::MonadThrow m => AccountName -> BalanceSheet a -> m (Account a) --Either SomeException (Account a)
-getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" ++ show name ++ "\"")) $ mLookup name am 
+getAccount :: MonadError FMCException m => AccountName -> BalanceSheet a -> m (Account a) --Either SomeException (Account a)
+getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" <> (T.pack $ show name) <> "\"")) $ mLookup name am 
 
 putAccount::Account a->AccountName->BalanceSheet a->BalanceSheet a
 putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am) 
@@ -287,7 +288,11 @@ makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [
   z = MV.zero  (fe ^. feDefaultCCY)
 
 --NB: this is where all the evolution flows and accums finally get applied
-evolveMCS::(Evolvable a,Evolvable fl,IsRateModel rm)=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>app ()
+evolveMCS :: ( Evolvable a
+             , Evolvable fl
+             , IsRateModel rm
+             , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
+             , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
 evolveMCS = do
   mcs <- use csMC
   mcs' <- zoomStep csFinancial $ evolveAndApply mcs

@@ -65,13 +65,13 @@ import           Data.Aeson.Types                 (FromJSON (..), ToJSON (..),
 
 import           GHC.Generics                     (Generic)
 
-laERMV::Monad m=>Currency->CV.CVD->ReaderT (FinEnv rm) m MoneyValue
+laERMV :: Monad m => Currency -> CV.CVD -> ReaderT (FinEnv rm) m MoneyValue
 laERMV c = magnify feExchange . CV.asERMV c
 
-assetCVMult::(IsAsset a,Monad m)=>a->Double->ReaderT (FinEnv rm) m MoneyValue
+assetCVMult :: (IsAsset a,Monad m) => a -> Double -> ReaderT (FinEnv rm) m MoneyValue
 assetCVMult x rate = laERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (assetValue x)
 
-liftRates::ReaderT (RateTable Double) (Either SomeException) Double -> ReaderT (FinEnv rm) (Either SomeException) Double
+liftRates :: ReaderT (RateTable Double) (Either err) Double -> ReaderT (FinEnv rm) (Either err) Double
 liftRates = magnify feRates
 
 data MixedFundDetails = MixedFundDetails { _mfdStockPercentage :: !Double

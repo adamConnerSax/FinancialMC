@@ -49,13 +49,13 @@ module FinancialMC.Parsers.Configuration
 import           FinancialMC.Core.MoneyValue (Currency,MoneyValue)
 import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..))
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
-import           FinancialMC.Core.Rule (IsRule)
-import           FinancialMC.Core.LifeEvent (IsLifeEvent)
+--import           FinancialMC.Core.Rule (IsRule)
+--import           FinancialMC.Core.LifeEvent (IsLifeEvent)
 import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..))
 import           FinancialMC.Parsers.JSON.Utilities (EnumKeyMap(..))
 
 import           Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON,object,(.=),(.:),Value(Object))
-import           Data.Aeson.TH (deriveJSON,Options(..),defaultOptions)
+import           Data.Aeson.TH (Options(..),defaultOptions)
 
 import           Control.Applicative ((<|>))
 import qualified Control.Lens as Lens
@@ -64,6 +64,8 @@ import           Control.Monad.State.Strict (State,get,put)
 import           Data.List.Split (splitOn)
 import qualified Data.Map as M
 import           GHC.Generics (Generic)
+import qualified Data.Text as T
+import Data.Monoid ((<>))
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
@@ -274,9 +276,9 @@ instance FromJSON CityTaxStructure where
 {-  $(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''CityTaxStructure) -}
 
 data TaxStructure = TaxStructure {
-  _tsFederal::M.Map String FederalTaxStructure,
-  _tsState::M.Map String StateTaxStructure,
-  _tsCity::M.Map String CityTaxStructure } deriving (Show,Generic)
+  _tsFederal :: M.Map String FederalTaxStructure,
+  _tsState :: M.Map String StateTaxStructure,
+  _tsCity :: M.Map String CityTaxStructure } deriving (Show,Generic)
 
 Lens.makeClassy ''TaxStructure
 
@@ -287,19 +289,27 @@ instance FromJSON TaxStructure where
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier = drop 3} ''TaxStructure) -}
 
-lookupTS::M.Map String a->String->String->Either E.SomeException a
+lookupTS :: M.Map String a -> String -> String -> Either FMCException a
 lookupTS taxMap key taxLevelString =
-  noteM (FailedLookup ("Couldn't find " ++ show key ++ " in loaded " ++ taxLevelString ++ " tax structures.")) $ M.lookup key taxMap
+  noteM (FailedLookup ("Couldn't find "
+                       <> (T.pack $ show key)
+                       <> " in loaded "
+                       <> (T.pack taxLevelString)
+                       <> " tax structures.")) $ M.lookup key taxMap
 
-lookupTB::M.Map FilingStatus TaxBrackets->FilingStatus->String->Either E.SomeException TaxBrackets
+lookupTB :: M.Map FilingStatus TaxBrackets -> FilingStatus -> String -> Either FMCException TaxBrackets
 lookupTB bracketMap filingStatus taxName =
-  noteM (FailedLookup ("Couldn't find " ++ show filingStatus ++ " in loaded " ++ taxName ++ " tax structures.")) $ M.lookup filingStatus bracketMap
+  noteM (FailedLookup ("Couldn't find "
+                       <> (T.pack $ show filingStatus)
+                       <> " in loaded "
+                       <> (T.pack taxName)
+                       <> " tax structures.")) $ M.lookup filingStatus bracketMap
 
-makeTaxRules::TaxStructure->FilingStatus->String->String->Maybe String->Either E.SomeException TaxRules
+makeTaxRules :: TaxStructure -> FilingStatus -> String -> String -> Maybe String -> Either FMCException TaxRules
 makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateName mCityName = do
   (FederalTaxStructure fedInc payroll estate cgrb (medSRate,medSThresh)) <- lookupTS fedByName fedName "federal"
   fedT <- lookupTB (unEnumKeyMap fedInc) fs fedName
-  msThresh <- noteM (FailedLookup ("Couldn't find " ++ show fs ++ " in Medicare Surtax MAGI thresholds.")) $ M.lookup fs (unEnumKeyMap medSThresh)
+  msThresh <- noteM (FailedLookup ("Couldn't find " <> (T.pack $ show fs) <> " in Medicare Surtax MAGI thresholds.")) $ M.lookup fs (unEnumKeyMap medSThresh)
   (StateTaxStructure stateInc stateCG) <- lookupTS stateByName stateName "state"
   stateT <- lookupTB (unEnumKeyMap stateInc) fs stateName
   cityT <- case mCityName of
@@ -307,7 +317,7 @@ makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateNam
     Just n -> lookupTS cityByName n "city" >>= (\(CityTaxStructure bktMap)->lookupTB (unEnumKeyMap bktMap) fs n)
   return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSRate msThresh) stateT stateCG cityT
 
-emptyTaxStructure::TaxStructure
+emptyTaxStructure :: TaxStructure
 emptyTaxStructure = TaxStructure M.empty M.empty M.empty
 
 

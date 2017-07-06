@@ -8,7 +8,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-
+{-# LANGUAGE OverloadedStrings #-}
 module FinancialMC.Core.Tax 
        (
          TaxType(..)
@@ -40,7 +40,7 @@ module FinancialMC.Core.Tax
 import FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),HasMoneyValue(..),Currency(USD),ExchangeRateFunction)
 --import FinancialMC.Core.MoneyValueOps (MDiv(..),AGroup(..),(*|),(|>|))
 import qualified FinancialMC.Core.MoneyValueOps as MV
-import FinancialMC.Core.Utilities (FMCException(FailedLookup),noteM)
+import FinancialMC.Core.Utilities (FMCException(FailedLookup),noteM, AsFMCException (..))
 import qualified FinancialMC.Core.CValued as CV
 import           FinancialMC.Core.CValued ((|+|),(|-|),(|*|),(|/|),(|>|),(|<|),cvMin,cvMax)
 
@@ -53,7 +53,11 @@ import Control.Monad (liftM2)
 import Control.Monad.Reader (ReaderT,ask,lift,MonadReader)
 import Control.Monad.State.Strict (StateT,put,get,MonadState)
 import Control.Exception (SomeException)
-import Control.Monad.Catch (MonadThrow(throwM))
+--import Control.Monad.Catch (MonadThrow(throwM))
+import Control.Monad.Except (MonadError)
+import Control.Monad.Error.Lens (throwing)
+import Data.Monoid ((<>))
+import qualified Data.Text as T
 
 import Data.Aeson (ToJSON(..),FromJSON(..),genericToJSON,genericParseJSON)
 import Data.Aeson.Types (Options(..),defaultOptions)
@@ -104,11 +108,11 @@ defaultTaxMap c = M.fromList (defaultTaxList c)
 defaultTaxData::Currency->TaxData
 defaultTaxData c = TaxData (defaultTaxMap c) c
 
-throwableLookup::(MonadThrow m,Show k,Ord k)=>String->M.Map k v->k->m v
+throwableLookup :: (MonadError FMCException m, Show k, Ord k)=>T.Text -> M.Map k v -> k -> m v
 throwableLookup mapName m key = do
   let res = M.lookup key m
   case res of 
-    Nothing -> throwM $ FailedLookup ("lookup of " ++ show key ++ " in " ++ mapName ++ " failed!") 
+    Nothing -> throwing _FailedLookup ("lookup of " <> (T.pack $ show key) <> " in " <> mapName <> " failed!") 
     Just x -> return x
 
 
@@ -133,7 +137,7 @@ carryForwardTaxDetails (TaxDetails (MoneyValue t ccy) (MoneyValue d _)) =
   else TaxDetails (MV.zero ccy) (MoneyValue (d-t) ccy)
                   
 
-carryForwardTaxData :: (MonadThrow m, TaxDataAppC m) => m ()
+carryForwardTaxData :: (MonadError FMCException m, TaxDataAppC m) => m ()
 carryForwardTaxData = do
   (TaxData tm ccy) <- get
   let f = throwableLookup "TaxData" tm
@@ -276,13 +280,13 @@ fedCapitalGainRateCV' (FedCapitalGains tRate rateBands) margRate' =
 maxFedCapGainCV::CV.SVD
 maxFedCapGainCV = fedCapitalGainRateCV (CV.toSVD 1)
 
-fullTaxCV::TaxRules->TaxData->MV.ER (Either SomeException) (MoneyValue,Double)
+fullTaxCV :: TaxRules -> TaxData -> MV.ER (Either FMCException) (MoneyValue,Double)
 fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm ccy) = do
   e <- ask
   let cTax = computeIncomeTaxCV'' ccy e
       net' (TaxDetails inFlow deds) = CV.fromMoneyValue inFlow |-| CV.fromMoneyValue deds
       gross (TaxDetails inFlow _) = inFlow
-      details tt = lift $ noteM (FailedLookup ("Failed to find " ++ show tt ++ " in TaxMap!")) (M.lookup tt tm)
+      details tt = lift $ noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
 
 
   ordinaryD <- details OrdinaryIncome             

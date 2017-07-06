@@ -1,5 +1,6 @@
-{-# LANGUAGE Arrows #-}
-module FinancialMC.Parsers.XML.Utilities 
+{-# LANGUAGE Arrows            #-}
+{-# LANGUAGE OverloadedStrings #-}
+module FinancialMC.Parsers.XML.Utilities
        (
          parseXML
        , buildOpts
@@ -21,20 +22,38 @@ module FinancialMC.Parsers.XML.Utilities
        , xmlParseError
        ) where
 
-import Text.XML.HXT.Core (SysConfig,withValidate,no,yes,hasName,changeUserState,(>>>),constA,returnA,getUserState,arr,withRemoveWS,
-                          XmlTree,first,ArrowXml,XNode,deep,isElem,hasAttr,orElse,getAttrValue,IOStateArrow,readDocument)
+import           Text.XML.HXT.Core                           (ArrowXml,
+                                                              IOStateArrow,
+                                                              SysConfig, XNode,
+                                                              XmlTree, arr,
+                                                              changeUserState,
+                                                              constA, deep,
+                                                              first,
+                                                              getAttrValue,
+                                                              getUserState,
+                                                              hasAttr, hasName,
+                                                              isElem, no,
+                                                              orElse,
+                                                              readDocument,
+                                                              returnA,
+                                                              withRemoveWS,
+                                                              withValidate, yes,
+                                                              (>>>))
 
-import Text.XML.HXT.Arrow.XmlState.RunIOStateArrow (runXIOState,initialState)
-import Text.XML.HXT.RelaxNG (withRelaxNG)
-import Data.Tree.NTree.TypeDefs (NTree)
-import Text.Read (readEither)
+import           Data.Tree.NTree.TypeDefs                    (NTree)
+import           Text.Read                                   (readEither)
+import           Text.XML.HXT.Arrow.XmlState.RunIOStateArrow (initialState,
+                                                              runXIOState)
+import           Text.XML.HXT.RelaxNG                        (withRelaxNG)
 
-import Control.Monad (when)
-import Control.Monad.Catch (throwM)
+import           Control.Monad                               (when)
+import           Control.Monad.Catch                         (throwM)
 
-import FinancialMC.Core.Utilities (FMCException(..))
-import Data.Maybe (catMaybes)
-import Safe (readNote)
+import           Data.Maybe                                  (catMaybes)
+import           Data.Monoid                                 ((<>))
+import qualified Data.Text                                   as T
+import           FinancialMC.Core.Utilities                  (FMCException (..))
+import           Safe                                        (readNote)
 
 data XmlParseInfo = Info String | Error String deriving (Show)
 
@@ -43,23 +62,23 @@ newtype XmlParseInfos = XmlParseInfos { infoList::[XmlParseInfo] }
 instance Show XmlParseInfos where
   show (XmlParseInfos is) = show is
 
-type FMCXmlArrow a b = IOStateArrow XmlParseInfos a b 
+type FMCXmlArrow a b = IOStateArrow XmlParseInfos a b
 
 
-deMaybe::[Maybe a]->[a]  
+deMaybe::[Maybe a]->[a]
 deMaybe = catMaybes
 
 parseXML::String->FMCXmlArrow b XmlTree
-parseXML = readDocument [ withValidate no, withRemoveWS yes] 
+parseXML = readDocument [ withValidate no, withRemoveWS yes]
 
 atTag::ArrowXml a=>String->a (NTree XNode) XmlTree
 atTag tag = deep (isElem >>> hasName tag)
-  
+
 readAttrValue::(ArrowXml a, Read b)=>String->a XmlTree b
-readAttrValue attrName = proc l -> do            
+readAttrValue attrName = proc l -> do
   x <- getAttrValue attrName -< l
   returnA -< readNote ("Reading attribute: " ++ attrName) x
-  
+
 readAttrValueEither::(ArrowXml a, Read b)=>String->a XmlTree (Either String b)
 readAttrValueEither  attrName = proc l -> do
   x <- getAttrValue attrName -< l
@@ -67,11 +86,11 @@ readAttrValueEither  attrName = proc l -> do
 
 readAttrValueDef::Read b=>String->b->FMCXmlArrow XmlTree b
 readAttrValueDef name def = proc l -> do
-  e <- readAttrValueEither name -< l 
+  e <- readAttrValueEither name -< l
   y <- eitherADef def ("Error parsing a \"" ++ name ++ "\" attribute. ") -< e
   returnA -< y
-  
-  
+
+
 readAttrValueIf::(ArrowXml a, Read b)=>String->a XmlTree (Maybe b)
 readAttrValueIf name = (hasAttr name >>> readAttrValue name >>> arr Just) `orElse` constA Nothing
 
@@ -106,11 +125,11 @@ eitherA msgIn = proc l -> do
     Right x ->  constA (Just x) -<< l
   returnA -< r
 -}
-  
+
 eitherADef::a->String->FMCXmlArrow (Either String a) a
 eitherADef def msgIn = proc l -> do
   r <- case l of
-    Left msg -> addInfoA (Error (msgIn++msg)) 
+    Left msg -> addInfoA (Error (msgIn++msg))
                 >>> constA def  -<< l
     Right x ->  constA x -<< l
   returnA -< r
@@ -122,7 +141,7 @@ split::FMCXmlArrow a (a,a)
 split = arr (\x->(x,x))
 
 isXmlParseError::XmlParseInfo->Bool
-isXmlParseError (Info _) = False
+isXmlParseError (Info _)  = False
 isXmlParseError (Error _) = True
 
 xmlParseError::XmlParseInfos->Bool
@@ -131,13 +150,13 @@ xmlParseError (XmlParseInfos infos) = any isXmlParseError infos --not (null (fil
 xpiMerge::[XmlParseInfos]->XmlParseInfos
 xpiMerge li = XmlParseInfos $ li >>= infoList --concatMap (\(XmlParseInfos is)->is) li
 
-runFMCX::FMCXmlArrow XmlTree b->IO [b] 
+runFMCX::FMCXmlArrow XmlTree b->IO [b]
 runFMCX fa = do
   let efa = fa >>> split >>> first getXmlParseInfos
-  result <- runXIOState (initialState (XmlParseInfos [])) efa 
-  Control.Monad.when (null result) $ throwM (BadParse "Parse Error: no result.") 
-  let (xpis',results) = unzip result  
+  result <- runXIOState (initialState (XmlParseInfos [])) efa
+  Control.Monad.when (null result) $ throwM (BadParse "Parse Error: no result.")
+  let (xpis',results) = unzip result
   let xpis = xpiMerge xpis'
-  Control.Monad.when (xmlParseError xpis) $ throwM (BadParse ("Parse Error(s): " ++ show xpis))
+  Control.Monad.when (xmlParseError xpis) $ throwM (BadParse ("Parse Error(s): " <> (T.pack $ show xpis)))
   return results
-          
+

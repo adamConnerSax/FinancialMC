@@ -48,13 +48,13 @@ import qualified Data.Text                        as T
 import           GHC.Generics                     (Generic)
 
 -- lifts to one below since we do all work underneath Result and then lift
-laERMV::Monad m=>Currency->CV.CVD->ReaderT (FinEnv rm) m MoneyValue
+laERMV :: Monad m => Currency->CV.CVD->ReaderT (FinEnv rm) m MoneyValue
 laERMV c = magnify feExchange . CV.asERMV c
 
-liftFE::ReaderT (FinEnv rm) (Either SomeException) a -> ResultT EvolveOutput (ReaderT (FinEnv rm) (Either SomeException)) a
+liftFE :: ReaderT (FinEnv rm) (Either err) a -> ResultT EvolveOutput (ReaderT (FinEnv rm) (Either err)) a
 liftFE = lift
 
-flowF::IsFlow f=>Year->f->MoneyValue
+flowF :: IsFlow f => Year -> f -> MoneyValue
 flowF date flow = if flowingAt date flow then annualFlowAmount flow else MV.zero (flowCurrency flow)
 
 data BaseFlowDetails =

@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
@@ -21,12 +22,16 @@ module FinancialMC.Core.FinApp
        , taxDataApp2StepAppFSER
        , taxDataApp2StepApp
        , zoomStepApp
+       , zoomStep
        , magnifyStepApp
        , zoomPathAppS
        , zoomPathAppE
+       , Loggable (log)
        , LoggableStepApp
        , LoggablePathApp
        , StepLiftable (stepLift)
+       , PathLiftable (pathLift)
+       , StepToPath (stepToPath)
        , StepApp
        , execPathApp
        , execPPathApp
@@ -37,14 +42,16 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
                                                    HasFinState (..))
 import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction)
 import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
-import           FinancialMC.Core.Utilities       (eitherToIO, multS, readOnly)
+import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
+                                                   HasFMCException, eitherToIO,
+                                                   multS, readOnly)
 
 import           Control.Lens                     (Identity, Lens', magnify,
                                                    makeClassy, set, zoom, (^.))
 
 import           Control.Monad                    (unless, when)
 import           Control.Monad.Catch              (MonadThrow (..),
-                                                   SomeException)
+                                                   SomeException, toException)
 import           Control.Monad.Except             (MonadError (..))
 import           Control.Monad.Morph              (generalize, hoist)
 import           Control.Monad.Reader             (MonadReader, ReaderT, ask,
@@ -122,7 +129,6 @@ instance MonadThrow (PStepApp s e) where
 instance MonadIO (PStepApp s e) where
   liftIO  = PStepApp . lift . liftIO
 
-
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
 zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
 
@@ -159,7 +165,7 @@ lensFirst l q (a,x) = (\(b,y) -> (set l b a,y)) <$> q (a ^. l,x)
 zoomBasePathAppS :: Monad m => Lens' s2 s1 -> BasePathApp s1 e m a -> BasePathApp s2 e m a
 zoomBasePathAppS l = BasePathApp . zoom (lensFirst l) . unBasePathApp  -- fmap (zoom (lensFirst l))
 
-lensSecond::Lens' a b->Lens' (x,a) (x,b)
+lensSecond :: Lens' a b->Lens' (x,a) (x,b)
 lensSecond l q (x,a) = (\(y,b)->(y,set l b a)) <$> q (x, a ^. l)
 
 zoomBasePathAppE :: Monad m => Lens' e2 e1 -> BasePathApp s e1 m a -> BasePathApp s e2 m a
@@ -210,10 +216,10 @@ execPathApp app = execBasePathApp (unPathApp app)
 execPPathApp :: PPathApp s e a -> [LogLevel] -> s -> e -> IO (s,e)
 execPPathApp app logDetails = execBasePathApp (runEffect (unPPathApp app >-> printLog logDetails))
 
-liftStepApp :: StepApp SomeException s e a -> PStepApp s e a
+liftStepApp :: HasFMCException err => StepApp err s e a -> PStepApp s e a
 liftStepApp = PStepApp . lift . hoist eitherToIO . unStepApp -- adds IO at bottom of stack and wraps in Producer
 
-liftPathApp :: PathApp SomeException s e a -> PPathApp s e a
+liftPathApp :: HasFMCException err => PathApp err s e a -> PPathApp s e a
 liftPathApp = PPathApp . lift . hoist eitherToIO . unPathApp
 
 baseStep2basePath :: Monad m => BaseStepApp s e m a -> BasePathApp s e m a
@@ -222,13 +228,13 @@ baseStep2basePath = BasePathApp . multS . hoist readOnly . unBaseStepApp
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
-class StepLiftable err s e m where
+class HasFMCException err => StepLiftable err s e m where
   stepLift :: StepApp err s e a -> m a
 
 class Monad n => BaseStepLiftable s e n m where
   baseStepLift :: BaseStepApp s e n a -> m a
 
-type LoggableStepApp err s e m = (MonadThrow m, Loggable m, MonadState s m, MonadReader e m)
+type LoggableStepApp s e m = (Loggable m, MonadState s m, MonadReader e m)
 
 {-
 class (MonadThrow m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
@@ -237,13 +243,13 @@ class (MonadThrow m, MonadState s m, MonadReader e m) => LoggableStepApp s e m w
   fromBaseS :: BaseStepApp s e Identity x -> m x
 -}
 
-zoomStep :: (LoggableStepApp err s e m, StepLiftable err s e m) => Lens' s sInner -> StepApp err sInner e x -> m x
+zoomStep :: (HasFMCException err, LoggableStepApp s e m, StepLiftable err s e m) => Lens' s sInner -> StepApp err sInner e x -> m x
 zoomStep l = stepLift . zoomStepApp l
 
 instance Loggable (StepApp err s e) where
   log _ _ = return ()
 
-instance StepLiftable err s e (StepApp err s e) where
+instance HasFMCException err => StepLiftable err s e (StepApp err s e) where
   stepLift = id
 
 instance BaseStepLiftable s e Identity (StepApp err s e) where
@@ -259,7 +265,7 @@ instance LoggableStepApp s e (StepApp err s e) where
 instance Loggable (PStepApp s e) where
   log ll = PStepApp . faLog ll
 
-instance StepLiftable SomeException s e (PStepApp s e) where
+instance HasFMCException err => StepLiftable err s e (PStepApp s e) where
   stepLift = liftStepApp
 
 instance BaseStepLiftable s e Identity (PStepApp s e) where
@@ -271,7 +277,7 @@ instance LoggableStepApp s e (PStepApp s e) where
   stepLift = liftStepApp
   fromBaseS = PStepApp . lift . hoist generalize
 -}
-class PathLiftable err s e m where
+class HasFMCException err => PathLiftable err s e m where
   pathLift :: PathApp err s e a -> m a
 
 class Monad n => BasePathLiftable s e n m where
@@ -280,7 +286,7 @@ class Monad n => BasePathLiftable s e n m where
 class StepToPath stepM pathM where
   stepToPath :: stepM a -> pathM a
 
-type LoggablePathApp err s e m = (MonadThrow m, Loggable m, MonadState (s,e) m)
+type LoggablePathApp s e m = (Loggable m, MonadState (s,e) m)
 
 {-
 class (MonadThrow m, MonadState (s,e) m) => LoggablePathApp s e m where
@@ -294,7 +300,7 @@ class (MonadThrow m, MonadState (s,e) m) => LoggablePathApp s e m where
 instance Loggable (PathApp err s e) where
   log _ _ = return ()
 
-instance PathLiftable err s e (PathApp err s e) where
+instance HasFMCException err => PathLiftable err s e (PathApp err s e) where
   pathLift = id
 
 instance BasePathLiftable s e Identity (PathApp err s e) where
@@ -315,7 +321,7 @@ instance LoggablePathApp s e (PathApp err s e) where
 instance Loggable (PPathApp s e) where
   log ll = PPathApp . faLog ll
 
-instance PathLiftable SomeException s e (PPathApp s e) where
+instance HasFMCException err => PathLiftable err s e (PPathApp s e) where
   pathLift = liftPathApp
 
 instance BasePathLiftable s e Identity (PPathApp s e) where
@@ -348,15 +354,30 @@ printLog lvls = do
   printLog lvls
 
 --taxDataApp2StepAppFSER::LoggableStepApp FinState ExchangeRateFunction app => TaxDataApp (Either SomeException) a->app a
-taxDataApp2StepAppFSER :: forall err m a. StepLiftable err FinState ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
+taxDataApp2StepAppFSER :: forall m a. StepLiftable FMCException FinState ExchangeRateFunction m
+  => TaxDataApp (Either FMCException) a -> m a
 taxDataApp2StepAppFSER x =
-  let sa :: StepApp err FinState ExchangeRateFunction a
-      sa = zoomStepApp fsTaxData . toStepApp $ x
+  let sa :: StepApp FMCException FinState ExchangeRateFunction a
+      sa = zoomStepApp fsTaxData $ toStepApp $ x
   in stepLift sa
 
-taxDataApp2StepAppFS :: TaxDataApp (Either err) a -> StepApp err FinState (FinEnv rm) a
+taxDataApp2StepAppFS :: TaxDataApp (Either FMCException) a -> StepApp FMCException FinState (FinEnv rm) a
 taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . toStepApp $ tda
 
 --taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction app=>TaxDataApp (Either SomeException) a->app a
-taxDataApp2StepApp :: StepLiftable err TaxData ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
+taxDataApp2StepApp :: StepLiftable FMCException TaxData ExchangeRateFunction m => TaxDataApp (Either FMCException) a -> m a
 taxDataApp2StepApp = stepLift . toStepApp
+
+{-
+taxDataAppToLSFSER :: (Functor (Zoomed m a), Zoom m n TaxData FinState) => m a -> n a
+taxDataAppToLSFSER = zoom fsTaxData
+
+taxDataAppToLSFSFE :: ( Functor (Zoomed m a)
+                      , Zoom m n TaxData FinState
+                      , Functor (Magnified m a)
+                      , Magnified m ~ Magnified n
+                      , Magnify m n (FinEnv rm) ExchangeRateFunction
+                      ) => m a -> n a
+taxDataAppToLSFSFE = taxDataAppToLSFSER . magnify feExchange
+-}
+

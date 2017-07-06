@@ -41,14 +41,15 @@ import           Control.Lens                   (makeClassy, use, view, (%=),
                                                  (.=), (^.))
 import           Control.Monad                  (when)
 import           Control.Monad.Catch            (MonadThrow, throwM)
-import           Control.Monad.Error            (MonadError)
+import           Control.Monad.Error.Lens       (throwing)
+import           Control.Monad.Except           (MonadError)
 import           Control.Monad.Reader           (MonadReader, Reader, ask,
                                                  reader)
 import           Control.Monad.State.Strict     (MonadState, State)
 import qualified Data.Map.Strict                as M
 import           Data.Maybe                     (fromJust)
+import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
-
 
 data FinEnv rm = FinEnv { _feRates::RateTable Double, _feExchange:: !ExchangeRateFunction , _feCurrentDate:: !Year, _feDefaultCCY:: !Currency, _feTaxRules:: !TaxRules, _feRateModel:: !rm}
 makeClassy ''FinEnv
@@ -117,18 +118,18 @@ addToAccumulator name amount = do
 --  let g (Accumulators a) = Accumulators $ M.insertWith f name a
   fsAccumulators.accums %= M.insertWith f name amount
 
-addToAccumulator'::(MonadThrow m, MonadReader ExchangeRateFunction m, MonadState FinState m)=>AccumName->MoneyValue->m ()
+addToAccumulator'::(MonadError FMCException m, MonadReader ExchangeRateFunction m, MonadState FinState m)=>AccumName->MoneyValue->m ()
 addToAccumulator' name amount = do
-  when (T.null name) $ throwingM _Other "No name specified in call to addToAccumulator"
+  when (T.null name) $ throwing _Other "No name specified in call to addToAccumulator"
   e <- ask
   let f = MV.inFirst e (+)
   fsAccumulators.accums %= M.insertWith f name amount
 
 
-getAccumulatedValue::(MonadThrow m, MonadReader FinState m)=>AccumName->m MoneyValue
+getAccumulatedValue::(MonadError FMCException m, MonadReader FinState m) => AccumName -> m MoneyValue
 getAccumulatedValue accumName = do
   (Accumulators as) <- view fsAccumulators
-  noteM (FailedLookup ("Couldn't find accum named " ++ show accumName)) $ M.lookup accumName as
+  noteM (FailedLookup ("Couldn't find accum named " <> (T.pack $ show accumName))) $ M.lookup accumName as
 
 zeroAccumulator::MonadState FinState m=>AccumName->m ()
 zeroAccumulator accumName = fsAccumulators.accums %= M.delete accumName
