@@ -66,9 +66,11 @@ makeClassy ''LogEntry
 
 newtype BaseStepApp s e m a =
   BaseStepApp { unBaseStepApp :: StateT s (ReaderT e m) a }
-  deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
+  deriving (Functor, Applicative, Monad, MonadReader e)
 
-instance MonadState s (BaseStepApp s e m a) where
+instance Monad m => MonadState s (BaseStepApp s e m) where
+  get = BaseStepApp $ get
+  put = BaseStepApp . put
 
 --
 
@@ -140,7 +142,7 @@ newtype BasePathApp s e m a =
   deriving (Functor, Applicative, Monad, MonadState (s,e), MFunctor, MonadTrans)
 
 instance MonadIO m => MonadIO (BasePathApp s e m) where
-  liftIO = BasePathApp . lift
+  liftIO = BasePathApp . lift . lift . liftIO
 
 -- this is all what MonadBaseControl is for, right??
 -- also, this has semantics, when and if state is updated, etc.
@@ -148,7 +150,7 @@ instance MonadError err m => MonadError err (BasePathApp s e m) where
   throwError = lift . throwError
   catchError action handler = do
     curState <- get
-    let bpaToMonadError = runState curState
+    let bpaToMonadError = runState curState . unBasePathApp
     (a, newState) <- lift $ do
       let action' = bpaToMonadError action
           handler' = bpaToMonadError . handler
@@ -163,8 +165,8 @@ instance MonadError err (PathApp err s e) where
   throwError = PathApp . throwError
   catchError action handler = PathApp $ catchError (unPathApp action) (unPathApp . handler)
 
-instance MonadThrow (PathApp err s e) where
-  throwM x = PathApp . lift $ throwM x
+instance MonadThrow (PathApp SomeException s e) where
+  throwM = PathApp . lift . throwM
 
 newtype PPathApp s e a =
   PPathApp { unPPathApp :: Producer LogEntry (BasePathApp s e IO) a} deriving (Functor, Applicative, Monad, MonadState (s,e))
@@ -192,16 +194,16 @@ lensSecond l q (x,a) = (\(y,b)->(y,set l b a)) <$> q (x, a ^. l)
 -}
 
 zoomBasePathAppS :: Monad m => Lens' s2 s1 -> BasePathApp s1 e m a -> BasePathApp s2 e m a
-zoomBasePathAppS l = fmap (zoom (_1 . l))  -- fmap (zoom (lensFirst l))
+zoomBasePathAppS l = BasePathApp . (zoom (l . _1)) . unBasePathApp  -- fmap (zoom (lensFirst l))
 
 zoomPathAppS :: Lens' s2 s1 -> PathApp err s1 e a -> PathApp err s2 e a
-zoomPathAppS l = fmap (zoomBasePathAppS l)
+zoomPathAppS l = PathApp . (zoomBasePathAppS l) . unPathApp
 
 zoomBasePathAppE :: Monad m => Lens' e2 e1 -> BasePathApp s e1 m a -> BasePathApp s e2 m a
-zoomBasePathAppE l = fmap (zoom (_2 . l)) -- fmap (zoom (lensSecond l))
+zoomBasePathAppE l = BasePathApp . (zoom (_2 . l)) . unBasePathApp -- fmap (zoom (lensSecond l))
 
 zoomPathAppE :: Lens' e2 e1 -> PathApp err s e1 a -> PathApp err s e2 a
-zoomPathAppE l = fmap (zoomBasePathAppE l)
+zoomPathAppE l = PathApp . (zoomBasePathAppE l) . unPathApp
 
 toPathApp :: StateT (s,e) (Either err) a -> PathApp err s e a
 toPathApp = PathApp . BasePathApp
