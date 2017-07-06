@@ -75,7 +75,7 @@ addTaxDetails e (TaxDetails inX dedX) (TaxDetails inY dedY) = TaxDetails x y whe
   x = MV.inFirst e (+) inX inY
   y = MV.inFirst e (+) dedX dedY
 
-type TaxFlowFunction a = TaxType->MoneyValue->a
+type TaxFlowFunction a = TaxType -> MoneyValue -> a
 
 taxInflow::TaxType->MoneyValue->TaxDetails 
 taxInflow _ mv = TaxDetails mv (MV.zero USD)
@@ -113,27 +113,27 @@ throwableLookup mapName m key = do
 
 
 --addTaxFlow::Monad m=>TaxFlowFunction TaxDetails->TaxFlowFunction (TaxDataApp m ())
-addTaxFlow::TaxDataAppC m=>TaxFlowFunction TaxDetails->TaxFlowFunction (m ())
+addTaxFlow::TaxDataAppC m => TaxFlowFunction TaxDetails -> TaxFlowFunction (m ())
 addTaxFlow mkDetails tt cf = do
   e <- ask
   tdMap %= M.insertWith (addTaxDetails e) tt (mkDetails tt cf) 
 
   
-addTaxableFlow::TaxDataAppC m=>TaxFlowFunction (m ())
+addTaxableFlow :: TaxDataAppC m => TaxFlowFunction (m ())
 addTaxableFlow = addTaxFlow taxInflow
 
-addDeductibleFlow::TaxDataAppC m=>TaxFlowFunction (m())  
+addDeductibleFlow :: TaxDataAppC m => TaxFlowFunction (m())  
 addDeductibleFlow = addTaxFlow taxDeduction
 
 
-carryForwardTaxDetails::TaxDetails->TaxDetails
+carryForwardTaxDetails :: TaxDetails -> TaxDetails
 carryForwardTaxDetails (TaxDetails (MoneyValue t ccy) (MoneyValue d _)) =
   if t > d 
   then zeroTaxDetails ccy 
   else TaxDetails (MV.zero ccy) (MoneyValue (d-t) ccy)
                   
 
-carryForwardTaxData::(MonadThrow m,TaxDataAppC m)=>m ()
+carryForwardTaxData :: (MonadThrow m, TaxDataAppC m) => m ()
 carryForwardTaxData = do
   (TaxData tm ccy) <- get
   let f = throwableLookup "TaxData" tm

@@ -140,7 +140,7 @@ addCashFlow cf = do
   fsCashFlow %= MV.inFirst e (+) cf
 -}
 
-addCashFlow::(MonadState FinState m, MonadReader ExchangeRateFunction m)=>MoneyValue->m ()
+addCashFlow :: (MonadState FinState m, MonadReader ExchangeRateFunction m) => MoneyValue -> m ()
 addCashFlow cf = do
   e <- ask
   fsCashFlow %= MV.inFirst e (+) cf

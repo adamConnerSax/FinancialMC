@@ -26,6 +26,7 @@ module FinancialMC.Core.FinApp
        , zoomPathAppE
        , LoggableStepApp
        , LoggablePathApp
+       , StepLiftable (stepLift)
        , StepApp
        , execPathApp
        , execPPathApp
@@ -350,11 +351,11 @@ printLog lvls = do
 taxDataApp2StepAppFSER :: forall err m a. StepLiftable err FinState ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
 taxDataApp2StepAppFSER x =
   let sa :: StepApp err FinState ExchangeRateFunction a
-      sa = (zoomStepApp fsTaxData) . toStepApp $ x
+      sa = zoomStepApp fsTaxData . toStepApp $ x
   in stepLift sa
 
 taxDataApp2StepAppFS :: TaxDataApp (Either err) a -> StepApp err FinState (FinEnv rm) a
-taxDataApp2StepAppFS tda = (zoomStepApp fsTaxData) . (magnifyStepApp feExchange) . toStepApp $ tda
+taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . toStepApp $ tda
 
 --taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction app=>TaxDataApp (Either SomeException) a->app a
 taxDataApp2StepApp :: StepLiftable err TaxData ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
