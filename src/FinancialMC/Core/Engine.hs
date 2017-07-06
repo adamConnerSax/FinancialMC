@@ -366,7 +366,7 @@ payTax::LoggableStepApp FinState ExchangeRateFunction app=>MoneyValue->app ()
 payTax tax = do
   let taxPmt = MV.negate tax
   stepLift $ toStepApp (addCashFlow taxPmt) >> taxDataApp2StepAppFSER carryForwardTaxData
-  stepLog Debug ("Paid Tax of " ++ show tax)
+  log Debug ("Paid Tax of " <> (T.pack $ show tax))
 
 
 doSweepTrades::(EngineC a fl le ru rm, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>app ()
