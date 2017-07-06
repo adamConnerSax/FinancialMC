@@ -5,6 +5,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeFamilies               #-}
@@ -23,8 +24,8 @@ module FinancialMC.Core.FinApp
        , magnifyStepApp
        , zoomPathAppS
        , zoomPathAppE
-       , LoggableStepApp(..)
-       , LoggablePathApp(..)
+       , LoggableStepApp
+       , LoggablePathApp
        , StepApp
        , execPathApp
        , execPPathApp
@@ -38,8 +39,7 @@ import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
 import           FinancialMC.Core.Utilities       (eitherToIO, multS, readOnly)
 
 import           Control.Lens                     (Identity, Lens', magnify,
-                                                   makeClassy, set, zoom, (^.),
-                                                   _1, _2)
+                                                   makeClassy, set, zoom, (^.))
 
 import           Control.Monad                    (unless, when)
 import           Control.Monad.Catch              (MonadThrow (..),
@@ -53,7 +53,7 @@ import           Control.Monad.State.Strict       (MonadState, StateT,
                                                    runStateT)
 import           Control.Monad.Trans              (MonadIO, MonadTrans, lift,
                                                    liftIO)
-import           Data.Text                        (Text)
+import           Data.Text                        (Text, unpack)
 
 import           Pipes                            (MFunctor, Producer, Proxy, X,
                                                    await, runEffect, yield,
@@ -61,18 +61,12 @@ import           Pipes                            (MFunctor, Producer, Proxy, X,
 
 
 data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
-data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg::String }
+data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
 newtype BaseStepApp s e m a =
   BaseStepApp { unBaseStepApp :: StateT s (ReaderT e m) a }
-  deriving (Functor, Applicative, Monad, MonadReader e)
-
-instance Monad m => MonadState s (BaseStepApp s e m) where
-  get = BaseStepApp $ get
-  put = BaseStepApp . put
-
---
+  deriving (Functor, Applicative, Monad, MonadReader e, MonadState s)
 
 instance MFunctor (BaseStepApp s e) where
   hoist f (BaseStepApp bsa) = BaseStepApp $ hoist (hoist f) bsa
@@ -91,9 +85,9 @@ instance MonadError err m => MonadError err (BaseStepApp s e m) where
   catchError action handler = do
     curState <- get
     curEnv <- ask
-    let bsaToMonadError = runReaderT curEnv . runStateT curState . unBaseStepApp
+    let bsaToMonadError = flip runReaderT curEnv . flip runStateT curState . unBaseStepApp
     (a, newState)  <- lift $ do
-      let action' = bsaToMonadError action
+      let action'  = bsaToMonadError action
           handler' = bsaToMonadError . handler
       catchError action' handler' -- this is happening in the MonadError err m
     put newState
@@ -142,7 +136,7 @@ newtype BasePathApp s e m a =
   deriving (Functor, Applicative, Monad, MonadState (s,e), MFunctor, MonadTrans)
 
 instance MonadIO m => MonadIO (BasePathApp s e m) where
-  liftIO = BasePathApp . lift . lift . liftIO
+  liftIO = lift . liftIO
 
 -- this is all what MonadBaseControl is for, right??
 -- also, this has semantics, when and if state is updated, etc.
@@ -150,13 +144,25 @@ instance MonadError err m => MonadError err (BasePathApp s e m) where
   throwError = lift . throwError
   catchError action handler = do
     curState <- get
-    let bpaToMonadError = runState curState . unBasePathApp
+    let bpaToMonadError = flip runStateT curState . unBasePathApp
     (a, newState) <- lift $ do
       let action' = bpaToMonadError action
           handler' = bpaToMonadError . handler
       catchError action' handler'
     put newState
     return a
+
+lensFirst :: Lens' a b -> Lens' (a,x) (b,x)
+lensFirst l q (a,x) = (\(b,y) -> (set l b a,y)) <$> q (a ^. l,x)
+
+zoomBasePathAppS :: Monad m => Lens' s2 s1 -> BasePathApp s1 e m a -> BasePathApp s2 e m a
+zoomBasePathAppS l = BasePathApp . zoom (lensFirst l) . unBasePathApp  -- fmap (zoom (lensFirst l))
+
+lensSecond::Lens' a b->Lens' (x,a) (x,b)
+lensSecond l q (x,a) = (\(y,b)->(y,set l b a)) <$> q (x, a ^. l)
+
+zoomBasePathAppE :: Monad m => Lens' e2 e1 -> BasePathApp s e1 m a -> BasePathApp s e2 m a
+zoomBasePathAppE l = BasePathApp . zoom (lensSecond l) . unBasePathApp -- fmap (zoom (lensSecond l))
 
 newtype PathApp err s e a =
   PathApp { unPathApp :: BasePathApp s e (Either err) a} deriving (Functor, Applicative, Monad, MonadState (s,e))
@@ -185,22 +191,8 @@ instance (MonadIO (BasePathApp s e IO)) => MonadIO (PPathApp s e) where
   liftIO m = PPathApp $ liftIO m
 -}
 
-{-
-lensFirst :: Lens' a b -> Lens' (a,x) (b,x)
-lensFirst l q (a,x) = (\(b,y) -> (set l b a,y)) <$> q (a ^. l,x)
-
-lensSecond::Lens' a b->Lens' (x,a) (x,b)
-lensSecond l q (x,a) = (\(y,b)->(y,set l b a)) <$> q (x, a ^. l)
--}
-
-zoomBasePathAppS :: Monad m => Lens' s2 s1 -> BasePathApp s1 e m a -> BasePathApp s2 e m a
-zoomBasePathAppS l = BasePathApp . (zoom (l . _1)) . unBasePathApp  -- fmap (zoom (lensFirst l))
-
 zoomPathAppS :: Lens' s2 s1 -> PathApp err s1 e a -> PathApp err s2 e a
 zoomPathAppS l = PathApp . (zoomBasePathAppS l) . unPathApp
-
-zoomBasePathAppE :: Monad m => Lens' e2 e1 -> BasePathApp s e1 m a -> BasePathApp s e2 m a
-zoomBasePathAppE l = BasePathApp . (zoom (_2 . l)) . unBasePathApp -- fmap (zoom (lensSecond l))
 
 zoomPathAppE :: Lens' e2 e1 -> PathApp err s e1 a -> PathApp err s e2 a
 zoomPathAppE l = PathApp . (zoomBasePathAppE l) . unPathApp
@@ -308,7 +300,7 @@ instance BasePathLiftable s e Identity (PathApp err s e) where
   basePathLift = PathApp . hoist generalize
 
 instance StepToPath (StepApp err s e) (PathApp err s e) where
-  stepToPath = PathApp . baseStep2BasePath . unStepApp
+  stepToPath = PathApp . baseStep2basePath . unStepApp
 
 {-
 instance LoggablePathApp s e (PathApp err s e) where
@@ -340,7 +332,7 @@ instance LoggablePathApp s e (PPathApp s e) where
   step2Path = PPathApp . hoist baseStep2basePath . unPStepApp
 -}
 
-faLog :: Monad m => LogLevel -> String -> Producer LogEntry m ()
+faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
 
 printLog :: MonadIO m => [LogLevel] -> Proxy () LogEntry () X  m a
@@ -349,14 +341,17 @@ printLog lvls = do
         let lvl = x ^. leLevel
             msg = x ^. leMsg
             shouldLog = lvl `elem` lvls
-        when shouldLog (liftIO $ putStrLn (show lvl ++ ": " ++ msg))
+        when shouldLog (liftIO $ putStrLn (show lvl ++ ": " ++ (unpack msg)))
   le <- await
   unless (null lvls) (printL le)
   printLog lvls
 
 --taxDataApp2StepAppFSER::LoggableStepApp FinState ExchangeRateFunction app => TaxDataApp (Either SomeException) a->app a
-taxDataApp2StepAppFSER :: StepLiftable err FinState ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
-taxDataApp2StepAppFSER tda = stepLift . (zoomStepApp fsTaxData).  toStepApp $ tda
+taxDataApp2StepAppFSER :: forall err m a. StepLiftable err FinState ExchangeRateFunction m => TaxDataApp (Either err) a -> m a
+taxDataApp2StepAppFSER x =
+  let sa :: StepApp err FinState ExchangeRateFunction a
+      sa = (zoomStepApp fsTaxData) . toStepApp $ x
+  in stepLift sa
 
 taxDataApp2StepAppFS :: TaxDataApp (Either err) a -> StepApp err FinState (FinEnv rm) a
 taxDataApp2StepAppFS tda = (zoomStepApp fsTaxData) . (magnifyStepApp feExchange) . toStepApp $ tda
