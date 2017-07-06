@@ -123,7 +123,7 @@ applyFlowAndTax :: forall err m. ( MonadThrow m
   => MoneyValue -> TaxAmount -> m ()
 applyFlowAndTax x ta =
   let taxFlow :: (MonadThrow m, StepLiftable err FinState ExchangeRateFunction m) => m ()
-      taxFlow = stepLift $ applyTax ta
+      taxFlow = applyTax ta
   in addCashFlow x >> taxFlow
 
 
