@@ -301,9 +301,9 @@ doRules w = do
   Result _ ruleOutput <- runResultT $ mapM_ f liveRules -- can/should move zoom/hoist to here?  Does it matter?
   doRuleResult ruleOutput
 
-doRuleResult::(IsAsset a,Show a,
-               StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
-               LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=> RuleOutput -> m ()
+doRuleResult :: (IsAsset a, Show a
+                , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
+                , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=> RuleOutput -> m ()
 doRuleResult (RuleOutput trades accs) = do
   log Debug ("Resulting in trades:" <> (T.pack $ show trades) <> " and accums=" <> show accs)
   stepLift . magnifyStepApp feExchange $ do
@@ -350,14 +350,14 @@ doTax = stepLift $ do
     return (tax',rate')
 
 
-doTaxTrade::(IsAsset a,Show a,IsRule ru, IsRateModel rm,
-              LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>app ()
+doTaxTrade :: ( IsAsset a,Show a,IsRule ru, IsRateModel rm
+            ,  LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
 doTaxTrade = stepLift $ do
   mcs <- use csMC
   let getA name = getAccount name ( mcs ^. mcsBalanceSheet)
   curPos <- use (csFinancial.fsCashFlow)
-  stepLog Debug ("Current cash on hand is " ++ show curPos)
-  stepLog Debug "Generating tax trade, if necessary"
+  log Debug ("Current cash on hand is " <> (T.pack $ show curPos))
+  log Debug "Generating tax trade, if necessary"
   Result _ result <- morphInnerRuleStack $ runResultT (doRule (mcs ^. mcsTaxTrade) getA)
   doRuleResult result
 
