@@ -125,9 +125,14 @@ newtype PStepApp s e a =
 
 instance MonadThrow (PStepApp s e) where
   throwM  = PStepApp . lift . lift . throwM
-
+  
 instance MonadIO (PStepApp s e) where
   liftIO  = PStepApp . lift . liftIO
+
+instance MonadError FMCException (PStepApp s e) where
+  throwError = PStepApp . lift . lift . throwM . toException
+  catchError action handler = 
+
 
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
 zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
