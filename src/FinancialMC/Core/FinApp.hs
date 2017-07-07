@@ -27,11 +27,8 @@ module FinancialMC.Core.FinApp
        , zoomPathAppS
        , zoomPathAppE
        , Loggable (log)
-       , LoggableStepApp
-       , LoggablePathApp
-       , StepLiftable (stepLift)
-       , PathLiftable (pathLift)
-       , StepToPath (stepToPath)
+       , LoggableStepApp (..)
+       , LoggablePathApp (..)
        , StepApp
        , execPathApp
        , execPPathApp
@@ -51,7 +48,8 @@ import           Control.Lens                     (Identity, Lens', magnify,
 
 import           Control.Monad                    (unless, when)
 import           Control.Monad.Catch              (MonadThrow (..),
-                                                   SomeException, toException)
+                                                   SomeException, catch, throwM,
+                                                   toException)
 import           Control.Monad.Except             (MonadError (..))
 import           Control.Monad.Morph              (generalize, hoist)
 import           Control.Monad.Reader             (MonadReader, ReaderT, ask,
@@ -125,14 +123,22 @@ newtype PStepApp s e a =
 
 instance MonadThrow (PStepApp s e) where
   throwM  = PStepApp . lift . lift . throwM
-  
+
 instance MonadIO (PStepApp s e) where
   liftIO  = PStepApp . lift . liftIO
 
 instance MonadError FMCException (PStepApp s e) where
-  throwError = PStepApp . lift . lift . throwM . toException
-  catchError action handler = 
-
+  throwError = throwM . toException -- because PStepApp has a MonadThrow instance
+  catchError action handler = do
+    curState <- get
+    curEnv <- ask
+    let psaToIO = flip runReaderT curEnv . flip runStateT curState . unBaseStepApp . runEffect . ( >-> printLog []) . unPStepApp
+    (a, newState) <- PStepApp . lift . lift $ do
+      let action' = psaToIO action -- IO (a, s)
+          handler' = psaToIO . handler -- (e ~ FMCException => e -> IO (a,s))
+      catch action' handler' -- this is using catch from Control.Monad.Catch
+    put newState
+    return a
 
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
 zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
@@ -195,6 +201,19 @@ instance MonadThrow (PPathApp s e) where
 instance MonadIO (PPathApp s e) where
   liftIO = PPathApp . lift . liftIO
 
+instance MonadError FMCException (PPathApp s e) where
+  throwError = throwM . toException -- because PStepApp has a MonadThrow instance
+  catchError action handler = do
+    curState <- get
+    let ppaToIO = flip runStateT curState . unBasePathApp . runEffect . (>-> printLog []) . unPPathApp
+    (a, newState) <- PPathApp . lift . lift $ do
+      let action' = ppaToIO action -- IO (a, s)
+          handler' = ppaToIO . handler -- (e ~ FMCException => e -> IO (a,s))
+      catch action' handler' -- this is using catch from Control.Monad.Catch
+    put newState
+    return a
+
+
 {-
 instance MonadIO (BasePathApp s e IO) where
   liftIO  = BasePathApp . liftIO m
@@ -221,10 +240,10 @@ execPathApp app = execBasePathApp (unPathApp app)
 execPPathApp :: PPathApp s e a -> [LogLevel] -> s -> e -> IO (s,e)
 execPPathApp app logDetails = execBasePathApp (runEffect (unPPathApp app >-> printLog logDetails))
 
-liftStepApp :: HasFMCException err => StepApp err s e a -> PStepApp s e a
+liftStepApp :: StepApp FMCException s e a -> PStepApp s e a
 liftStepApp = PStepApp . lift . hoist eitherToIO . unStepApp -- adds IO at bottom of stack and wraps in Producer
 
-liftPathApp :: HasFMCException err => PathApp err s e a -> PPathApp s e a
+liftPathApp :: PathApp FMCException s e a -> PPathApp s e a
 liftPathApp = PPathApp . lift . hoist eitherToIO . unPathApp
 
 baseStep2basePath :: Monad m => BaseStepApp s e m a -> BasePathApp s e m a
@@ -289,11 +308,11 @@ type LoggablePathApp s e m = (Loggable m, MonadState (s,e) m)
 
 class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m where
   type Step s e m :: * -> *
-  pathLift :: PathApp err s e a -> m a
+  pathLift :: PathApp FMCException s e a -> m a
   fromBaseP :: BasePathApp s e Identity a -> m a
-  step2Path :: Step s e m a -> m a
+  stepToPath :: Step s e m a -> m a
 
-instance Loggable (PathApp err s e) where
+instance Loggable (PathApp FMCException s e) where
   log _ _ = return ()
 
 {-
@@ -311,7 +330,7 @@ instance LoggablePathApp s e (PathApp FMCException s e) where
   type Step s e (PathApp FMCException s e)  = StepApp FMCException s e
   pathLift = id
   fromBaseP = PathApp . hoist generalize
-  step2Path = PathApp . baseStep2basePath . unStepApp
+  stepToPath = PathApp . baseStep2basePath . unStepApp
 
 instance Loggable (PPathApp s e) where
   log ll = PPathApp . faLog ll
@@ -332,7 +351,7 @@ instance LoggablePathApp s e (PPathApp s e) where
   type Step s e (PPathApp s e) = PStepApp s e
   pathLift = liftPathApp
   fromBaseP = PPathApp . lift . hoist generalize
-  step2Path = PPathApp . hoist baseStep2basePath . unPStepApp
+  stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
 
 
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()

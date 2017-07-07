@@ -19,7 +19,7 @@ module FinancialMC.Core.Engine
          -- Only for Benchmarking
        ) where
 
-import           FinancialMC.Core.Asset           (Account, IsAsset)
+import           FinancialMC.Core.Asset           (IsAsset)
 import           FinancialMC.Core.AssetTrading    (tradeAccount)
 import           FinancialMC.Core.Evolve          (applyAccums, applyFlows)
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
@@ -41,9 +41,6 @@ import           FinancialMC.Core.FinApp          (LogLevel (..),
                                                    Loggable (log),
                                                    LoggablePathApp (..),
                                                    LoggableStepApp (..),
-                                                   PathLiftable (pathLift),
-                                                   StepLiftable (stepLift),
-                                                   StepToPath (stepToPath),
                                                    execPPathApp, execPathApp,
                                                    magnifyStepApp,
                                                    taxDataApp2StepAppFSER,
@@ -86,7 +83,7 @@ import           Control.Lens                     (Lens', magnify, makeClassy,
                                                    use, view, zoom, (%=), (+=),
                                                    (.=), (^.), _2)
 import           Control.Monad                    (foldM, unless, when)
-import           Control.Monad.Catch              (MonadThrow, throwM)
+--import           Control.Monad.Catch              (MonadThrow, throwM)
 import           Control.Monad.Morph              (hoist, lift)
 import qualified Control.Monad.Parallel           as CMP
 import           Control.Monad.Reader             (ReaderT, ask)
@@ -179,8 +176,7 @@ doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do
 
 
 doPath :: ( EngineC a fl le ru rm
-          , LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) m
-          , PathLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m)
+          , LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) m)
   => LifeEventConverters a fl le -> PureMT -> Int -> m PureMT
 doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1..years]
 
@@ -192,7 +188,6 @@ lensToEmpty::Lens' a ()
 lensToEmpty q x = const x <$> q ()
 
 doOneStepOnPath :: ( EngineC a fl le ru rm
-                   , PathLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
                    , LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) m)
   => LifeEventConverters a fl le
   -> PureMT
@@ -226,8 +221,7 @@ updateRates' pMT = do
   return $! newPMT
 
 
-updateTaxBrackets :: ( LoggablePathApp () (FinEnv rm) m
-                     , PathLiftable FMCException () (FinEnv rm) m) => m ()
+updateTaxBrackets :: LoggablePathApp () (FinEnv rm) m => m ()
 updateTaxBrackets = pathLift $ do
   taxBracketInflationRate <- toPathApp . readOnly . magnify (lensFinEnv.feRates) $ rateRequest (Inflation TaxBracket)
   (lensFinEnv.feTaxRules) %= flip updateTaxRules taxBracketInflationRate
@@ -240,7 +234,6 @@ updateTaxBrackets' = do
 -}
 
 doOneYear :: ( EngineC a fl le ru rm
-             , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
              , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
   => LifeEventConverters a fl le
   -> m (MoneyValue,Double)
@@ -274,31 +267,29 @@ checkEndingCash = do
   cash <- get
   checkFalse (MV.gt e cash (MoneyValue 1 (cash^.mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
 
-doChecks :: ( StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
-            , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
+doChecks :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m => m ()
 doChecks = do
   zoomStep (csFinancial.fsCashFlow) . magnifyStepApp feExchange $ checkEndingCash
 
-morphInnerRuleStack :: ( LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
-                       , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m)
+morphInnerRuleStack :: ( LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
   => ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) b -> m b
 morphInnerRuleStack = zoomStep csFinancial . toStepApp . readOnly
 
-morphResultStack :: ( LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
-                    , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m)
-  => ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException))) b->ResultT o m b
+morphResultStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
+  => ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException))) b -> ResultT o m b
 morphResultStack =  hoist morphInnerRuleStack
 
-doRules :: ( EngineC a fl le ru rm
-           , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+doRules :: forall a fl le ru rm m. ( EngineC a fl le ru rm
+                                   , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
   => RuleWhen -> m ()
 doRules w = do
   mcs <- use csMC
   let isRuleNow r = ruleWhen r == w
       liveRules = filter isRuleNow (mcs ^. mcsRules)
-      getA :: MonadError FMCException m => T.Text -> m (Account a)
       getA name = getAccount name (mcs ^. mcsBalanceSheet)
-      f :: (IsRule ru, IsRateModel rm) =>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>ru->ResultT RuleOutput app ()
+      f :: ( IsRule ru
+           , IsRateModel rm
+           , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => ru -> ResultT RuleOutput m ()
       f r = do
         lift $ log Debug ("Doing " <> (T.pack $ show (ruleName r)))
         morphResultStack (doRule r getA)
@@ -307,7 +298,6 @@ doRules w = do
   doRuleResult ruleOutput
 
 doRuleResult :: (IsAsset a, Show a
-                , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
                 , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=> RuleOutput -> m ()
 doRuleResult (RuleOutput trades accs) = do
   log Debug ("Resulting in trades:" <> (T.pack $ show trades) <> " and accums=" <> (T.pack $ show accs))
@@ -333,14 +323,13 @@ doLifeEvents convertLE = do
   Result _ results <- runResultT $ mapM_ f liveEvents
   doLifeEventResult results
 
-doLifeEventResult::(IsFlow fl, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>LifeEventOutput a fl->app ()
+doLifeEventResult::(IsFlow fl, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=>LifeEventOutput a fl->m ()
 doLifeEventResult (LifeEventOutput newAccounts newFlows) = do
   csMC.mcsBalanceSheet %= execState (mapM_ insertAccount newAccounts)
   csMC.mcsCashFlows %= execState (mapM_ addFlow newFlows)
 
 
 doTax :: (EngineC a fl le ru rm
-         , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
          , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
   => m (MoneyValue,Double)
 doTax = stepLift $ do
@@ -405,14 +394,11 @@ isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
 
 doTransactions :: ( IsAsset a
                   , Show a
-                  , StepLiftable FMCException (CombinedState a fl le ru) ExchangeRateFunction m
                   , LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction m)
   =>[Transaction]->m ()
 doTransactions ts = stepLift $ mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
 
-computeTax :: ( LoggableStepApp TaxData (FinEnv rm) m
-              , StepLiftable FMCException TaxData (FinEnv rm) m)
-  => m (MoneyValue,Double)  -- main body now in Tax.hs
+computeTax :: LoggableStepApp TaxData (FinEnv rm) m => m (MoneyValue,Double)  -- main body now in Tax.hs
 computeTax = stepLift $ do
   tr <- view feTaxRules
   td <- get

@@ -46,7 +46,7 @@ module FinancialMC.Core.MCState
 import           FinancialMC.Core.Asset (IsAsset,AccountName,Account(Account),HasAccount(..),accountValueCV)
 import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
-import           FinancialMC.Core.FinApp (LoggableStepApp,StepLiftable,zoomStep)
+import           FinancialMC.Core.FinApp (LoggableStepApp (..),zoomStep)
 import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,HasFinState(..))
 import           FinancialMC.Core.Flow (FlowName,FlowDirection(..),flowName,flowingAt,IsFlow(..),annualFlowAmount)
 import           FinancialMC.Core.MapLike (IsMap(..))
@@ -73,7 +73,7 @@ import Control.Monad.Except (MonadError)
 import           Control.Monad (when)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State.Strict (State,MonadState,get)
-import Control.Monad.Catch (MonadThrow)
+--import Control.Monad.Catch (MonadThrow)
 --import qualified Data.Text as T 
 
 type MyMap k v = M.Map k v
@@ -291,7 +291,6 @@ makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [
 evolveMCS :: ( Evolvable a
              , Evolvable fl
              , IsRateModel rm
-             , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
              , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
 evolveMCS = do
   mcs <- use csMC

@@ -40,7 +40,7 @@ import           Control.Exception.Lens         (exception, throwingM)
 import           Control.Lens                   (makeClassy, use, view, (%=),
                                                  (.=), (^.))
 import           Control.Monad                  (when)
-import           Control.Monad.Catch            (MonadThrow, throwM)
+--import           Control.Monad.Catch            (MonadThrow, throwM)
 import           Control.Monad.Error.Lens       (throwing)
 import           Control.Monad.Except           (MonadError)
 import           Control.Monad.Reader           (MonadReader, Reader, ask,
@@ -110,9 +110,9 @@ zeroFinState c = FinState { _fsTaxData=defaultTaxData c,
 
 
 
-addToAccumulator::(MonadThrow m, MonadReader (FinEnv rm) m, MonadState FinState m)=>AccumName->MoneyValue->m ()
+addToAccumulator::(MonadError FMCException m, MonadReader (FinEnv rm) m, MonadState FinState m)=>AccumName->MoneyValue->m ()
 addToAccumulator name amount = do
-  when (T.null name) $ throwingM _Other "No name specified in call to addToAccumulator"
+  when (T.null name) $ throwing _Other "No name specified in call to addToAccumulator"
   e <- view feExchange
   let f = MV.inFirst e (+)
 --  let g (Accumulators a) = Accumulators $ M.insertWith f name a
@@ -126,7 +126,7 @@ addToAccumulator' name amount = do
   fsAccumulators.accums %= M.insertWith f name amount
 
 
-getAccumulatedValue::(MonadError FMCException m, MonadReader FinState m) => AccumName -> m MoneyValue
+getAccumulatedValue :: (MonadError FMCException m, MonadReader FinState m) => AccumName -> m MoneyValue
 getAccumulatedValue accumName = do
   (Accumulators as) <- view fsAccumulators
   noteM (FailedLookup ("Couldn't find accum named " <> (T.pack $ show accumName))) $ M.lookup accumName as

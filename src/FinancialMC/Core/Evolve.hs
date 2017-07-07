@@ -24,8 +24,7 @@ module FinancialMC.Core.Evolve
        , evolveAndApply
        ) where
 
-import           FinancialMC.Core.FinApp          (LoggableStepApp,
-                                                   StepLiftable (stepLift),
+import           FinancialMC.Core.FinApp          (LoggableStepApp (..),
                                                    magnifyStepApp,
                                                    taxDataApp2StepAppFSER,
                                                    toStepApp)
@@ -99,7 +98,7 @@ evolveWithin :: IsRateModel rm => (Evolvable a, TR.Traversable t)=> b -> Lens' b
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
 
 applyTax ::( MonadError FMCException m
-           , StepLiftable FMCException FinState ExchangeRateFunction m)
+           , LoggableStepApp FinState ExchangeRateFunction m)
   => TaxAmount -> m ()
 applyTax (TaxAmount tt y) =
   let taxFlow :: TaxDataApp (Either FMCException) ()
@@ -109,7 +108,7 @@ applyTax (TaxAmount tt y) =
   in if MV.isNonNegative y then applyAction else errorAction
 
 applyDeduction :: ( MonadError FMCException m
-                  , StepLiftable FMCException FinState ExchangeRateFunction m)
+                  , LoggableStepApp FinState ExchangeRateFunction m)
   => TaxAmount -> m ()
 applyDeduction (TaxAmount tt y) =
   let taxFlow :: TaxDataApp (Either FMCException) ()
@@ -119,22 +118,20 @@ applyDeduction (TaxAmount tt y) =
   in if MV.isNonNegative y then applyAction else errorAction
 
 applyFlowAndTax :: ( MonadError FMCException m
-                   , LoggableStepApp FinState ExchangeRateFunction m
-                   , StepLiftable FMCException FinState ExchangeRateFunction m)
+                   , LoggableStepApp FinState ExchangeRateFunction m)
   => MoneyValue -> TaxAmount -> m ()
 applyFlowAndTax x ta =   addCashFlow x >> applyTax ta
 
 applyFlowAndDeduction :: ( MonadError FMCException m
-                         , LoggableStepApp FinState ExchangeRateFunction m
-                         , StepLiftable FMCException FinState ExchangeRateFunction m) => MoneyValue -> TaxAmount -> m ()
+                         , LoggableStepApp FinState ExchangeRateFunction m) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndDeduction x ta = addCashFlow x >> applyDeduction ta
 
 
 
 applyFlow :: ( MonadError FMCException m
-             , LoggableStepApp FinState ExchangeRateFunction m
-             , StepLiftable FMCException FinState ExchangeRateFunction m)
-  =>FlowResult -> m ()
+             , LoggableStepApp FinState ExchangeRateFunction m)
+  => FlowResult
+  -> m ()
 applyFlow (UnTaxed x) = addCashFlow x
 applyFlow (AllTaxed ta@(TaxAmount _ x)) = applyFlowAndTax x ta
 applyFlow (AllDeductible ta@(TaxAmount _ x)) = applyFlowAndDeduction (MV.negate x) ta
@@ -145,8 +142,7 @@ applyFlow (PartiallyDeductible x ta) = applyFlowAndDeduction x ta
 
 
 applyFlows :: ( MonadError FMCException m
-              , LoggableStepApp FinState ExchangeRateFunction m
-              , StepLiftable FMCException FinState ExchangeRateFunction m)
+              , LoggableStepApp FinState ExchangeRateFunction m)
   => [FlowResult] -> m ()
 applyFlows = mapM_ applyFlow
 
@@ -163,7 +159,6 @@ applyAccums  = mapM_ applyAccum
 
 
 applyEvolveResult :: ( MonadError FMCException m
-                     , StepLiftable FMCException FinState ExchangeRateFunction m
                      , LoggableStepApp FinState ExchangeRateFunction m) => EvolveResult a -> m a
 applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyFlows flows
@@ -173,8 +168,7 @@ applyEvolveResult (Result a (EvolveOutput flows accums)) = do
 evolveAndApply :: forall rm m a. ( IsRateModel rm
                                  , MonadError FMCException m
                                  , Evolvable a
-                                 , LoggableStepApp FinState (FinEnv rm) m
-                                 , StepLiftable FMCException FinState (FinEnv rm) m)
+                                 , LoggableStepApp FinState (FinEnv rm) m)
   => a -> m a
 evolveAndApply x = stepLift $  do
   let result :: ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException)) a

@@ -35,7 +35,7 @@ import qualified FinancialMC.Core.MoneyValueOps   as MV
 import           FinancialMC.Core.Engine          (EngineC,
                                                    HasPathSummaryAndSeed (..),
                                                    PathSummaryAndSeed (..),
-                                                   RandomSeed, execOnePathPure)
+                                                   execOnePathPure)
 
 --import FinancialMC.Core.Flow (FlowDirection(..))
 import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
@@ -44,20 +44,20 @@ import           FinancialMC.Core.MCState         (CombinedState,
                                                    HasMCState (..),
                                                    PathSummary (..), grossFlows,
                                                    netWorth)
-import           FinancialMC.Core.Utilities       (Year)
+import           FinancialMC.Core.Utilities       (FMCException, Year)
 
-import           Control.Arrow                    ((&&&), (***))
-import           Control.Exception                (SomeException)
+import           Control.Arrow                    ((***))
+--import           Control.Exception                (SomeException)
 import           Control.Lens                     (makeClassy, view, (&), (.~),
-                                                   (^.), _1, _2)
+                                                   (^.), _1)
 import           Control.Parallel.Strategies      (parList, rseq, using)
 import           Data.List                        (foldl', sort, sortBy)
 import qualified Data.Map                         as M
 import           Data.Ord                         (comparing)
 import qualified Data.Vector                      as V
-import qualified Data.Vector.Generic.Base         as VGB
-import           Data.Word                        (Word64)
-import qualified Safe                             as Safe
+--import qualified Data.Vector.Generic.Base         as VGB
+--import           Data.Word                        (Word64)
+--import qualified Safe                             as Safe
 import           Statistics.Sample.Histogram      (histogram, histogram_, range)
 
 psasToNumber :: PathSummaryAndSeed -> Double
@@ -68,10 +68,10 @@ sortSummaries::[PathSummaryAndSeed] -> [PathSummaryAndSeed]
 sortSummaries = sortBy (\x y-> compare (psasToNumber x) (psasToNumber y))
 
 qIndices::Int->Int->[Int]
-qIndices len quantiles = map (\n -> (2*n - 1) * len `div` (2 * quantiles)) [1..quantiles]
+qIndices len quantiles = fmap (\n -> (2*n - 1) * len `div` (2 * quantiles)) [1..quantiles]
 
 qSubSet::[Int]->[a]->[a]
-qSubSet is xs = map (\n -> xs !! n) is
+qSubSet is xs = fmap (\n -> xs !! n) is
 
 data DatedMoneyValue = DatedMoneyValue { _dmYear :: !Year, _dmValue :: !MoneyValue } deriving (Show)
 
@@ -99,7 +99,7 @@ historiesFromSummaries::EngineC a fl le ru rm
   -> Bool -- single threaded ?
   -> Int -- number of quantiles
   -> Int -- years per path
-  -> Either SomeException SimHistories
+  -> Either FMCException SimHistories
 historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles years = do
   let year0 = fe0 ^. feCurrentDate
       nw0 = netWorth cs0 fe0
