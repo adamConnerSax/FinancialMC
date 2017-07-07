@@ -80,6 +80,7 @@ library
                 , lens
                 , mersenne-random-pure64
                 , mmorph
+                , monad-control
                 , monad-parallel
                 , mtl
                 , parallel
@@ -94,6 +95,7 @@ library
                 , text
                 , time
                 , transformers
+                , transformers-base
                 , unordered-containers
                 , vector
                 , yaml

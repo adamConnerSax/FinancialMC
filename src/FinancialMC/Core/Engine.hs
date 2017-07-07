@@ -121,15 +121,33 @@ type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
                              IsRule ru, Show ru,
                              IsRateModel rm)
 
-execOnePathIO::EngineC a fl le ru rm=>LifeEventConverters a fl le->[LogLevel]->
-  CombinedState a fl le ru->FinEnv rm->RandomSeed->Int->IO (CombinedState a fl le ru,FinEnv rm)
+-- The IO versions are required for logging.
+-- If we only use IO for entropy, config loading and result reporting, we can use the pure stack.
+-- But to do realtime logging to stdout we need IO in the stack all the time.
+
+execOnePathIO :: EngineC a fl le ru rm
+  => LifeEventConverters a fl le
+  -> [LogLevel]
+  -> CombinedState a fl le ru
+  -> FinEnv rm
+  -> RandomSeed
+  -> Int
+  -> IO (CombinedState a fl le ru,FinEnv rm)
 execOnePathIO convertLE logDetails cs fe seed years = do
   let newSource = pureMT seed
   execPPathApp (doPath convertLE newSource years) logDetails cs fe
 
-doPathsIO::EngineC a fl le ru rm=>
-           LifeEventConverters a fl le->[LogLevel]->Bool->CombinedState a fl le ru->
-           FinEnv rm->Bool->PureMT->Int->Int->IO [PathSummaryAndSeed] --[(PathSummary,RandomSeed)]
+doPathsIO :: EngineC a fl le ru rm
+  => LifeEventConverters a fl le
+  -> [LogLevel]
+  -> Bool
+  -> CombinedState a fl le ru
+  -> FinEnv rm
+  -> Bool
+  -> PureMT
+  -> Int
+  -> Int
+  -> IO [PathSummaryAndSeed] --[(PathSummary,RandomSeed)]
 doPathsIO convertLE logDetails showFinalStates cs0 fe0 singleThreaded pMT yearsPerPath paths = do
   let seeds = getNSeeds pMT paths
   let g seed = do
@@ -148,7 +166,7 @@ execOnePathPure :: EngineC a fl le ru rm
   -> FinEnv rm
   -> RandomSeed
   -> Int
-  -> Either FMCException (CombinedState a fl le ru,FinEnv rm)
+  -> Either FMCException (CombinedState a fl le ru, FinEnv rm)
 execOnePathPure convertLE cs fe seed years = do
   let newSource = pureMT seed
   execPathApp (doPath convertLE newSource years) cs fe
@@ -164,27 +182,26 @@ doPaths :: EngineC a fl le ru rm
   -> Either FMCException [PathSummaryAndSeed]
 doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do
   let seeds =  getNSeeds pMT paths
-      g :: RandomSeed -> Either FMCException PathSummaryAndSeed
       g seed = do
         (cs',_) <-  execOnePathPure convertLE cs0 fe0 seed yearsPerPath
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
-
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds
                              else g <$> seeds `using` parList rseq
   sequence eMap
 
-
 doPath :: ( EngineC a fl le ru rm
           , LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) m)
-  => LifeEventConverters a fl le -> PureMT -> Int -> m PureMT
+  => LifeEventConverters a fl le
+  -> PureMT
+  -> Int
+  -> m PureMT
 doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1..years]
 
-
-lensFinEnv::Lens' (s,FinEnv rm) (FinEnv rm)
+lensFinEnv :: Lens' (s,FinEnv rm) (FinEnv rm)
 lensFinEnv = _2
 
-lensToEmpty::Lens' a ()
+lensToEmpty :: Lens' a ()
 lensToEmpty q x = const x <$> q ()
 
 doOneStepOnPath :: ( EngineC a fl le ru rm
@@ -206,7 +223,7 @@ doOneStepOnPath convertLE pMT = pathLift $ do
   zoomPathAppS lensToEmpty updateTaxBrackets --fix??
   return $! newPMT
 
-updateCurrentDate::MonadState (FinEnv rm) m=>m ()
+updateCurrentDate :: MonadState (FinEnv rm) m => m ()
 updateCurrentDate = feCurrentDate += 1
 
 updateRates' :: ( IsRateModel rm
@@ -323,13 +340,12 @@ doLifeEvents convertLE = do
   Result _ results <- runResultT $ mapM_ f liveEvents
   doLifeEventResult results
 
-doLifeEventResult::(IsFlow fl, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=>LifeEventOutput a fl->m ()
+doLifeEventResult :: (IsFlow fl, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => LifeEventOutput a fl -> m ()
 doLifeEventResult (LifeEventOutput newAccounts newFlows) = do
   csMC.mcsBalanceSheet %= execState (mapM_ insertAccount newAccounts)
   csMC.mcsCashFlows %= execState (mapM_ addFlow newFlows)
 
-
-doTax :: (EngineC a fl le ru rm
+doTax :: ( EngineC a fl le ru rm
          , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
   => m (MoneyValue,Double)
 doTax = stepLift $ do
@@ -346,7 +362,7 @@ doTax = stepLift $ do
 
 doTaxTrade :: ( IsAsset a,Show a,IsRule ru, IsRateModel rm
               , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
-doTaxTrade = stepLift $ do
+doTaxTrade = do
   mcs <- use csMC
   let getA name = getAccount name ( mcs ^. mcsBalanceSheet)
   curPos <- use (csFinancial.fsCashFlow)
@@ -363,16 +379,19 @@ payTax tax = do
   log Debug ("Paid Tax of " <> (T.pack $ show tax))
 
 
-doSweepTrades::(EngineC a fl le ru rm, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>app ()
-doSweepTrades = stepLift $ do
+doSweepTrades::( EngineC a fl le ru rm
+               , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
+doSweepTrades = do
   mcs <- use csMC
   let getA name = getAccount name ( mcs ^. mcsBalanceSheet)
   Result _ result <- morphInnerRuleStack $ runResultT (doRule (mcs ^. mcsSweep) getA)
   doRuleResult result
 
-
-doAccountTransaction::(IsAsset a,Show a,
-                       LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction app)=>Transaction->app ()
+doAccountTransaction::( IsAsset a
+                      , Show a
+                      , LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction m)
+  => Transaction
+  -> m ()
 doAccountTransaction tr@(Transaction target typ amt)= stepLift $ do
   mcs <- use csMC
   let balanceSheet = mcs ^. mcsBalanceSheet
@@ -395,8 +414,9 @@ isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
 doTransactions :: ( IsAsset a
                   , Show a
                   , LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction m)
-  =>[Transaction]->m ()
-doTransactions ts = stepLift $ mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
+  => [Transaction]
+  -> m ()
+doTransactions ts = mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
 
 computeTax :: LoggableStepApp TaxData (FinEnv rm) m => m (MoneyValue,Double)  -- main body now in Tax.hs
 computeTax = stepLift $ do
