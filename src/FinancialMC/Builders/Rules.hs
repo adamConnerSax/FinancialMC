@@ -36,30 +36,22 @@ import qualified FinancialMC.Core.MoneyValueOps   as MV
 import           FinancialMC.Core.Result          (ResultT, appendAndReturn)
 import           FinancialMC.Core.TradingTypes    (TradeType (..),
                                                    Transaction (..))
-import           FinancialMC.Core.Utilities       (DateRange, Year, between,
-                                                   mapMSl)
+import           FinancialMC.Core.Utilities       (DateRange, FMCException,
+                                                   Year, between, mapMSl)
 
 import           FinancialMC.Core.Rule            (IsRule (..), RuleApp,
                                                    RuleName,
                                                    RuleOutput (RuleOutput),
-                                                   RuleWhen (AfterSweep, BeforeTax, Special),
-                                                   showRuleCore)
+                                                   RuleWhen (AfterSweep, BeforeTax, Special))
 
 import           FinancialMC.Core.Tax             (safeCapGainRateCV)
 
-import           Control.Exception                (SomeException)
 import           Control.Lens                     (magnify, makeClassy, view,
                                                    (^.))
 import           Control.Monad.Reader             (ReaderT)
 import           Control.Monad.Trans.Class        (lift)
 
-import           Data.Aeson                       (FromJSON, ToJSON,
-                                                   genericParseJSON,
-                                                   genericToJSON)
-import           Data.Aeson.Types                 (Options (fieldLabelModifier),
-                                                   defaultOptions)
---import           Data.Aeson.TH (deriveJSON)
---import           Data.Aeson.Existential (TypeNamed)
+import           Data.Aeson                       (FromJSON, ToJSON)
 import qualified Data.Text                        as T
 
 import           GHC.Generics                     (Generic)
@@ -196,7 +188,7 @@ doBaseRule (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip ac
     cashPos <- view fsCashFlow
     curDate <- liftFE $ view feCurrentDate
     let ccy = cashPos ^. mCurrency
-        h::(AccountName,DateRange)->MoneyValue->MV.ER (Either SomeException) (Transaction,MoneyValue)
+        h::(AccountName,DateRange)->MoneyValue->MV.ER (Either FMCException) (Transaction,MoneyValue)
         h (name,range) need = do
           acct <- lift $ getA name
           let bal' = accountValueCV acct

@@ -1,7 +1,7 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-
+{-# LANGUAGE OverloadedStrings     #-}
 module FinancialMC.Parsers.ConfigurationLoader
        (
          loadDataSources,
@@ -24,7 +24,7 @@ import           FinancialMC.Core.MCState                    (CombinedState (..)
                                                               getAccountNames,
                                                               makeMCState)
 import qualified FinancialMC.Core.MoneyValue                 as MV
-import           FinancialMC.Core.Rates                      (Rate, IsRateModel,
+import           FinancialMC.Core.Rates                      (IsRateModel, Rate,
                                                               RateTable,
                                                               applyModel,
                                                               defaultRateTable)
@@ -32,7 +32,9 @@ import           FinancialMC.Core.Rule                       (IsRule,
                                                               ruleAccounts)
 import           FinancialMC.Core.Tax                        (FilingStatus,
                                                               TaxRules)
-import           FinancialMC.Core.Utilities                  (eitherToIO, noteM)
+import           FinancialMC.Core.Utilities                  (AsFMCException (..),
+                                                              FMCException,
+                                                              eitherToIO, noteM)
 import qualified FinancialMC.Parsers.Configuration           as C
 import           FinancialMC.Parsers.XML.ParseFinancialState (loadFinancialStatesFromString)
 import qualified FinancialMC.Parsers.XML.ParseInput          as XML
@@ -42,23 +44,28 @@ import           FinancialMC.Parsers.XML.ParseTax            (loadTaxDataFromStr
 import           FinancialMC.Base                            (BaseAsset,
                                                               BaseFlow,
                                                               BaseLifeEvent,
-                                                              BaseRule,
-                                                              BaseRateModelT)
+                                                              BaseRateModelT,
+                                                              BaseRule)
 
 import qualified Control.Exception                           as E
+import           Control.Exception.Lens                      (throwingM)
 import           Control.Monad                               (foldM)
-import           Control.Monad.Catch                         (MonadThrow,
-                                                              throwM)
-import           Control.Monad.State.Strict                  (StateT,get,put,
-                                                              execStateT)
+import           Control.Monad.State.Strict                  (StateT,
+                                                              execStateT, get,
+                                                              put)
 import qualified Data.Map                                    as M
 import           Data.Random.Source.PureMT                   (pureMT)
 
 import           Control.Lens                                (zoom, (%=), _1,
                                                               _2)
+import           Control.Monad.Error.Lens                    (throwing)
+import           Control.Monad.Except                        (MonadError)
 import           Control.Monad.Morph                         (generalize, hoist,
                                                               lift)
-import           Data.Aeson                                  (FromJSON,eitherDecode)
+import           Data.Aeson                                  (FromJSON,
+                                                              eitherDecode)
+import           Data.Monoid                                 ((<>))
+import qualified Data.Text                                   as T
 import qualified Data.Yaml                                   as YAML
 
 type BaseFCC a fl le ru rm = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le BaseRule ru BaseRateModelT rm
@@ -73,7 +80,7 @@ loadDataSource fcc mSchemaDir (C.DataSource (C.Parseable up C.XML) C.FinancialSt
       xmlS <- (C.asIOString up)
       C.convertComponentsIFSMap fcc <$> execStateT (loadFinancialStatesFromString mSchemaDir xmlS) M.empty
     put $ M.union currentFS newFS
-                          
+
 {-  zoom C.lmFS $ lift (C.asIOString up) >>= loadFinancialStatesFromString fcc mSchemaDir -}
   -- validate!!
 loadDataSource _ mSchemaDir (C.DataSource (C.Parseable up C.XML) C.TaxStructureS) =
@@ -100,7 +107,7 @@ loadDataSource _ _ (C.DataSource (C.Parseable up encoding) C.TaxStructureS) = do
   newTS <- lift $ decodeUnparsed up encoding
   zoom C.lmTax . hoist generalize $ C.mergeTaxStructures newTS
 
-loadDataSource _ _ (C.DataSource C.DBQuery _) = lift . E.throwIO $ BadParse "DBQuery data source not yet implemented!"
+loadDataSource _ _ (C.DataSource C.DBQuery _) = lift $ throwingM _BadParse "DBQuery data source not yet implemented!"
 
 loadDataSource _ _ _ = lift . E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
 
@@ -110,16 +117,16 @@ decodeUnparsed _ C.XML = E.throwIO $ BadParse "XML handled specifically! Should 
 decodeUnparsed up C.JSON = do
   lbs <- C.asIOLazyByteString up
   case eitherDecode lbs of
-    Left err -> E.throwIO $ BadParse ("While decoding (as JSON): " ++ show up ++ ": " ++ err)
+    Left err -> throwingM _BadParse ("While decoding (as JSON): " <> (T.pack $ show up) <> ": " <> (T.pack err))
     Right x -> return x
 
 decodeUnparsed up C.YAML = do
   bs <- C.asIOByteString up
   case YAML.decodeEither bs of
-    Left err -> E.throwIO $ BadParse ("While decoding (as YAML)" ++ show up ++ ": " ++ err)
+    Left err -> throwingM _BadParse ("While decoding (as YAML)" <> (T.pack $ show up) <> ": " <> (T.pack err))
     Right x -> return x
 
-decodeUnparsed _ _ = E.throwIO $ BadParse "Fallthrough case in decodeUnparsed."
+decodeUnparsed _ _ = throwingM _BadParse "Fallthrough case in decodeUnparsed."
 
 loadDataSources::(FJ a fl le ru rm,IsRule ru)=>
   BaseFCC a fl le ru rm->Maybe FilePath->[C.DataSource]->StateT (C.LoadedModels a fl le ru rm) IO ()
@@ -138,7 +145,7 @@ loadJSONConfigs::(FJ a fl le ru rm,IsRule ru)=>BaseFCC a fl le ru rm->Maybe File
 loadJSONConfigs fcc mSchema up = do
   configLBS <- lift $ C.asIOLazyByteString up
   case eitherDecode configLBS of
-    Left err -> lift . E.throwIO $ BadParse err
+    Left err -> lift $ throwingM _BadParse (T.pack err)
     Right (C.ConfigurationInputs sources configM) -> do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
@@ -149,7 +156,7 @@ loadYAMLConfigs::(FJ a fl le ru rm,IsRule ru)=>
 loadYAMLConfigs fcc mSchema up = do
   configBS <- lift $ C.asIOByteString up
   case YAML.decodeEither configBS of
-    Left err -> lift . E.throwIO $ BadParse err
+    Left err -> lift $ throwingM _BadParse (T.pack err)
     Right (C.ConfigurationInputs sources configM) -> do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
@@ -162,9 +169,9 @@ loadConfigurationsS fcc mSchemaP up@(C.UnparsedFile configP) = loadC fcc mSchema
     C.XML -> loadXMLConfigs
     C.JSON -> loadJSONConfigs
     C.YAML -> loadYAMLConfigs
-    C.UnkEncoding -> \_ _ _ -> lift . E.throwIO $ Other "Bad file type specified as config.  Only .xml .json and .yaml supported"
+    C.UnkEncoding -> \_ _ _ -> lift $ throwingM _Other "Bad file type specified as config.  Only .xml .json and .yaml supported"
 
-loadConfigurationsS _ _ _ = lift . E.throwIO $ BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
+loadConfigurationsS _ _ _ = lift $ throwingM _BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
 
 
 loadConfigurations::(FJ a fl le ru rm,IsRule ru)=>
@@ -175,7 +182,7 @@ loadConfigurations fcc mSchemaP up =
 buildMCState::C.InitialFS a fl le ru->FinEnv rm->MCState a fl le ru
 buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs cfs fe les rules sweepR taxTradeR
 
-makeStartingRates::(IsRateModel rm,MonadThrow m)=>rm->m (RateTable Rate)
+makeStartingRates :: (IsRateModel rm, MonadError FMCException m)=>rm->m (RateTable Rate)
 makeStartingRates rateDefaultModel = do
   (_,(startingRates,_)) <- applyModel (defaultRateTable,pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
   return startingRates
@@ -189,11 +196,16 @@ buildInitialState ifs taxRules startingRates rModel date ccy =
       ics = CombinedState (zeroFinState ccy) mcs False
   in (fe, ics)
 
-getInitialStates::IsRateModel rm=>C.LoadedModels a fl le ru rm->FilingStatus->(String,String,String,String,String,Maybe String)->
-                  Year->MV.Currency->Either E.SomeException (FinEnv rm,CombinedState a fl le ru)
+getInitialStates :: IsRateModel rm
+  => C.LoadedModels a fl le ru rm
+  -> FilingStatus
+  -> (String,String,String,String,String,Maybe String)
+  -> Year
+  -> MV.Currency
+  -> Either FMCException (FinEnv rm,CombinedState a fl le ru)
 getInitialStates (C.LoadedModels ifsM rmM ts) fstat (fsName,rdName,rmName,tfName,tsName,mtcName) date ccy = do
   initialFS <-
-    noteM (Other ("Couldn't find Financial State named \"" ++ fsName ++ "\"")) $ C.getFinancialState ifsM fsName
+    noteM (Other ("Couldn't find Financial State named \"" <> (T.pack fsName) <> "\"")) $ C.getFinancialState ifsM fsName
   taxRules <- C.makeTaxRules ts fstat tfName tsName mtcName
   rateDefaultModel <- noteM (Other "Failed in getRateModel (defaults)") $ C.getRateModel rmM rdName
   rateModel <- noteM (Other "Failed in getRateModel (model)") $ C.getRateModel rmM rmName
@@ -201,11 +213,14 @@ getInitialStates (C.LoadedModels ifsM rmM ts) fstat (fsName,rdName,rmName,tfName
   return $ buildInitialState initialFS taxRules startingRates rateModel date ccy
 
 
-buildInitialStateFromConfig::IsRateModel rm=>C.LoadedModels a fl le ru rm->C.ModelDescriptionMap->
-                             String->Either E.SomeException (Maybe String,FinEnv rm,CombinedState a fl le ru)
+buildInitialStateFromConfig :: IsRateModel rm
+  => C.LoadedModels a fl le ru rm
+  -> C.ModelDescriptionMap
+  -> String
+  -> Either FMCException (Maybe String, FinEnv rm, CombinedState a fl le ru)
 buildInitialStateFromConfig ci cm confName = do
   (C.ModelDescription fs op date ccy (rds,rms) (fstat,fed,st,cty)) <-
-    noteM (Other ("Failed to find conf=" ++ confName)) $ M.lookup confName cm
+    noteM (Other ("Failed to find conf=" <> (T.pack confName))) $ M.lookup confName cm
   (fe,cs) <- getInitialStates ci fstat (fs,rds,rms,fed,st,cty) date ccy
   return (op,fe,cs)
 
@@ -213,16 +228,18 @@ buildInitialStateFromConfig ci cm confName = do
 exchangeRates::MV.ExchangeRateFunction
 exchangeRates MV.USD MV.EUR = 0.8
 exchangeRates MV.EUR MV.USD = 1.0/exchangeRates MV.USD MV.EUR
-exchangeRates _ _     = 1.0
+exchangeRates _ _           = 1.0
 
 
-validateFinancialState::IsRule ru=>C.InitialFS a fl le ru->String->Either E.SomeException ()
+validateFinancialState :: IsRule ru => C.InitialFS a fl le ru->String->Either FMCException ()
 validateFinancialState (C.InitialFS bs _ _ rs sw tt) configName = do
   let validAccountNames = getAccountNames bs
-      checkName::AccountName->Either E.SomeException ()
+      checkName::AccountName->Either FMCException ()
       checkName name = if name `elem` validAccountNames
                        then Right ()
-                       else throwM (Other ("(" ++ configName ++ ") Account \"" ++ show name ++ "\" required by a rule but not found."))
+                       else throwing _Other ("(" <> (T.pack configName)
+                                             <> ") Account \"" <> (T.pack $ show name)
+                                             <> "\" required by a rule but not found.")
       checkRule rule = foldM (\_ name-> checkName name) () (ruleAccounts rule)
       allRules = rs ++ [sw,tt]
   foldM (\_ r->checkRule r) () allRules
