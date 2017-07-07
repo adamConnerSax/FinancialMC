@@ -119,10 +119,10 @@ getNSeedsStrict pMT n = (head l)  `deepseq` l where
 -}
 
 type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
-                           IsAsset a, Show a,
-                           IsFlow fl, Show fl,
-                           IsRule ru, Show ru,
-                           IsRateModel rm)
+                             IsAsset a, Show a,
+                             IsFlow fl, Show fl,
+                             IsRule ru, Show ru,
+                             IsRateModel rm)
 
 execOnePathIO::EngineC a fl le ru rm=>LifeEventConverters a fl le->[LogLevel]->
   CombinedState a fl le ru->FinEnv rm->RandomSeed->Int->IO (CombinedState a fl le ru,FinEnv rm)
@@ -310,13 +310,13 @@ doRuleResult :: (IsAsset a, Show a
                 , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
                 , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=> RuleOutput -> m ()
 doRuleResult (RuleOutput trades accs) = do
-  log Debug ("Resulting in trades:" <> (T.pack $ show trades) <> " and accums=" <> show accs)
+  log Debug ("Resulting in trades:" <> (T.pack $ show trades) <> " and accums=" <> (T.pack $ show accs))
   stepLift . magnifyStepApp feExchange $ do
     zoomStepApp csFinancial $ applyAccums accs
     doTransactions trades
 
-doLifeEvents :: forall a fl le ru rm app. ( EngineC a fl le ru rm
-                                          , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+doLifeEvents :: forall a fl le ru rm m. ( EngineC a fl le ru rm
+                                        , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
   => LifeEventConverters a fl le -> m ()
 doLifeEvents convertLE = do
   fe <- ask
@@ -325,7 +325,7 @@ doLifeEvents convertLE = do
       happeningThisYear le = (lifeEventYear le == curDate)
       liveEvents = filter happeningThisYear (mcs ^. mcsLifeEvents)
       getA name = getAccount name (mcs ^. mcsBalanceSheet)
-      f::le->ResultT (LifeEventOutput a fl) app ()
+      f :: le -> ResultT (LifeEventOutput a fl) m ()
       f x = do
         lift $ log Debug ("Doing " <> (T.pack $ show (lifeEventName x)))
         morphResultStack (doLifeEvent x convertLE getA)

@@ -228,6 +228,7 @@ baseStep2basePath = BasePathApp . multS . hoist readOnly . unBaseStepApp
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
+{-
 class StepLiftable err s e m where
   stepLift :: StepApp err s e a -> m a
 
@@ -235,48 +236,39 @@ class Monad n => BaseStepLiftable s e n m where
   baseStepLift :: BaseStepApp s e n a -> m a
 
 type LoggableStepApp s e m = (Loggable m, MonadState s m, MonadReader e m)
-
-{-
-class (MonadThrow m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
-  stepLog :: LogLevel -> String -> m ()
-  stepLift :: StepApp err s e z -> m z
-  fromBaseS :: BaseStepApp s e Identity x -> m x
 -}
 
-zoomStep :: (LoggableStepApp s e m, StepLiftable FMCException s e m) => Lens' s sInner -> StepApp FMCException sInner e x -> m x
+class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
+  stepLift :: StepApp FMCException s e z -> m z
+  fromBaseS :: BaseStepApp s e Identity x -> m x
+
+zoomStep :: LoggableStepApp s e m => Lens' s sInner -> StepApp FMCException sInner e x -> m x
 zoomStep l = stepLift . zoomStepApp l
 
 instance Loggable (StepApp err s e) where
   log _ _ = return ()
 
+{-
 instance StepLiftable FMCException s e (StepApp FMCException s e) where
   stepLift = id
 
 instance BaseStepLiftable s e Identity (StepApp FMCException s e) where
   baseStepLift = StepApp . hoist generalize
+-}
 
-{-
-instance LoggableStepApp s e (StepApp err s e) where
-  stepLog _ _ = return ()
+
+instance LoggableStepApp s e (StepApp FMCException s e) where
   stepLift = id
   fromBaseS = StepApp . hoist generalize
--}
 
 instance Loggable (PStepApp s e) where
   log ll = PStepApp . faLog ll
 
-instance StepLiftable FMCException s e (PStepApp s e) where
-  stepLift = liftStepApp
-
-instance BaseStepLiftable s e Identity (PStepApp s e) where
-  baseStepLift = PStepApp . lift . hoist generalize
-
-{-
 instance LoggableStepApp s e (PStepApp s e) where
-  stepLog ll msg = PStepApp $ faLog ll msg
   stepLift = liftStepApp
   fromBaseS = PStepApp . lift . hoist generalize
--}
+
+{-
 class HasFMCException err => PathLiftable err s e m where
   pathLift :: PathApp err s e a -> m a
 
@@ -287,19 +279,19 @@ class StepToPath stepM pathM where
   stepToPath :: stepM a -> pathM a
 
 type LoggablePathApp s e m = (Loggable m, MonadState (s,e) m)
-
-{-
-class (MonadThrow m, MonadState (s,e) m) => LoggablePathApp s e m where
-  type Step s e m :: * -> *
-  pathLog :: LogLevel -> String -> m ()
-  pathLift :: PathApp err s e z -> m z
-  fromBaseP :: BasePathApp s e Identity x -> m x
-  step2Path :: Step s e m x -> m x
 -}
+
+
+class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m where
+  type Step s e m :: * -> *
+  pathLift :: PathApp err s e a -> m a
+  fromBaseP :: BasePathApp s e Identity a -> m a
+  step2Path :: Step s e m a -> m a
 
 instance Loggable (PathApp err s e) where
   log _ _ = return ()
 
+{-
 instance PathLiftable FMCException s e (PathApp FMCException s e) where
   pathLift = id
 
@@ -308,19 +300,18 @@ instance BasePathLiftable s e Identity (PathApp FMCException s e) where
 
 instance StepToPath (StepApp FMCException s e) (PathApp FMCException s e) where
   stepToPath = PathApp . baseStep2basePath . unStepApp
+-}
 
-{-
-instance LoggablePathApp s e (PathApp err s e) where
-  type Step s e (PathApp err s e)  = StepApp err s e
-  pathLog _ _ = return ()
+instance LoggablePathApp s e (PathApp FMCException s e) where
+  type Step s e (PathApp FMCException s e)  = StepApp FMCException s e
   pathLift = id
   fromBaseP = PathApp . hoist generalize
   step2Path = PathApp . baseStep2basePath . unStepApp
--}
 
 instance Loggable (PPathApp s e) where
   log ll = PPathApp . faLog ll
 
+{-
 instance HasFMCException err => PathLiftable err s e (PPathApp s e) where
   pathLift = liftPathApp
 
@@ -329,15 +320,15 @@ instance BasePathLiftable s e Identity (PPathApp s e) where
 
 instance StepToPath (PStepApp s e) (PPathApp s e) where
   stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
+-}
 
-{-
+
 instance LoggablePathApp s e (PPathApp s e) where
   type Step s e (PPathApp s e) = PStepApp s e
-  pathLog ll = PPathApp . faLog ll
   pathLift = liftPathApp
   fromBaseP = PPathApp . lift . hoist generalize
   step2Path = PPathApp . hoist baseStep2basePath . unPStepApp
--}
+
 
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
@@ -354,7 +345,7 @@ printLog lvls = do
   printLog lvls
 
 --taxDataApp2StepAppFSER::LoggableStepApp FinState ExchangeRateFunction app => TaxDataApp (Either SomeException) a->app a
-taxDataApp2StepAppFSER :: forall m a. StepLiftable FMCException FinState ExchangeRateFunction m
+taxDataApp2StepAppFSER :: forall m a. LoggableStepApp FinState ExchangeRateFunction m
   => TaxDataApp (Either FMCException) a -> m a
 taxDataApp2StepAppFSER x =
   let sa :: StepApp FMCException FinState ExchangeRateFunction a
@@ -365,7 +356,7 @@ taxDataApp2StepAppFS :: TaxDataApp (Either FMCException) a -> StepApp FMCExcepti
 taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . toStepApp $ tda
 
 --taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction app=>TaxDataApp (Either SomeException) a->app a
-taxDataApp2StepApp :: StepLiftable FMCException TaxData ExchangeRateFunction m => TaxDataApp (Either FMCException) a -> m a
+taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction m => TaxDataApp (Either FMCException) a -> m a
 taxDataApp2StepApp = stepLift . toStepApp
 
 {-

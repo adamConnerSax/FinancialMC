@@ -44,6 +44,7 @@ import           FinancialMC.Core.Result        ()
 import           FinancialMC.Core.TradingTypes  (AccountType, TradeApp,
                                                  TradeFunction, TradeResult,
                                                  TradeType)
+import           FinancialMC.Core.Utilities     (FMCException)
 
 import           Control.Lens                   (makeClassy, (^.))
 import           Data.Aeson                     (FromJSON (..), ToJSON (..),
@@ -54,7 +55,7 @@ import           Data.Aeson.Types               (Options (fieldLabelModifier),
 
 import qualified Data.Text                      as T
 
-import           Control.Exception              (SomeException)
+--import           Control.Exception              (SomeException)
 
 import           GHC.Generics                   (Generic)
 
@@ -130,5 +131,4 @@ accountValueCV::IsAsset a=>Account a->CV.CVD
 accountValueCV acct = foldr f (CV.mvZero (acct ^. acCurrency))  (acct ^. acAssets) where
   f a s = s |+| (CV.fromMoneyValue $ assetValue a)
 
-
-type AccountGetter a = AccountName -> Either SomeException (Account a)
+type AccountGetter a = AccountName -> Either FMCException (Account a)
