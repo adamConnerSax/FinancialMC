@@ -16,13 +16,13 @@ module FinancialMC.Core.Rule
 
 import           FinancialMC.Core.Asset           (AccountGetter, AccountName,
                                                    IsAsset)
-import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Evolve          (AccumResult)
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
+import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Result          (ResultT)
 import           FinancialMC.Core.TradingTypes    (Transaction)
+import           FinancialMC.Core.Utilities       (FMCException)
 
-import           Control.Exception                (SomeException)
 import           Control.Monad.Reader             (ReaderT)
 import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
@@ -32,19 +32,19 @@ instance Monoid RuleOutput where
   mempty = RuleOutput [] []
   mappend (RuleOutput x1 y1) (RuleOutput x2 y2) = RuleOutput (x1<>x2) (y1<>y2)
 
-type RuleApp rm = ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)))
+type RuleApp rm = ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
 
 data RuleWhen = Special | BeforeTax | AfterSweep  deriving (Enum,Ord,Eq,Show,Read)
 
 type RuleName = T.Text
 
 class IsRule r where
-  ruleName::r->RuleName
-  ruleAccounts::r->[AccountName]
-  ruleWhen::r->RuleWhen
-  doRule::(IsAsset a,IsRateModel rm)=>r->AccountGetter a->RuleApp rm ()
+  ruleName :: r -> RuleName
+  ruleAccounts :: r -> [AccountName]
+  ruleWhen :: r -> RuleWhen
+  doRule :: (IsAsset a, IsRateModel rm) => r -> AccountGetter a -> RuleApp rm ()
 
-showRuleCore::IsRule r=>r->String
+showRuleCore :: IsRule r => r -> String
 showRuleCore r = show (ruleName r) ++" (involves " ++ show (ruleAccounts r) ++ ")"
 
 

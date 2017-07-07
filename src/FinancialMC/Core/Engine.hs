@@ -19,7 +19,7 @@ module FinancialMC.Core.Engine
          -- Only for Benchmarking
        ) where
 
-import           FinancialMC.Core.Asset           (IsAsset)
+import           FinancialMC.Core.Asset           (Account, IsAsset)
 import           FinancialMC.Core.AssetTrading    (tradeAccount)
 import           FinancialMC.Core.Evolve          (applyAccums, applyFlows)
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
@@ -48,7 +48,8 @@ import           FinancialMC.Core.FinApp          (LogLevel (..),
                                                    magnifyStepApp,
                                                    taxDataApp2StepAppFSER,
                                                    toPathApp, toStepApp,
-                                                   zoomPathAppS, zoomStepApp)
+                                                   zoomPathAppS, zoomStep,
+                                                   zoomStepApp)
 
 import           FinancialMC.Core.MCState         (CombinedState,
                                                    HasCombinedState (..),
@@ -80,7 +81,7 @@ import           Prelude                          hiding (log)
 import qualified Data.Text                        as T
 
 import           Control.DeepSeq                  (deepseq)
-import           Control.Exception                (SomeException)
+--import           Control.Exception                (SomeException)
 import           Control.Lens                     (Lens', magnify, makeClassy,
                                                    use, view, zoom, (%=), (+=),
                                                    (.=), (^.), _2)
@@ -215,7 +216,7 @@ updateCurrentDate = feCurrentDate += 1
 
 updateRates' :: ( IsRateModel rm
                 , MonadState (FinEnv rm) m
-                , MonadError FMCException m) => PureMT-> m PureMT
+                , MonadError FMCException m) => PureMT -> m PureMT
 updateRates' pMT = do
   rates <- use feRates
   model <- use feRateModel
@@ -232,7 +233,7 @@ updateTaxBrackets = pathLift $ do
   (lensFinEnv.feTaxRules) %= flip updateTaxRules taxBracketInflationRate
 
 {-
-updateTaxBrackets'::(MonadState FinEnv m, MonadThrow m)=>m ()
+updateTaxBrackets' :: (MonadState FinEnv m, MonadThrow m)=>m ()
 updateTaxBrackets' = do
   taxBracketInflationRate <- readOnly . zoom feRates $ rateRequest (Inflation TaxBracket)
   feTaxRules %= flip updateTaxRules taxBracketInflationRate
@@ -276,26 +277,30 @@ checkEndingCash = do
 doChecks :: ( StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m
             , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
 doChecks = do
-  stepLift . zoomStepApp (csFinancial.fsCashFlow) . magnifyStepApp feExchange $ checkEndingCash
+  zoomStep (csFinancial.fsCashFlow) . magnifyStepApp feExchange $ checkEndingCash
 
 morphInnerRuleStack :: ( LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
                        , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m)
-  => ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)) b -> m b
-morphInnerRuleStack = stepLift.toStepApp.zoom csFinancial.readOnly
+  => ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) b -> m b
+morphInnerRuleStack = zoomStep csFinancial . toStepApp . readOnly
 
-morphResultStack::(LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>
-                  ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException))) b->ResultT o app b
+morphResultStack :: ( LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
+                    , StepLiftable FMCException (CombinedState a fl le ru) (FinEnv rm) m)
+  => ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException))) b->ResultT o m b
 morphResultStack =  hoist morphInnerRuleStack
 
-doRules::(EngineC a fl le ru rm, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>RuleWhen->app ()
+doRules :: ( EngineC a fl le ru rm
+           , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+  => RuleWhen -> m ()
 doRules w = do
   mcs <- use csMC
   let isRuleNow r = ruleWhen r == w
       liveRules = filter isRuleNow (mcs ^. mcsRules)
+      getA :: MonadError FMCException m => T.Text -> m (Account a)
       getA name = getAccount name (mcs ^. mcsBalanceSheet)
-      f::(IsRule ru,IsRateModel rm)=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>ru->ResultT RuleOutput app ()
+      f :: (IsRule ru, IsRateModel rm) =>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>ru->ResultT RuleOutput app ()
       f r = do
-        lift $ log Debug ("Doing " <> (T.pack show (ruleName r)))
+        lift $ log Debug ("Doing " <> (T.pack $ show (ruleName r)))
         morphResultStack (doRule r getA)
   log Debug ("Doing " <> (T.pack $ show w) <> " rules.")
   Result _ ruleOutput <- runResultT $ mapM_ f liveRules -- can/should move zoom/hoist to here?  Does it matter?
@@ -310,9 +315,9 @@ doRuleResult (RuleOutput trades accs) = do
     zoomStepApp csFinancial $ applyAccums accs
     doTransactions trades
 
-doLifeEvents::forall a fl le ru rm app.(EngineC a fl le ru rm,
-                                        LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app)=>
-              LifeEventConverters a fl le->app ()
+doLifeEvents :: forall a fl le ru rm app. ( EngineC a fl le ru rm
+                                          , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+  => LifeEventConverters a fl le -> m ()
 doLifeEvents convertLE = do
   fe <- ask
   mcs <- use csMC
@@ -351,7 +356,7 @@ doTax = stepLift $ do
 
 
 doTaxTrade :: ( IsAsset a,Show a,IsRule ru, IsRateModel rm
-            ,  LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
+              , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
 doTaxTrade = stepLift $ do
   mcs <- use csMC
   let getA name = getAccount name ( mcs ^. mcsBalanceSheet)
@@ -390,23 +395,33 @@ doAccountTransaction tr@(Transaction target typ amt)= stepLift $ do
   zoomStepApp (csMC.mcsBalanceSheet) $ insertAccount after
 
   fs <- use csFinancial
-  stepLog Debug ("Current net cash flow is " ++ show (fs ^. fsCashFlow))
-  stepLog Debug ("Did Transaction (" ++ show tr ++ ")")
-  stepLog Debug ("With resulting account " ++ show after ++ " and flows " ++ show flows)
+  log Debug ("Current net cash flow is " <> (T.pack $ show (fs ^. fsCashFlow)))
+  log Debug ("Did Transaction (" <> (T.pack $ show tr) <> ")")
+  log Debug ("With resulting account " <> (T.pack $ show after) <> " and flows " <> (T.pack $ show flows))
 
 
 isNonZeroTransaction::Transaction->Bool
 isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
 
-doTransactions::(IsAsset a,Show a,
-                 LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction app)=>[Transaction]->app ()
+doTransactions :: ( IsAsset a
+                  , Show a
+                  , StepLiftable FMCException (CombinedState a fl le ru) ExchangeRateFunction m
+                  , LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction m)
+  =>[Transaction]->m ()
 doTransactions ts = stepLift $ mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
 
-computeTax::LoggableStepApp TaxData (FinEnv rm) app=>app (MoneyValue,Double)  -- main body now in Tax.hs
+computeTax :: ( LoggableStepApp TaxData (FinEnv rm) m
+              , StepLiftable FMCException TaxData (FinEnv rm) m)
+  => m (MoneyValue,Double)  -- main body now in Tax.hs
 computeTax = stepLift $ do
   tr <- view feTaxRules
   td <- get
   (total,rate) <- toStepApp . lift . (magnify feExchange) $ fullTaxCV tr td
-  stepLog Debug ("Computed tax of " ++ show total ++ " (eff rate of " ++ show (100*rate) ++ "%) given tax data: " ++ show td)
+  log Debug ("Computed tax of "
+             <> (T.pack $ show total)
+             <> " (eff rate of "
+             <> (T.pack $ show (100*rate))
+             <> "%) given tax data: "
+             <> (T.pack $ show td))
   return  (total,rate)
 

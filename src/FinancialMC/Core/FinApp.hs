@@ -228,7 +228,7 @@ baseStep2basePath = BasePathApp . multS . hoist readOnly . unBaseStepApp
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
-class HasFMCException err => StepLiftable err s e m where
+class StepLiftable err s e m where
   stepLift :: StepApp err s e a -> m a
 
 class Monad n => BaseStepLiftable s e n m where
@@ -243,16 +243,16 @@ class (MonadThrow m, MonadState s m, MonadReader e m) => LoggableStepApp s e m w
   fromBaseS :: BaseStepApp s e Identity x -> m x
 -}
 
-zoomStep :: (HasFMCException err, LoggableStepApp s e m, StepLiftable err s e m) => Lens' s sInner -> StepApp err sInner e x -> m x
+zoomStep :: (LoggableStepApp s e m, StepLiftable FMCException s e m) => Lens' s sInner -> StepApp FMCException sInner e x -> m x
 zoomStep l = stepLift . zoomStepApp l
 
 instance Loggable (StepApp err s e) where
   log _ _ = return ()
 
-instance HasFMCException err => StepLiftable err s e (StepApp err s e) where
+instance StepLiftable FMCException s e (StepApp FMCException s e) where
   stepLift = id
 
-instance BaseStepLiftable s e Identity (StepApp err s e) where
+instance BaseStepLiftable s e Identity (StepApp FMCException s e) where
   baseStepLift = StepApp . hoist generalize
 
 {-
@@ -265,7 +265,7 @@ instance LoggableStepApp s e (StepApp err s e) where
 instance Loggable (PStepApp s e) where
   log ll = PStepApp . faLog ll
 
-instance HasFMCException err => StepLiftable err s e (PStepApp s e) where
+instance StepLiftable FMCException s e (PStepApp s e) where
   stepLift = liftStepApp
 
 instance BaseStepLiftable s e Identity (PStepApp s e) where
@@ -300,13 +300,13 @@ class (MonadThrow m, MonadState (s,e) m) => LoggablePathApp s e m where
 instance Loggable (PathApp err s e) where
   log _ _ = return ()
 
-instance HasFMCException err => PathLiftable err s e (PathApp err s e) where
+instance PathLiftable FMCException s e (PathApp FMCException s e) where
   pathLift = id
 
-instance BasePathLiftable s e Identity (PathApp err s e) where
+instance BasePathLiftable s e Identity (PathApp FMCException s e) where
   basePathLift = PathApp . hoist generalize
 
-instance StepToPath (StepApp err s e) (PathApp err s e) where
+instance StepToPath (StepApp FMCException s e) (PathApp FMCException s e) where
   stepToPath = PathApp . baseStep2basePath . unStepApp
 
 {-

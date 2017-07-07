@@ -44,10 +44,9 @@ import Control.Monad.Except (MonadError)
 import Control.Monad.Error.Lens (throwing)
 
 readOnly :: Monad m => ReaderT s m r -> StateT s m r
-readOnly readerT = StateT  (\x -> do
+readOnly readerT = StateT $ \x -> do
   r <- runReaderT readerT x
-  return (r, x))
-
+  return (r, x)
 
 multS::Monad m => StateT a (StateT b m) r -> StateT (a,b) m r
 multS (StateT k) = StateT (\(x,y) -> do

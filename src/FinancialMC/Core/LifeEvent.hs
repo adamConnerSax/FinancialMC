@@ -23,9 +23,8 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
 import           FinancialMC.Core.Flow            (IsFlow)
 import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Result          (ResultT)
-import           FinancialMC.Core.Utilities       (Year)
+import           FinancialMC.Core.Utilities       (FMCException, Year)
 
-import           Control.Exception                (SomeException)
 import           Control.Monad.Reader             (ReaderT)
 import           Data.Aeson                       (FromJSON (..), ToJSON (..),
                                                    genericParseJSON,
@@ -46,7 +45,7 @@ instance Bifunctor LifeEventOutput where
   first f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
   second f (LifeEventOutput accts flows) = LifeEventOutput accts (f <$> flows)
 
-type LifeEventApp a fl rm = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT (FinEnv rm) (Either SomeException)))
+type LifeEventApp a fl rm = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
 
 type LifeEventName = T.Text
 
