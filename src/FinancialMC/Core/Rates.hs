@@ -88,18 +88,17 @@ defaultRates (Exchange _) = 1.0
 showRateAsPct::Rate->String
 showRateAsPct r = (printf "%.2f" (r*100)) ++ "%"
 
-data RateTable a = RateTable { rLookup::RateTag->Maybe a, 
-                               rSet::RateTag->a->RateTable a, 
-                               rToList::[(RateTag,a)],
-                               rKeys::[RateTag] }
-                   
-                   
+data RateTable a = RateTable { rLookup :: RateTag->Maybe a
+                             , rSet :: RateTag->a->RateTable a
+                             , rToList :: [(RateTag, a)]
+                             , rKeys::[RateTag]
+                             }    
+
 instance (PrintfArg a,Num a)=>Show (RateTable a) where
   show rt = "[" ++ show (fmap f (rKeys rt)) ++ "]" where
     fmtRate x = printf "%.2f" (x*100)
     f k = "(" ++ show k ++ "," ++ fmtRate (fromJust $ rLookup rt k) ++ "%)"
-
-
+    
 fromMap :: M.Map RateTag a -> RateTable a   
 fromMap m = RateTable (`M.lookup` m) (\t r->fromMap $ M.insert t r m) (M.toList m) (M.keys m)    
 
@@ -117,7 +116,7 @@ rateRequest rTag = ask >>= flip throwingLookup rTag
 
 type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadError FMCException m)
 
-applyModel :: (IsRateModel r, MonadError FMCException m) => (RateTable Rate,RSource) -> r -> m (r, (RateTable Rate, RSource))
+applyModel :: (IsRateModel r, MonadError FMCException m) => (RateTable Rate, RSource) -> r -> m (r, (RateTable Rate, RSource))
 applyModel (rates,src) model = runStateT (rateModelF model) (rates,src)
 
 class IsRateModel a where
