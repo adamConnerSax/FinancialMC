@@ -199,7 +199,7 @@ instance MonadThrow (PPathApp s e) where
   throwM = liftIO . throwM
 
 instance MonadError FMCException (PPathApp s e) where
-  throwError = throwM . toException -- because PStepApp has a MonadThrow instance
+  throwError = throwM . toException -- because PPathApp has a MonadThrow instance
   catchError action handler = PPathApp $ do
     let ppaTobpa = runEffect . (>-> printLog []) . unPPathApp -- throw away logging. ?
         ce a h = MTC.control $ \run -> catch (run a) (run . h) -- use MonadBaseControl to deal with lifiting in PPathApp
