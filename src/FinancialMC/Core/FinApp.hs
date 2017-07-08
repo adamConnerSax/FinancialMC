@@ -43,14 +43,16 @@ import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
 
 import           Control.Lens                     (Identity, Lens', magnify,
                                                    makeClassy, set, zoom, (^.))
-
+import           Control.Lens.Internal.Zoom       (Effect (..), Focusing (..))
+import           Control.Lens.Zoom                (Magnified (..), Magnify (..),
+                                                   Zoom (..), Zoomed (..))
 import           Control.Monad                    (unless, when)
 import qualified Control.Monad.Base               as MB
 import           Control.Monad.Catch              (MonadThrow (..),
                                                    SomeException, catch, throwM,
                                                    toException)
 import           Control.Monad.Except             (MonadError (..))
-import           Control.Monad.Morph              (generalize, hoist)
+import           Control.Monad.Morph              (MFunctor, generalize, hoist)
 import           Control.Monad.Reader             (MonadReader, ReaderT, ask,
                                                    runReaderT)
 import           Control.Monad.State.Strict       (MonadState, StateT,
@@ -61,10 +63,8 @@ import           Control.Monad.Trans              (MonadIO, MonadTrans, lift,
 import qualified Control.Monad.Trans.Control      as MTC
 import           Data.Text                        (Text, unpack)
 
-import           Pipes                            (MFunctor, Producer, Proxy, X,
-                                                   await, runEffect, yield,
-                                                   (>->))
-
+import           Pipes                            (Consumer, Producer, await,
+                                                   runEffect, yield, (>->))
 
 data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
@@ -102,6 +102,11 @@ instance (MTC.MonadBaseControl m (BaseStepApp s e m), MonadError err m) => Monad
 instance MonadThrow m => MonadThrow (BaseStepApp s e m) where
   throwM = lift . throwM
 
+type instance Zoomed (BaseStepApp s e m) = Focusing (ReaderT e m)
+
+instance Monad m => Zoom (BaseStepApp s e m) (BaseStepApp t e m) s t where
+  zoom l (BaseStepApp n) = BaseStepApp (zoom l n)
+
 zoomBaseStepApp :: Monad m => Lens' s2 s1 -> BaseStepApp s1 e m a -> BaseStepApp s2 e m a
 zoomBaseStepApp l = BaseStepApp . (zoom l) . unBaseStepApp
 
@@ -120,6 +125,7 @@ instance MonadError err (StepApp err s e) where
 
 newtype PStepApp s e a =
   PStepApp { unPStepApp :: Producer LogEntry (BaseStepApp s e IO) a } deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
+
 instance MonadIO (PStepApp s e) where
   liftIO  = PStepApp . lift . liftIO
 
@@ -234,26 +240,35 @@ class Loggable m where
   log :: LogLevel -> Text -> m ()
 
 class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
-  stepLift :: StepApp FMCException s e z -> m z
+  type BaseStep s e m :: * -> *
+  stepLift :: BaseStep s e m a -> m a
 
-zoomStep :: LoggableStepApp s e m => Lens' s sInner -> StepApp FMCException sInner e x -> m x
+{-
+zoomStep :: LoggableStepApp s e m => Lens' s sInner -> BaseStep sInner e m -> m x
 zoomStep l = stepLift . zoomStepApp l
+
+zoomStep :: (LoggableStepApp s1 e m, LoggableStepApp s2 e n) => Lens' s1 s2 -> n a -> m a
+zoomStep l = zoomBaseStepApp
+-}
 
 instance Loggable (StepApp err s e) where
   log _ _ = return ()
 
 instance LoggableStepApp s e (StepApp FMCException s e) where
-  stepLift = id
+  type BaseStep s e (StepApp FMCException s e) = BaseStepApp s e (Either FMCException)
+  stepLift = StepApp
 
 instance Loggable (PStepApp s e) where
-  log ll = PStepApp . faLog ll
+  log ll msg = liftIO (putStrLn $ unpack msg) >> (PStepApp $ faLog ll msg)
 
 instance LoggableStepApp s e (PStepApp s e) where
-  stepLift = liftStepApp
+  type BaseStep s e (PStepApp s e) = Producer LogEntry (BaseStepApp s e IO)
+  stepLift = PStepApp
 
 class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m where
   type Step s e m :: * -> *
-  pathLift :: PathApp FMCException s e a -> m a
+  type BasePath s e m :: * -> *
+  pathLift :: BasePath s e m a -> m a
   stepToPath :: Step s e m a -> m a
 
 instance Loggable (PathApp FMCException s e) where
@@ -261,21 +276,23 @@ instance Loggable (PathApp FMCException s e) where
 
 instance LoggablePathApp s e (PathApp FMCException s e) where
   type Step s e (PathApp FMCException s e)  = StepApp FMCException s e
-  pathLift = id
+  type BasePath s e (PathApp FMCException s e) = BasePathApp s e (Either FMCException)
+  pathLift = PathApp
   stepToPath = PathApp . baseStep2basePath . unStepApp
 
 instance Loggable (PPathApp s e) where
-  log ll = PPathApp . faLog ll
+  log ll msg = liftIO (putStrLn $ unpack msg) >> (PPathApp $ faLog ll msg)
 
 instance LoggablePathApp s e (PPathApp s e) where
   type Step s e (PPathApp s e) = PStepApp s e
-  pathLift = liftPathApp
+  type BasePath s e (PPathApp s e) = Producer LogEntry (BasePathApp s e IO)
+  pathLift = PPathApp
   stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
 
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
 
-printLog :: MonadIO m => [LogLevel] -> Proxy () LogEntry () X  m a
+printLog :: MonadIO m => [LogLevel] -> Consumer LogEntry m a --Proxy () LogEntry () X  m a
 printLog lvls = do
   let printL x = do
         let lvl = x ^. leLevel

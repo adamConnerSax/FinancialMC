@@ -207,7 +207,7 @@ doOneStepOnPath :: ( EngineC a fl le ru rm
   => LifeEventConverters a fl le
   -> PureMT
   -> m PureMT
-doOneStepOnPath convertLE pMT = pathLift $ do
+doOneStepOnPath convertLE pMT = {- pathLift $ -} do
   let feUpdater = toPathApp . zoom lensFinEnv
   newPMT <- feUpdater $ do
     x <- updateRates' pMT
