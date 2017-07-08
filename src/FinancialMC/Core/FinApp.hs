@@ -97,8 +97,6 @@ instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BaseStepApp s e m) 
   liftBaseWith = MTC.defaultLiftBaseWith
   restoreM = MTC.defaultRestoreM
 
--- this is all what MonadBaseControl is for, right??
--- also, this has semantics, when and if state is updated, etc.
 instance (MTC.MonadBaseControl m (BaseStepApp s e m), MonadError err m) => MonadError err (BaseStepApp s e m) where
   throwError = lift . throwError
   catchError action handler = MTC.control $ \run -> catchError (run action) (run . handler)
@@ -119,36 +117,23 @@ instance MonadError err (StepApp err s e) where
   throwError = StepApp . throwError
   catchError action handler = StepApp $ catchError (unStepApp action) (unStepApp . handler)
 
-instance MonadThrow (StepApp SomeException s e) where
-  throwM  = StepApp . throwM
+--instance MonadThrow (StepApp SomeException s e) where
+--  throwM  = StepApp . throwM
 
 newtype PStepApp s e a =
   PStepApp { unPStepApp :: Producer LogEntry (BaseStepApp s e IO) a } deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
-
-instance MonadThrow (PStepApp s e) where
-  throwM  = PStepApp . lift . lift . throwM
-
 instance MonadIO (PStepApp s e) where
   liftIO  = PStepApp . lift . liftIO
+
+instance MonadThrow (PStepApp s e) where
+  throwM  = liftIO . throwM
 
 instance MonadError FMCException (PStepApp s e) where
   throwError = throwM . toException -- because PStepApp has a MonadThrow instance
   catchError action handler = PStepApp $ do
-    let psaTobsa = runEffect . ( >-> printLog []) . unPStepApp
-        ce a h = MTC.control $ \run -> catch (run a) (run . h)
+    let psaTobsa = runEffect . (>-> printLog []) . unPStepApp -- we throw away the pipes piece. ?
+        ce a h = MTC.control $ \run -> catch (run a) (run . h) -- and use MonadBaseControl for the BaseStepApp lifting
     lift $ ce (psaTobsa action) (psaTobsa . handler)
-{-
-  catchError action handler = do -- can we simplify this via `MonadError FMCException (BaseStepApp s e IO)` ?
-    curState <- get
-    curEnv <- ask
-    let psaToIO = flip runReaderT curEnv . flip runStateT curState . unBaseStepApp . runEffect . ( >-> printLog []) . unPStepApp
-    (a, newState) <- PStepApp . lift . lift $ do
-      let action' = psaToIO action -- IO (a, s)
-          handler' = psaToIO . handler -- (e ~ FMCException => e -> IO (a,s))
-      catch action' handler' -- this is using catch from Control.Monad.Catch
-    put newState
-    return a
--}
 
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
 zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
@@ -166,19 +151,21 @@ newtype BasePathApp s e m a =
 instance MonadIO m => MonadIO (BasePathApp s e m) where
   liftIO = lift . liftIO
 
--- this is all what MonadBaseControl is for, right??
--- also, this has semantics, when and if state is updated, etc.
-instance MonadError err m => MonadError err (BasePathApp s e m) where
+deriving instance MB.MonadBase b m => MB.MonadBase b (BasePathApp s e m)
+
+instance MTC.MonadTransControl (BasePathApp s e) where
+  type StT (BasePathApp s e) a = MTC.StT (StateT (s,e)) a
+  liftWith = MTC.defaultLiftWith BasePathApp unBasePathApp
+  restoreT = MTC.defaultRestoreT BasePathApp
+
+instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BasePathApp s e m) where
+  type StM (BasePathApp s e m) a = MTC.ComposeSt (BasePathApp s e) m a
+  liftBaseWith = MTC.defaultLiftBaseWith
+  restoreM = MTC.defaultRestoreM
+
+instance (MTC.MonadBaseControl m (BasePathApp s e m), MonadError err m) => MonadError err (BasePathApp s e m) where
   throwError = lift . throwError
-  catchError action handler = do
-    curState <- get
-    let bpaToMonadError = flip runStateT curState . unBasePathApp
-    (a, newState) <- lift $ do
-      let action' = bpaToMonadError action
-          handler' = bpaToMonadError . handler
-      catchError action' handler'
-    put newState
-    return a
+  catchError action handler = MTC.control $ \run -> catchError (run action) (run . handler)
 
 lensFirst :: Lens' a b -> Lens' (a,x) (b,x)
 lensFirst l q (a,x) = (\(b,y) -> (set l b a,y)) <$> q (a ^. l,x)
@@ -199,38 +186,24 @@ instance MonadError err (PathApp err s e) where
   throwError = PathApp . throwError
   catchError action handler = PathApp $ catchError (unPathApp action) (unPathApp . handler)
 
-instance MonadThrow (PathApp SomeException s e) where
-  throwM = PathApp . lift . throwM
+instance MonadIO (PPathApp s e) where
+  liftIO = PPathApp . lift . liftIO
+
+--instance MonadThrow (PathApp SomeException s e) where
+--  throwM = PathApp . lift . throwM
 
 newtype PPathApp s e a =
   PPathApp { unPPathApp :: Producer LogEntry (BasePathApp s e IO) a} deriving (Functor, Applicative, Monad, MonadState (s,e))
 
 instance MonadThrow (PPathApp s e) where
-  throwM = PPathApp . lift . lift . throwM
-
-instance MonadIO (PPathApp s e) where
-  liftIO = PPathApp . lift . liftIO
+  throwM = liftIO . throwM
 
 instance MonadError FMCException (PPathApp s e) where
   throwError = throwM . toException -- because PStepApp has a MonadThrow instance
-  catchError action handler = do
-    curState <- get
-    let ppaToIO = flip runStateT curState . unBasePathApp . runEffect . (>-> printLog []) . unPPathApp
-    (a, newState) <- PPathApp . lift . lift $ do
-      let action' = ppaToIO action -- IO (a, s)
-          handler' = ppaToIO . handler -- (e ~ FMCException => e -> IO (a,s))
-      catch action' handler' -- this is using catch from Control.Monad.Catch
-    put newState
-    return a
-
-
-{-
-instance MonadIO (BasePathApp s e IO) where
-  liftIO  = BasePathApp . liftIO m
-
-instance (MonadIO (BasePathApp s e IO)) => MonadIO (PPathApp s e) where
-  liftIO m = PPathApp $ liftIO m
--}
+  catchError action handler = PPathApp $ do
+    let ppaTobpa = runEffect . (>-> printLog []) . unPPathApp -- throw away logging. ?
+        ce a h = MTC.control $ \run -> catch (run a) (run . h) -- use MonadBaseControl to deal with lifiting in PPathApp
+    lift $ ce (ppaTobpa action) (ppaTobpa . handler)
 
 zoomPathAppS :: Lens' s2 s1 -> PathApp err s1 e a -> PathApp err s2 e a
 zoomPathAppS l = PathApp . (zoomBasePathAppS l) . unPathApp
@@ -307,7 +280,6 @@ instance LoggablePathApp s e (PPathApp s e) where
   fromBaseP = PPathApp . lift . hoist generalize
   stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
 
-
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
 
@@ -321,7 +293,6 @@ printLog lvls = do
   le <- await
   unless (null lvls) (printL le)
   printLog lvls
-
 
 taxDataApp2StepAppFSER :: forall m a. LoggableStepApp FinState ExchangeRateFunction m
   => TaxDataApp (Either FMCException) a -> m a
