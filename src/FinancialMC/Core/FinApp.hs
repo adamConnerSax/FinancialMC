@@ -15,12 +15,9 @@
 module FinancialMC.Core.FinApp
        (
          LogLevel(..)
-       , faLog
+--       , faLog
        , toStepApp
        , toPathApp
-       , taxDataApp2StepAppFS
-       , taxDataApp2StepAppFSER
-       , taxDataApp2StepApp
        , zoomStepApp
        , zoomStep
        , magnifyStepApp
@@ -32,6 +29,7 @@ module FinancialMC.Core.FinApp
        , StepApp
        , execPathApp
        , execPPathApp
+       , taxDataApp2StepAppFSER
        ) where
 
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
@@ -131,7 +129,7 @@ instance MonadThrow (PStepApp s e) where
 instance MonadError FMCException (PStepApp s e) where
   throwError = throwM . toException -- because PStepApp has a MonadThrow instance
   catchError action handler = PStepApp $ do
-    let psaTobsa = runEffect . (>-> printLog []) . unPStepApp -- we throw away the pipes piece. ?
+    let psaTobsa = runEffect . (>-> printLog [minBound..]) . unPStepApp -- log it all.  It's an error, after all.
         ce a h = MTC.control $ \run -> catch (run a) (run . h) -- and use MonadBaseControl for the BaseStepApp lifting
     lift $ ce (psaTobsa action) (psaTobsa . handler)
 
@@ -201,7 +199,7 @@ instance MonadThrow (PPathApp s e) where
 instance MonadError FMCException (PPathApp s e) where
   throwError = throwM . toException -- because PPathApp has a MonadThrow instance
   catchError action handler = PPathApp $ do
-    let ppaTobpa = runEffect . (>-> printLog []) . unPPathApp -- throw away logging. ?
+    let ppaTobpa = runEffect . (>-> printLog [minBound..]) . unPPathApp -- log it all.  It's an error, right?
         ce a h = MTC.control $ \run -> catch (run a) (run . h) -- use MonadBaseControl to deal with lifiting in PPathApp
     lift $ ce (ppaTobpa action) (ppaTobpa . handler)
 
@@ -237,7 +235,6 @@ class Loggable m where
 
 class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
   stepLift :: StepApp FMCException s e z -> m z
-  fromBaseS :: BaseStepApp s e Identity x -> m x
 
 zoomStep :: LoggableStepApp s e m => Lens' s sInner -> StepApp FMCException sInner e x -> m x
 zoomStep l = stepLift . zoomStepApp l
@@ -247,19 +244,16 @@ instance Loggable (StepApp err s e) where
 
 instance LoggableStepApp s e (StepApp FMCException s e) where
   stepLift = id
-  fromBaseS = StepApp . hoist generalize
 
 instance Loggable (PStepApp s e) where
   log ll = PStepApp . faLog ll
 
 instance LoggableStepApp s e (PStepApp s e) where
   stepLift = liftStepApp
-  fromBaseS = PStepApp . lift . hoist generalize
 
 class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m where
   type Step s e m :: * -> *
   pathLift :: PathApp FMCException s e a -> m a
-  fromBaseP :: BasePathApp s e Identity a -> m a
   stepToPath :: Step s e m a -> m a
 
 instance Loggable (PathApp FMCException s e) where
@@ -268,7 +262,6 @@ instance Loggable (PathApp FMCException s e) where
 instance LoggablePathApp s e (PathApp FMCException s e) where
   type Step s e (PathApp FMCException s e)  = StepApp FMCException s e
   pathLift = id
-  fromBaseP = PathApp . hoist generalize
   stepToPath = PathApp . baseStep2basePath . unStepApp
 
 instance Loggable (PPathApp s e) where
@@ -277,7 +270,6 @@ instance Loggable (PPathApp s e) where
 instance LoggablePathApp s e (PPathApp s e) where
   type Step s e (PPathApp s e) = PStepApp s e
   pathLift = liftPathApp
-  fromBaseP = PPathApp . lift . hoist generalize
   stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
 
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
@@ -301,6 +293,7 @@ taxDataApp2StepAppFSER x =
       sa = zoomStepApp fsTaxData $ toStepApp $ x
   in stepLift sa
 
+{-
 taxDataApp2StepAppFS :: TaxDataApp (Either FMCException) a -> StepApp FMCException FinState (FinEnv rm) a
 taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . toStepApp $ tda
 
@@ -308,3 +301,4 @@ taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . t
 taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction m => TaxDataApp (Either FMCException) a -> m a
 taxDataApp2StepApp = stepLift . toStepApp
 
+-}

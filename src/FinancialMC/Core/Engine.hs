@@ -41,8 +41,8 @@ import           FinancialMC.Core.FinApp          (LogLevel (..),
                                                    Loggable (log),
                                                    LoggablePathApp (..),
                                                    LoggableStepApp (..),
-                                                   execPPathApp, execPathApp,
-                                                   magnifyStepApp,
+                                                   StepApp, execPPathApp,
+                                                   execPathApp, magnifyStepApp,
                                                    taxDataApp2StepAppFSER,
                                                    toPathApp, toStepApp,
                                                    zoomPathAppS, zoomStep,
@@ -68,7 +68,8 @@ import qualified FinancialMC.Core.MoneyValueOps   as MV
 import           FinancialMC.Core.Rates           (InflationType (TaxBracket),
                                                    RateTag (Inflation),
                                                    applyModel, rateRequest)
-import           FinancialMC.Core.Tax             (TaxData, carryForwardTaxData,
+import           FinancialMC.Core.Tax             (TaxData, TaxDataApp,
+                                                   carryForwardTaxData,
                                                    fullTaxCV, updateTaxRules)
 import           FinancialMC.Core.Utilities       (AsFMCException (..),
                                                    FMCException (..), readOnly)
@@ -78,12 +79,10 @@ import           Prelude                          hiding (log)
 import qualified Data.Text                        as T
 
 import           Control.DeepSeq                  (deepseq)
---import           Control.Exception                (SomeException)
 import           Control.Lens                     (Lens', magnify, makeClassy,
                                                    use, view, zoom, (%=), (+=),
                                                    (.=), (^.), _2)
 import           Control.Monad                    (foldM, unless, when)
---import           Control.Monad.Catch              (MonadThrow, throwM)
 import           Control.Monad.Morph              (hoist, lift)
 import qualified Control.Monad.Parallel           as CMP
 import           Control.Monad.Reader             (ReaderT, ask)
@@ -95,7 +94,6 @@ import           System.Random.Mersenne.Pure64    (PureMT, pureMT, randomWord64)
 
 import           Control.Monad.Error.Lens         (throwing)
 import           Control.Monad.Except             (MonadError)
---import qualified Data.Vector as V
 
 -- types for analysis
 type RandomSeed = Word64
@@ -103,14 +101,14 @@ data PathSummaryAndSeed = PathSummaryAndSeed { _psasSummary :: !PathSummary, _ps
 makeClassy ''PathSummaryAndSeed
 
 -- the "drop 1" is to get rid of the (0,pMT) entry
-makeAllTheSeeds::PureMT->[RandomSeed]
+makeAllTheSeeds :: PureMT -> [RandomSeed]
 makeAllTheSeeds pMT = drop 1 . fst . unzip $ iterate (randomWord64 . snd) (0,pMT)
 
-getNSeeds::PureMT->Int->[RandomSeed]
+getNSeeds :: PureMT -> Int -> [RandomSeed]
 getNSeeds pMT n = take n $ makeAllTheSeeds pMT
 
 {-
-getNSeedsStrict::PureMT->Int->[RandomSeed]
+getNSeedsStrict :: PureMT -> Int -> [RandomSeed]
 getNSeedsStrict pMT n = (head l)  `deepseq` l where
  l = getNSeeds pMT n
 -}
@@ -260,16 +258,15 @@ doOneYear convertLE = do
   doLifeEvents convertLE
   log Debug "Evolving assets and cashflows..."
   evolveMCS
-  fs<-use csFinancial
+  fs <- use csFinancial
   log Debug ("Accumulators=" <> (T.pack $ show (fs ^. fsAccumulators)))
   doRules BeforeTax
-  (tax,effRate)<-doTax
+  (tax, effRate) <- doTax
   doSweepTrades
   doRules AfterSweep
   doChecks
   log Debug ("Completed " <> (T.pack $ show year) <> ".")
-  return  (tax,effRate)
-
+  return (tax, effRate)
 
 checkTrue :: MonadError FMCException m => Bool -> String -> m ()
 checkTrue cond errMsg = unless cond $ throwing _Other (T.pack errMsg)
@@ -288,7 +285,7 @@ doChecks :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m => m ()
 doChecks = do
   zoomStep (csFinancial.fsCashFlow) . magnifyStepApp feExchange $ checkEndingCash
 
-morphInnerRuleStack :: ( LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+morphInnerRuleStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
   => ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) b -> m b
 morphInnerRuleStack = zoomStep csFinancial . toStepApp . readOnly
 
@@ -359,7 +356,6 @@ doTax = stepLift $ do
     toStepApp $ zeroAccumulator (T.pack "TaxOwed")
     return (tax',rate')
 
-
 doTaxTrade :: ( IsAsset a,Show a,IsRule ru, IsRateModel rm
               , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
 doTaxTrade = do
@@ -371,13 +367,11 @@ doTaxTrade = do
   Result _ result <- morphInnerRuleStack $ runResultT (doRule (mcs ^. mcsTaxTrade) getA)
   doRuleResult result
 
-
 payTax::LoggableStepApp FinState ExchangeRateFunction app=>MoneyValue->app ()
 payTax tax = do
   let taxPmt = MV.negate tax
   stepLift $ toStepApp (addCashFlow taxPmt) >> taxDataApp2StepAppFSER carryForwardTaxData
   log Debug ("Paid Tax of " <> (T.pack $ show tax))
-
 
 doSweepTrades::( EngineC a fl le ru rm
                , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()

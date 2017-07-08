@@ -140,12 +140,10 @@ applyFlow (OnlyDeductible ta) = applyDeduction ta
 applyFlow (PartiallyTaxed x ta) = applyFlowAndTax x ta
 applyFlow (PartiallyDeductible x ta) = applyFlowAndDeduction x ta
 
-
 applyFlows :: ( MonadError FMCException m
               , LoggableStepApp FinState ExchangeRateFunction m)
   => [FlowResult] -> m ()
 applyFlows = mapM_ applyFlow
-
 
 applyAccum :: ( MonadError FMCException m
               , LoggableStepApp FinState ExchangeRateFunction m) => AccumResult -> m ()
