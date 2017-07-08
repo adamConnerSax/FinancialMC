@@ -85,8 +85,7 @@ instance MonadTrans (BaseStepApp s e) where
 instance MonadIO m => MonadIO (BaseStepApp s e m) where
   liftIO = lift . liftIO
 
-{-
-deriving instance MB.MonadBase m m => MB.MonadBase m (BaseStepApp s e m)
+deriving instance MB.MonadBase b m => MB.MonadBase b (BaseStepApp s e m)
 
 instance MTC.MonadTransControl (BaseStepApp s e) where
   type StT (BaseStepApp s e) a = MTC.StT (ReaderT e) (MTC.StT (StateT s) a)
@@ -97,21 +96,12 @@ instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BaseStepApp s e m) 
   type StM (BaseStepApp s e m) a = MTC.ComposeSt (BaseStepApp s e) m a
   liftBaseWith = MTC.defaultLiftBaseWith
   restoreM = MTC.defaultRestoreM
--}
+
 -- this is all what MonadBaseControl is for, right??
 -- also, this has semantics, when and if state is updated, etc.
-instance MonadError err m => MonadError err (BaseStepApp s e m) where
+instance (MTC.MonadBaseControl m (BaseStepApp s e m), MonadError err m) => MonadError err (BaseStepApp s e m) where
   throwError = lift . throwError
-  catchError action handler = do
-    curState <- get
-    curEnv <- ask
-    let bsaToMonadError = flip runReaderT curEnv . flip runStateT curState . unBaseStepApp
-    (a, newState)  <- lift $ do
-      let action'  = bsaToMonadError action
-          handler' = bsaToMonadError . handler
-      catchError action' handler' -- this is happening in the MonadError err m
-    put newState
-    return a
+  catchError action handler = MTC.control $ \run -> catchError (run action) (run . handler)
 
 instance MonadThrow m => MonadThrow (BaseStepApp s e m) where
   throwM = lift . throwM
@@ -143,7 +133,12 @@ instance MonadIO (PStepApp s e) where
 
 instance MonadError FMCException (PStepApp s e) where
   throwError = throwM . toException -- because PStepApp has a MonadThrow instance
-  catchError action handler = do
+  catchError action handler = PStepApp $ do
+    let psaTobsa = runEffect . ( >-> printLog []) . unPStepApp
+        ce a h = MTC.control $ \run -> catch (run a) (run . h)
+    lift $ ce (psaTobsa action) (psaTobsa . handler)
+{-
+  catchError action handler = do -- can we simplify this via `MonadError FMCException (BaseStepApp s e IO)` ?
     curState <- get
     curEnv <- ask
     let psaToIO = flip runReaderT curEnv . flip runStateT curState . unBaseStepApp . runEffect . ( >-> printLog []) . unPStepApp
@@ -153,6 +148,7 @@ instance MonadError FMCException (PStepApp s e) where
       catch action' handler' -- this is using catch from Control.Monad.Catch
     put newState
     return a
+-}
 
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
 zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
