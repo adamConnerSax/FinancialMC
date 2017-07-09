@@ -70,6 +70,9 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
+newtype PathState s e = FMCStackState { _stepState :: s
+                                      , _stepEnv :: e }   
+
 newtype BaseStepApp s e m a =
   BaseStepApp { unBaseStepApp :: StateT s (ReaderT e m) a }
   deriving (Functor, Applicative, Monad, MonadReader e, MonadState s)
@@ -102,23 +105,6 @@ instance (MTC.MonadBaseControl m (BaseStepApp s e m), MonadError err m) => Monad
 instance MonadThrow m => MonadThrow (BaseStepApp s e m) where
   throwM = lift . throwM
 
-type instance Zoomed (BaseStepApp s e m) = Focusing (ReaderT e m)
-
-instance Monad m => Zoom (BaseStepApp s e m) (BaseStepApp t e m) s t where
-  zoom l (BaseStepApp n) = BaseStepApp (zoom l n)
-
-type instance Magnified (BaseStepApp s e m) = Effect m
-
--- really ??
-instance Monad m => Magnify (BaseStepApp s e1 m) (BaseStepApp s e2 m) e1 e2 where
-  magnify l (BaseStepApp n) = BaseStepApp $ do
-    s <- get
-    let original = evalStateT n s
-        magnified = magnify l original
-    a <- lift magnified
-    put s
-    return a
-
 zoomBaseStepApp :: Monad m => Lens' s2 s1 -> BaseStepApp s1 e m a -> BaseStepApp s2 e m a
 zoomBaseStepApp l = BaseStepApp . (zoom l) . unBaseStepApp
 
@@ -135,16 +121,6 @@ instance MonadError err (StepApp err s e) where
 --instance MonadThrow (StepApp SomeException s e) where
 --  throwM  = StepApp . throwM
 
-type instance Zoomed (StepApp err s e) = Focusing (ReaderT e (Either err))
-
-instance Zoom (StepApp err s e) (StepApp err t e) s t where
-  zoom l (StepApp n) = StepApp (zoom l n)
-
-type instance Magnified (StepApp err s e) = Effect (Either err)
-
-instance Magnify (StepApp err s e1) (StepApp err s e2) e1 e2 where
-  magnify l (StepApp n) = StepApp (magnify l n)
-
 newtype PStepApp s e a =
   PStepApp { unPStepApp :: Producer LogEntry (BaseStepApp s e IO) a } deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
 
@@ -160,18 +136,6 @@ instance MonadError FMCException (PStepApp s e) where
     let psaTobsa = runEffect . (>-> printLog [minBound..]) . unPStepApp -- log it all.  It's an error, after all.
         ce a h = MTC.control $ \run -> catch (run a) (run . h) -- and use MonadBaseControl for the BaseStepApp lifting
     lift $ ce (psaTobsa action) (psaTobsa . handler)
-
-type instance Zoomed (PStepApp s e) = Focusing (ReaderT e IO)
-
-instance Zoom (PStepApp s e) (PStepApp t e) s t where
-  zoom l (PStepApp n) = PStepApp (zoom l n)
-
-{-
-type instance Magnified (StepApp err s e) = Effect (Either err)
-
-instance Magnify (StepApp err s e1) (StepApp err s e2) e1 e2 where
-  magnify l (StepApp n) = StepApp (magnify l n)
--}
 
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
 zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
