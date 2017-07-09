@@ -71,10 +71,7 @@ data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
 newtype PathState s e = FMCStackState { _stepState :: s
-                                      , _stepEnv :: e }
-
-makeClassy ''PathState
-
+                                      , _stepEnv :: e }   
 
 newtype BaseStepApp s e m a =
   BaseStepApp { unBaseStepApp :: StateT s (ReaderT e m) a }
