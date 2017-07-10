@@ -45,38 +45,38 @@ class (Monoid o, Monad m) => MonadResult o m | m->o where
   appendAndReturn :: o -> a -> m a
   adjust::(o -> m o) -> m a -> m a
 
-instance Monoid o=>MonadResult o (Result o) where
+instance Monoid o => MonadResult o (Result o) where
   returnOnly a = Result a mempty
   appendAndReturn o a = Result a o
   adjust f (Result a o) = do
     o' <- f o
     Result a o'
 
-newtype ResultT o m a = ResultT { unResultT::o->m (Result o a) }
+newtype ResultT o m a = ResultT { unResultT :: o -> m (Result o a) }
 
-runResultT::Monoid o=>ResultT o m a->m (Result o a)
+runResultT :: Monoid o => ResultT o m a -> m (Result o a)
 runResultT m = unResultT m mempty
 
-instance Monad m=>Functor (ResultT o m) where
+instance Monad m => Functor (ResultT o m) where
   fmap f r = ResultT $ \o->do
     result <- unResultT r o
     return $! fmap f result
 
-instance Monad m=>Applicative (ResultT o m) where
+instance Monad m => Applicative (ResultT o m) where
   pure x = ResultT $ \o->return (Result x o)
   rf <*> ra = ResultT $ \o -> do
     Result f o' <- unResultT rf o
     Result a o'' <- unResultT ra o'
     return $! Result (f a)  o''
 
-instance Monad m=>Monad (ResultT o m) where
+instance Monad m => Monad (ResultT o m) where
   return x = ResultT $ \o->return (Result x o)
 
   ma >>= f = ResultT $ \o-> do
     Result a oA <- unResultT ma o
     unResultT (f a) oA
 
-instance (Monad m,Monoid o)=>MonadResult o (ResultT o m) where
+instance (Monad m, Monoid o) => MonadResult o (ResultT o m) where
   returnOnly = return
   appendAndReturn o a = ResultT $ \x->
     let ox = o `mappend` x
