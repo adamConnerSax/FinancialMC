@@ -65,7 +65,7 @@ class ReadsFinEnv s rm  where
   default getFinEnv :: HasFinEnv s rm => Getter s (FinEnv rm)
   getFinEnv = finEnv
 
-instance Show rm=>Show (FinEnv rm) where
+instance Show rm => Show (FinEnv rm) where
   show (FinEnv rates _ cd ccy tr rm) = "rates: " ++ show rates ++ "\nmodel: " ++ show rm ++ "\ndate: " ++ show cd ++ "\ncurrency: " ++ show ccy ++ "\ntax: " ++ show tr
 
 currentDate::Reader (FinEnv rm) Year

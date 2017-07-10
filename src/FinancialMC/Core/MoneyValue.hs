@@ -23,6 +23,17 @@ import           GHC.Generics     (Generic)
 
 data Currency = USD | EUR deriving (Eq,Ord,Enum,Bounded,Show,Read,Generic,ToJSON,FromJSON)
 
+class HasCurrency s where
+  currency :: Lens' s Currency
+
+instance HasCurrency Currency where
+  currency = id
+
+class ReadsCurrency s where
+  getCurrency :: Getter s Currency
+  default getCurrency :: HasCurrency s => Getter s Currency
+  getCurrency = currency
+
 currencyToChar :: Currency -> Char
 currencyToChar USD = '$'
 currencyToChar EUR = chr 164 -- ?
@@ -31,12 +42,15 @@ instance NFData Currency where
   rnf USD = ()
   rnf EUR = ()
 
-type ExchangeRateFunction = Currency->Currency->Double
-defaultExchangeRates::ExchangeRateFunction
+type ExchangeRateFunction = Currency -> Currency -> Double
+defaultExchangeRates :: ExchangeRateFunction
 defaultExchangeRates _ _ = 1.0
 
 class HasExchangeRateFunction s where
   exchangeRateFunction :: Lens' s ExchangeRateFunction
+
+instance HasExchangeRateFunction ExchangeRateFunction where
+  exchangeRateFunction = id
 
 class ReadsExchangeRateFunction s where
   getExchangeRateFunction :: Getter s ExchangeRateFunction
@@ -57,7 +71,6 @@ instance Eq MoneyValue where
 
 instance NFData MoneyValue where
   rnf (MoneyValue x ccy) = rnf x `seq` rnf ccy `seq` ()
-
 
 readsMoneyValue :: ReadS MoneyValue
 readsMoneyValue s = [(MoneyValue x c,r2) |

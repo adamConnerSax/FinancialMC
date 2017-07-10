@@ -281,14 +281,13 @@ fedCapitalGainRateCV' (FedCapitalGains tRate rateBands) margRate' =
 maxFedCapGainCV :: CV.SVD
 maxFedCapGainCV = fedCapitalGainRateCV (CV.toSVD 1)
 
-fullTaxCV :: TaxRules -> TaxData -> MV.ER (Either FMCException) (MoneyValue,Double)
+fullTaxCV :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s) => TaxRules -> TaxData -> m (MoneyValue,Double)
 fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm ccy) = do
-  e <- ask
+  e <- use getExchangeRateFunction
   let cTax = computeIncomeTaxCV'' ccy e
       net' (TaxDetails inFlow deds) = CV.fromMoneyValue inFlow |-| CV.fromMoneyValue deds
       gross (TaxDetails inFlow _) = inFlow
-      details tt = lift $ noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
-
+      details tt = noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
 
   ordinaryD <- details OrdinaryIncome             
   nonPayrollD <- details NonPayrollIncome
