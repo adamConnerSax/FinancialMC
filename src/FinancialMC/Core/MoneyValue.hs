@@ -1,3 +1,4 @@
+{-# LANGUAGE DefaultSignatures     #-}
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleInstances     #-}
@@ -6,7 +7,7 @@
 module FinancialMC.Core.MoneyValue where
 
 import           Control.DeepSeq  (NFData (rnf))
-import           Control.Lens     (makeClassy)
+import           Control.Lens     (Getter, Lens', makeClassy)
 import           Data.Char        (chr)
 import qualified Data.Text        as T
 import           Text.Printf      (printf)
@@ -33,6 +34,14 @@ instance NFData Currency where
 type ExchangeRateFunction = Currency->Currency->Double
 defaultExchangeRates::ExchangeRateFunction
 defaultExchangeRates _ _ = 1.0
+
+class HasExchangeRateFunction s where
+  exchangeRateFunction :: Lens' s ExchangeRateFunction
+
+class ReadsExchangeRateFunction s where
+  getExchangeRateFunction :: Getter s ExchangeRateFunction
+  default getExchangeRateFunction :: HasExchangeRateFunction s => Getter s ExchangeRateFunction
+  getExchangeRateFunction = exchangeRateFunction
 
 data MoneyValue = MoneyValue {_mAmount:: !Double, _mCurrency:: !Currency} deriving (Generic)
 makeClassy ''MoneyValue

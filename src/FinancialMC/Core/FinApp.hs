@@ -42,7 +42,7 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
                                                    HasFinEnv (..),
                                                    HasFinState (..))
 import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction)
-import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
+--import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
 import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
                                                    HasFMCException, eitherToIO,
                                                    multS, readOnly)
