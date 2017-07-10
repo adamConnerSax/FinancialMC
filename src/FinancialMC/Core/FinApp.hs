@@ -1,4 +1,5 @@
 {-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
@@ -15,7 +16,12 @@
 module FinancialMC.Core.FinApp
        (
          LogLevel(..)
+       , PathState
+       , HasPathState (..)
+       , ReadsStepEnv (..)
+       , Loggable (log)
 --       , faLog
+{-
        , toStepApp
        , toPathApp
        , zoomStepApp
@@ -23,13 +29,13 @@ module FinancialMC.Core.FinApp
        , magnifyStepApp
        , zoomPathAppS
        , zoomPathAppE
-       , Loggable (log)
        , LoggableStepApp (..)
        , LoggablePathApp (..)
        , StepApp
-       , execPathApp
-       , execPPathApp
-       , taxDataApp2StepAppFSER
+-}
+       , execPathStack
+       , execPPathStack
+--       , taxDataApp2StepAppFSER
        ) where
 
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
@@ -41,8 +47,9 @@ import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
                                                    HasFMCException, eitherToIO,
                                                    multS, readOnly)
 
-import           Control.Lens                     (Identity, Lens', magnify,
-                                                   makeClassy, set, zoom, (^.))
+import           Control.Lens                     (Getter, Identity, Lens',
+                                                   magnify, makeClassy, set,
+                                                   zoom, (^.))
 
 import           Control.Monad                    (unless, when)
 import qualified Control.Monad.Base               as MB
@@ -70,14 +77,12 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
-
-
-newtype PathState s e = PathState { _stepState :: s, _stepEnv :: e }
+data PathState s e = PathState { _stepState :: s, _stepEnv :: e }
 makeClassy ''PathState
 
 class ReadsStepEnv s e where
   getEnv :: Getter (PathState s e) e
-  default getEnv :: HasPathState PathState
+  default getEnv :: HasPathState s e e => Getter (PathState s e) e
   getEnv = stepEnv
 
 newtype BasePathStack s e m a =
@@ -88,7 +93,7 @@ instance MFunctor (BasePathStack s e) where
   hoist f (BasePathStack bsa) = BasePathStack $ hoist f bsa
 
 instance MonadTrans (BasePathStack s e) where
-  lift  = BasePathStack . lift 
+  lift  = BasePathStack . lift
 
 instance MonadIO m => MonadIO (BasePathStack s e m) where
   liftIO = lift . liftIO
@@ -96,7 +101,7 @@ instance MonadIO m => MonadIO (BasePathStack s e m) where
 deriving instance MB.MonadBase b m => MB.MonadBase b (BasePathStack s e m)
 
 instance MTC.MonadTransControl (BasePathStack s e) where
-  type StT (PathStack s e) a = MTC.StT (StateT (PathState s e)) a
+  type StT (BasePathStack s e) a = MTC.StT (StateT (PathState s e)) a
   liftWith = MTC.defaultLiftWith BasePathStack unBasePathStack
   restoreT = MTC.defaultRestoreT BasePathStack
 
@@ -125,7 +130,7 @@ newtype PathStack err s e a =
 
 instance MonadError err (PathStack err s e) where
   throwError = PathStack . throwError
-  catchError action handler = PathStack $ catchError (unStepApp action) (unStepApp . handler)
+  catchError action handler = PathStack $ catchError (unPathStack action) (unPathStack . handler)
 
 --instance MonadThrow (StepApp SomeException s e) where
 --  throwM  = StepApp . throwM
@@ -134,17 +139,17 @@ newtype PPathStack s e a =
   PPathStack { unPPathStack :: Producer LogEntry (BasePathStack s e IO) a } deriving (Functor, Applicative, Monad, MonadState (PathState s e))
 
 instance MonadIO (PPathStack s e) where
-  liftIO  = PStepApp . lift . liftIO
+  liftIO  = PPathStack . lift . liftIO
 
 instance MonadThrow (PPathStack s e) where
   throwM  = liftIO . throwM
 
 instance MonadError FMCException (PPathStack s e) where
   throwError = throwM . toException -- because PPathStack has a MonadThrow instance
-  catchError action handler = PStepApp $ do
-    let psaTobsa = runEffect . (>-> printLog [minBound..]) . unPStepApp -- log it all.  It's an error, after all.
+  catchError action handler = PPathStack $ do
+    let ppsTobps = runEffect . (>-> printLog [minBound..]) . unPPathStack -- log it all.  It's an error, after all.
         ce a h = MTC.control $ \run -> catch (run a) (run . h) -- and use MonadBaseControl for the BasePathStack lifting
-    lift $ ce (psaTobsa action) (psaTobsa . handler)
+    lift $ ce (ppsTobps action) (ppsTobps . handler)
 
 {-
 zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
@@ -241,30 +246,34 @@ execBasePathStack :: Monad m => BasePathStack s e m a -> PathState s e -> m (Pat
 execBasePathStack bps s0 = execStateT (unBasePathStack bps) s0
 
 execPathStack :: PathStack err s e a -> PathState s e -> Either err (PathState s e)
-execPathStack ps = execBasePathStack (unPathStack ps) 
+execPathStack ps = execBasePathStack (unPathStack ps)
 
 execPPathStack :: PPathStack s e a -> [LogLevel] -> PathState s e -> IO (PathState s e)
-execPPathStack pps logDetails = execBasePathApp (runEffect (unPPathStack pps >-> printLog logDetails))
+execPPathStack pps logDetails = execBasePathStack (runEffect (unPPathStack pps >-> printLog logDetails))
 
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
-
+{-
 class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
   stepLift :: StepApp FMCException s e z -> m z
 
 zoomStep :: LoggableStepApp s e m => Lens' s sInner -> StepApp FMCException sInner e x -> m x
 zoomStep l = stepLift . zoomStepApp l
+-}
 
-instance Loggable (StepApp err s e) where
+instance Loggable (PathStack err s e) where
   log _ _ = return ()
 
+{-
 instance LoggableStepApp s e (StepApp FMCException s e) where
   stepLift = id
+-}
 
-instance Loggable (PStepApp s e) where
-  log ll = PStepApp . faLog ll
+instance Loggable (PPathStack s e) where
+  log ll = PPathStack . faLog ll
 
+{-
 instance LoggableStepApp s e (PStepApp s e) where
   stepLift = liftStepApp
 
@@ -288,6 +297,7 @@ instance LoggablePathApp s e (PPathApp s e) where
   type Step s e (PPathApp s e) = PStepApp s e
   pathLift = liftPathApp
   stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
+-}
 
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
@@ -303,6 +313,9 @@ printLog lvls = do
   unless (null lvls) (printL le)
   printLog lvls
 
+--taxDataApp2StepAppFSER :: (HasTaxData s, ReadsExchangeRateFunction s, MonadState s m) => m a
+
+{-
 taxDataApp2StepAppFSER :: forall m a. LoggableStepApp FinState ExchangeRateFunction m
   => TaxDataApp (Either FMCException) a -> m a
 taxDataApp2StepAppFSER x =
@@ -310,7 +323,7 @@ taxDataApp2StepAppFSER x =
       sa = zoomStepApp fsTaxData $ toStepApp $ x
   in stepLift sa
 
-{-
+
 taxDataApp2StepAppFS :: TaxDataApp (Either FMCException) a -> StepApp FMCException FinState (FinEnv rm) a
 taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . toStepApp $ tda
 
