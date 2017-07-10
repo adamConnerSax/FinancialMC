@@ -70,8 +70,15 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
+
+
 newtype PathState s e = PathState { _stepState :: s, _stepEnv :: e }
 makeClassy ''PathState
+
+class ReadsStepEnv s e where
+  getEnv :: Getter (PathState s e) e
+  default getEnv :: HasPathState PathState
+  getEnv = stepEnv
 
 newtype BasePathStack s e m a =
   BasePathStack { unBasePathStack :: StateT (PathState s e) m a }
@@ -231,7 +238,7 @@ addProducer :: PathStack FMCException s e a -> PPathStack s e a
 addProducer = PPathStack . lift . hoist eitherToIO . unPathStack -- adds IO at bottom of stack and wraps in Producer
 
 execBasePathStack :: Monad m => BasePathStack s e m a -> PathState s e -> m (PathState s e)
-execBasePathStack bps s0 = execStateT (unBasePathStack bpa) s0
+execBasePathStack bps s0 = execStateT (unBasePathStack bps) s0
 
 execPathStack :: PathStack err s e a -> PathState s e -> Either err (PathState s e)
 execPathStack ps = execBasePathStack (unPathStack ps) 
@@ -239,10 +246,9 @@ execPathStack ps = execBasePathStack (unPathStack ps)
 execPPathStack :: PPathStack s e a -> [LogLevel] -> PathState s e -> IO (PathState s e)
 execPPathStack pps logDetails = execBasePathApp (runEffect (unPPathStack pps >-> printLog logDetails))
 
-
-
 class Loggable m where
   log :: LogLevel -> Text -> m ()
+
 
 class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
   stepLift :: StepApp FMCException s e z -> m z
