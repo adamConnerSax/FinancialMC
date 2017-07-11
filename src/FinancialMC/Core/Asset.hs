@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE Rank2Types             #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
 {-# LANGUAGE UndecidableInstances   #-}
 module FinancialMC.Core.Asset
@@ -14,7 +15,7 @@ module FinancialMC.Core.Asset
          TradeType
        , TradeFunction
        , TradeResult
-       , TradeApp
+--       , TradeApp
        , AssetRevaluation(..)
        , AssetName
        , AssetCore(..)
@@ -41,7 +42,7 @@ import           FinancialMC.Core.MoneyValue    (Currency (..),
                                                  MoneyValue (..), mCurrency)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Result        ()
-import           FinancialMC.Core.TradingTypes  (AccountType, TradeApp,
+import           FinancialMC.Core.TradingTypes  (AccountType, TradeAppC,
                                                  TradeFunction, TradeResult,
                                                  TradeType)
 import           FinancialMC.Core.Utilities     (FMCException)
@@ -77,10 +78,10 @@ revalueAssetCore (AssetCore n _ cb) (NewValue v') = AssetCore n v' cb
 revalueAssetCore (AssetCore n v _) (NewBasis cb') = AssetCore n v cb'
 revalueAssetCore (AssetCore n _ _) (NewValueAndBasis v' cb') = AssetCore n v' cb'
 
-class Evolvable a=>IsAsset a where
-  assetCore::a->AssetCore
-  revalueAsset::a->AssetRevaluation->a
-  tradeAsset::TradeFunction a
+class Evolvable a => IsAsset a where
+  assetCore :: a -> AssetCore
+  revalueAsset :: a -> AssetRevaluation -> a
+  tradeAsset :: TradeFunction s m a
 
 assetName::IsAsset a=>a->AssetName
 assetName a = aName $ assetCore a

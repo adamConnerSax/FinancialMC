@@ -9,6 +9,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DefaultSignatures #-}
 module FinancialMC.Core.MCState 
        (
          BalanceSheet(BalanceSheet)
@@ -43,14 +44,15 @@ module FinancialMC.Core.MCState
        ) where
 
 
-import           FinancialMC.Core.Asset (IsAsset,AccountName,Account(Account),HasAccount(..),accountValueCV)
+import           FinancialMC.Core.Asset (IsAsset, AccountName,Account(Account),HasAccount(..),accountValueCV)
 import           FinancialMC.Core.Rates (IsRateModel)
+import           FinancialMC.Core.Tax (HasTaxData)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
-import           FinancialMC.Core.FinApp (LoggableStepApp (..),zoomStep)
-import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..),FinState,HasFinState(..))
+--import           FinancialMC.Core.FinApp (LoggableStepApp (..),zoomStep)
+import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..), ReadsFinEnv (..) , FinState,HasFinState(..), HasAccumulators, HasCashFlow)
 import           FinancialMC.Core.Flow (FlowName,FlowDirection(..),flowName,flowingAt,IsFlow(..),annualFlowAmount)
 import           FinancialMC.Core.MapLike (IsMap(..))
-import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),HasMoneyValue(..))
+import           FinancialMC.Core.MoneyValue (MoneyValue(MoneyValue),HasMoneyValue(..), ReadsExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import qualified FinancialMC.Core.CValued as CV
 import           FinancialMC.Core.TradingTypes (LiquidityType(NearCash),liquidityType)
@@ -67,7 +69,7 @@ import           GHC.Generics (Generic)
 
 import           Control.DeepSeq (NFData(..))
 --import           Control.Exception (SomeException)
-import           Control.Lens (makeClassy,use,(^.),(%=),(.=),(<>=))
+import           Control.Lens (makeClassy,use,(^.),(%=),(.=),(<>=), Getter)
 import Control.Monad.Except (MonadError)
 
 import           Control.Monad (when)
@@ -235,24 +237,29 @@ data CombinedState a fl le ru = CombinedState { _csFinancial:: !FinState,
                                                 _csNeedHistory:: !Bool } 
 makeClassy ''CombinedState
 
+class ReadsCombinedState s a fl le ru | s -> a, s -> fl, s -> le, s -> ru where
+  getCombinedState :: Getter s (CombinedState a fl le ru)
+  default getCombinedState :: HasCombinedState s a fl le ru => Getter s (CombinedState a fl le ru)
+  getCombinedState = combinedState
+  
+instance HasMCState (CombinedState a fl le ru) a fl le ru  where
+  mCState = csMC
 
 instance (Show a,Show fl,Show le, Show ru)=>Show (CombinedState a fl le ru) where
   show cs = "Financial:\n" ++ show (cs ^. csFinancial) ++ "\nMonteCarlo:\n" ++ show (cs ^. csMC)
 
-
-netWorth::IsAsset a=>CombinedState a fl le ru->FinEnv rm->MoneyValue
+netWorth :: IsAsset a => CombinedState a fl le ru -> FinEnv rm -> MoneyValue
 netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValueCV acct) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
   BalanceSheet accts = cs ^. csMC.mcsBalanceSheet
   initial' = CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow
 
-
-byLT::LiquidityType->Account a->Bool
+byLT :: LiquidityType -> Account a -> Bool
 byLT lt acct = acctLT == lt where 
   acctLT = liquidityType (acct ^. acType)
 
-netWorthByLiquidityType::IsAsset a=>CombinedState a fl le ru->FinEnv rm->LiquidityType->MoneyValue
+netWorthByLiquidityType :: IsAsset a => CombinedState a fl le ru -> FinEnv rm -> LiquidityType -> MoneyValue
 netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s CV.|+|  (value' acct)) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -262,14 +269,14 @@ netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s
   initial' = if lt == NearCash then (CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow) else z'
 
 
-netWorthBreakout::IsAsset a=>CombinedState a fl le ru->FinEnv rm->NetWorthMap
+netWorthBreakout :: IsAsset a => CombinedState a fl le ru -> FinEnv rm -> NetWorthMap
 netWorthBreakout cs fe = M.fromList (zip lts nws) where
   lts = [(minBound::LiquidityType) ..]
   nws = fmap (netWorthByLiquidityType cs fe) lts
 
 
 data FlowAccum' = FlowAccum' !CV.CVD !CV.CVD
-grossFlows::IsFlow fl=>CashFlows fl->FinEnv rm->(MoneyValue,MoneyValue)
+grossFlows :: IsFlow fl => CashFlows fl -> FinEnv rm -> (MoneyValue, MoneyValue)
 grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy e outF) where
   e = fe ^. feExchange
   d = fe ^. feCurrentDate
@@ -283,7 +290,7 @@ grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy
   FlowAccum' inF outF = F.foldr g (FlowAccum' z z) flows
 
 
-makeMCState::BalanceSheet a->CashFlows fl->FinEnv rm->[le]->[ru]->ru->ru->MCState a fl le ru
+makeMCState :: BalanceSheet a -> CashFlows fl -> FinEnv rm -> [le] -> [ru] -> ru -> ru -> MCState a fl le ru
 makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] where
   z = MV.zero  (fe ^. feDefaultCCY)
 
@@ -291,14 +298,18 @@ makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [
 evolveMCS :: ( Evolvable a
              , Evolvable fl
              , IsRateModel rm
-             , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
-evolveMCS = do
-  mcs <- use csMC
-  mcs' <- zoomStep csFinancial $ evolveAndApply mcs
-  csMC .= mcs'
-
---evolveMCS'::LoggableStepApp CombinedState app=>app ()
---evolveMCS' = csMC %= \x -> zoomStep csFinancial $  evolveAndApply x
+             , MonadError FMCException m
+             , MonadState s m
+             , ReadsExchangeRateFunction s
+             , ReadsFinEnv s rm
+             , HasAccumulators s
+             , HasCashFlow s
+             , HasTaxData s
+             , HasMCState s a fl le ru) => m ()
+evolveMCS = do -- mCState %= evolveAndApply
+  mcs <- use mCState
+  mcs' <- evolveAndApply mcs
+  mCState .= mcs'
 
 
 netWorth2PathSummary::MoneyValue->Year->PathSummary
@@ -310,35 +321,60 @@ addPathSummary (ZeroNW day) _ = ZeroNW day
 addPathSummary (FinalNW _) (FinalNW y) = FinalNW y
 addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day 
 
-
-summarize::IsAsset a=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>
-  MoneyValue->MoneyValue->MoneyValue->Double->app ()
+-- TODO: More specific constraints
+-- HasMCPathSummary
+-- ReadsCombinedState
+summarize :: ( IsAsset a
+             , MonadError FMCException m
+             , MonadState s m
+             , HasCombinedState s a fl le ru
+             , ReadsFinEnv s rm)
+  => MoneyValue
+  -> MoneyValue
+  -> MoneyValue
+  -> Double
+  -> m ()
 summarize  inF outF tax taxRate = do
-  cs <- get
-  fe <- ask  
-  needHistory <- use csNeedHistory
+  cs <- use combinedState
+  fe <- use getFinEnv
+  needHistory <- use (combinedState.csNeedHistory)
   let nw = netWorth cs fe
       endDate =  (fe ^. feCurrentDate) + 1 -- date is an integer year
       ps =  netWorth2PathSummary nw endDate
       prevPS =  cs ^. csMC.mcsPathSummary
       ps' =  ps `seq` addPathSummary prevPS ps
-  csMC.mcsPathSummary .=  ps'
+  combinedState.csMC.mcsPathSummary .=  ps'
   when needHistory $  addHistory inF outF tax taxRate
   return ()
 
-computeFlows::IsFlow fl=>LoggableStepApp (CashFlows fl) (FinEnv rm) app=>app (MoneyValue,MoneyValue)
+computeFlows :: ( IsFlow fl
+                , MonadError FMCException m
+                , MonadState s m
+                , ReadsCombinedState s a fl le ru
+                , ReadsFinEnv s rm) => m  (MoneyValue,MoneyValue)
 computeFlows = do
-  cs <- get --use (csMC.mcsCashFlows)
-  fe <- ask  
+  cs <- use (getCombinedState.csMC.mcsCashFlows) --use (csMC.mcsCashFlows)
+  fe <- use getFinEnv  
   return $ grossFlows cs fe
 
-addHistory::IsAsset a=>LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) app=>
-  MoneyValue->MoneyValue->MoneyValue->Double->app ()
+-- TODO: More specific constraints
+-- ReadsCombinedstate
+-- HasMCHistory
+addHistory :: ( IsAsset a
+              , MonadError FMCException m
+              , MonadState s m
+              , HasCombinedState s a fl le ru
+              , ReadsFinEnv s rm)
+  => MoneyValue
+  -> MoneyValue
+  -> MoneyValue
+  -> Double
+  -> m ()
 addHistory inF outF tax effRate  = do
-  cs <- get
-  fe <- ask  
+  cs <- use combinedState
+  fe <- use getFinEnv
   let nw = netWorth cs fe
       nwbo = netWorthBreakout cs fe
       endDate = (fe ^. feCurrentDate) + 1
-  csMC.mcsHistory <>= [DatedSummary endDate (FSSummary nw nwbo inF outF tax effRate)]
+  combinedState.csMC.mcsHistory <>= [DatedSummary endDate (FSSummary nw nwbo inF outF tax effRate)]
   

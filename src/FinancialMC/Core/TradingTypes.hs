@@ -1,20 +1,24 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE DeriveAnyClass        #-}
 {-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 module FinancialMC.Core.TradingTypes where
 
 import           FinancialMC.Core.Evolve        (FlowResult)
-import           FinancialMC.Core.MoneyValue    (MoneyValue)
-import           FinancialMC.Core.MoneyValueOps (ER)
+import           FinancialMC.Core.MoneyValue    (MoneyValue,
+                                                 ReadsExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps as MV
-import           FinancialMC.Core.Result        (Result, ResultT)
+import           FinancialMC.Core.Result        (MonadResult, Result)
 import           FinancialMC.Core.Utilities     (FMCException)
 --import Control.Exception (SomeException)
 
 import           Control.Lens                   (makeClassy)
 
+import           Control.Monad.State            (MonadState)
 import           Data.Aeson                     (FromJSON, ToJSON)
 import qualified Data.Text                      as T
 import           GHC.Generics                   (Generic)
@@ -63,9 +67,9 @@ instance Show Transaction where
 
 
 
-type TradeApp = ResultT [FlowResult] (ER (Either FMCException))
-type TradeFunction a = a->AccountType->TradeType->MoneyValue->TradeApp a
-type LiquidateFunction a = a->AccountType->TradeType->TradeApp a
+type TradeAppC s m = (MonadResult [FlowResult] m, MonadState s m, ReadsExchangeRateFunction s) --ResultT [FlowResult] (ER (Either FMCException))
+type TradeFunction s m a = TradeAppC s m => a -> AccountType -> TradeType -> MoneyValue -> m a --TradeApp a
+type LiquidateFunction s m a = TradeAppC s m => a -> AccountType -> TradeType -> m a --TradeApp a
 
 
 

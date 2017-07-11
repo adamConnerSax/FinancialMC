@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies #-}
 module FinancialMC.Core.Flow
        (
          flowingAt
@@ -59,7 +60,7 @@ class Evolvable f=>IsFlow f where
   flowCore::f->FlowCore
   revalueFlow::f->MoneyValue->f
   flowDirection::f->FlowDirection  
-  
+
 flowName::IsFlow f=>f->FlowName
 flowName f = fcName $ flowCore f
 

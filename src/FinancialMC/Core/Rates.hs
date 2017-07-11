@@ -27,7 +27,6 @@ module FinancialMC.Core.Rates
        , Rate
        , showRateAsPct
        , IsRateModel(..)
-       , RateModelType
        , applyModel
        , RateModelC
        ) where
@@ -119,9 +118,6 @@ type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadError FMCExcep
 
 applyModel :: (IsRateModel r, MonadError FMCException m) => (RateTable Rate, RSource) -> r -> m (r, (RateTable Rate, RSource))
 applyModel (rates,src) model = runStateT (rateModelF model) (rates,src)
-
--- we use this to witness that an abstract type (the state in our stack) is associated with a particular RateModelType
-type family RateModelType x :: *
 
 class IsRateModel a where
   rateModelF :: (MonadState (RateTable Rate, RSource) m, MonadError FMCException m) => a-> m a

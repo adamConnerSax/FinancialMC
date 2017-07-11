@@ -37,7 +37,7 @@ import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction,
                                                    MoneyValue,
                                                    ReadsExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Rates           (IsRateModel, RateModelType)
+import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Result          (MonadResult, Result (Result),
                                                    runResultT)
 import           FinancialMC.Core.Tax             (TaxDataAppC, TaxType,
@@ -84,7 +84,7 @@ instance Monoid EvolveOutput where
 type EvolveResult a = Result EvolveOutput a
 
 
-type EvolveC s rm m = (MonadResult EvolveOutput m, MonadState s m, RateModelType s ~ rm, IsRateModel rm, ReadsFinEnv s rm)
+type EvolveC s rm m = (MonadResult EvolveOutput m, MonadState s m, IsRateModel rm, ReadsFinEnv s rm)
 
 --type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
 
@@ -196,7 +196,6 @@ evolveAndApply :: ( Evolvable a
                   , MonadError FMCException m
                   , MonadState s m
                   , IsRateModel rm
-                  , RateModelType s ~ rm
                   , ReadsFinEnv s rm
                   , HasTaxData s
                   , HasCashFlow s

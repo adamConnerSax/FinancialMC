@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
 module FinancialMC.Core.FinancialStates
        (
          FinEnv(FinEnv)
@@ -60,7 +61,7 @@ import qualified Data.Text                      as T
 data FinEnv rm = FinEnv { _feRates::RateTable Double, _feExchange:: !ExchangeRateFunction , _feCurrentDate:: !Year, _feDefaultCCY:: !Currency, _feTaxRules:: !TaxRules, _feRateModel:: !rm}
 makeClassy ''FinEnv
 
-class ReadsFinEnv s rm  where
+class ReadsFinEnv s rm | s -> rm where
   getFinEnv :: Getter s (FinEnv rm)
   default getFinEnv :: HasFinEnv s rm => Getter s (FinEnv rm)
   getFinEnv = finEnv
