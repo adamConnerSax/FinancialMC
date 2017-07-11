@@ -10,14 +10,12 @@
 module FinancialMC.Core.Evolve
        (
          Evolver
-       , EvolveApp
        , Evolvable(..)
        , EvolveOutput(..)
        , EvolveResult
        , TaxAmount(..)
        , FlowResult(..)
        , AccumResult(..)
-       , liftER -- to match ReaderT ExchangeRateFunction Identity to Evolver
        , applyAccums --for Rules
        , applyFlows
        , evolveWithin
@@ -39,7 +37,7 @@ import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction,
                                                    MoneyValue,
                                                    ReadsExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Rates           (IsRateModel)
+import           FinancialMC.Core.Rates           (IsRateModel, RateModelType)
 import           FinancialMC.Core.Result          (MonadResult, Result (Result),
                                                    runResultT)
 import           FinancialMC.Core.Tax             (TaxDataAppC, TaxType,
@@ -85,23 +83,21 @@ instance Monoid EvolveOutput where
 
 type EvolveResult a = Result EvolveOutput a
 
-type EvolveC s rm m = (MonadResult EvolveOutput m, MonadState s m, IsRateModel rm, ReadsFinEnv s rm)
+
+type EvolveC s rm m = (MonadResult EvolveOutput m, MonadState s m, RateModelType s ~ rm, IsRateModel rm, ReadsFinEnv s rm)
 
 --type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
 
---type Evolver s rm m a = EvolveC s rm m => a -> m a
+type Evolver s rm m a = EvolveC s rm m => a -> m a
 
 --liftER :: (MonadState s m, ReadsExchangeRateFunction s) => MV.ER (Either FMCException) a -> m a
 --liftER = readOnly
 
 class Evolvable a where
-  evolve :: (IsRateModel rm, EvolveC s rm m) :: a -> m a
+  evolve :: EvolveC s rm m => a -> m a
 
-evolveWithin :: forall rm s m a t b. (EvolveC s rm m, Evolvable a, TR.Traversable t) => b -> Lens' b (t a) -> m b
-evolveWithin oldB l =
-  let ev :: EvolveC s rm m => a -> m a
-      ev = evolve
-  in mapMOf (l.traverse) ev oldB
+evolveWithin :: (EvolveC s rm m, Evolvable a, TR.Traversable t) => b -> Lens' b (t a) -> m b
+evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
 
 
 applyTax :: ( MonadError FMCException m
@@ -150,7 +146,11 @@ applyFlowAndDeduction :: ( MonadError FMCException m
                          , ReadsExchangeRateFunction s) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndDeduction x ta = addCashFlow x >> applyDeduction ta
 
-applyFlow :: (MonadError FMCException m, TaxDataAppC s m) => FlowResult -> m ()
+applyFlow :: ( MonadError FMCException m
+             , MonadState s m
+             , HasTaxData s
+             , HasCashFlow s
+             , ReadsExchangeRateFunction s) => FlowResult -> m ()
 applyFlow (UnTaxed x) = addCashFlow x
 applyFlow (AllTaxed ta@(TaxAmount _ x)) = applyFlowAndTax x ta
 applyFlow (AllDeductible ta@(TaxAmount _ x)) = applyFlowAndDeduction (MV.negate x) ta
@@ -168,14 +168,16 @@ applyFlows = mapM_ applyFlow
 
 applyAccum :: ( MonadError FMCException m
               , MonadState s m
-              , HasAccumulators s) => AccumResult -> m ()
+              , HasAccumulators s
+              , ReadsExchangeRateFunction s) => AccumResult -> m ()
 applyAccum (AddTo name amt) = addToAccumulator' name amt
 applyAccum (Zero name)      = zeroAccumulator name
 
 
 applyAccums :: ( MonadError FMCException m
                , MonadState s m
-               , HasAccumulators s) => [AccumResult] -> m ()
+               , HasAccumulators s
+               , ReadsExchangeRateFunction s) => [AccumResult] -> m ()
 applyAccums  = mapM_ applyAccum
 
 
@@ -190,14 +192,16 @@ applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyAccums accums
   return $! a
 
-evolveAndApply :: ( IsRateModel rm
+evolveAndApply :: ( Evolvable a
                   , MonadError FMCException m
-                  , Evolvable a
                   , MonadState s m
+                  , IsRateModel rm
+                  , RateModelType s ~ rm
+                  , ReadsFinEnv s rm
                   , HasTaxData s
                   , HasCashFlow s
                   , HasAccumulators s
                   , ReadsExchangeRateFunction s) => a -> m a
-evolveAndApply x = stepLift $  do
+evolveAndApply x = do
   x <- runResultT $ evolve x
   applyEvolveResult x

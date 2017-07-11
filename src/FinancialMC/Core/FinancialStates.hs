@@ -37,8 +37,8 @@ import           FinancialMC.Core.MoneyValue    (Currency, ExchangeRateFunction,
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Rates         (Rate, RateTable (..),
                                                  RateTag (Exchange))
-import           FinancialMC.Core.Tax           (TaxData, TaxRules,
-                                                 defaultTaxData)
+import           FinancialMC.Core.Tax           (HasTaxData (..), TaxData,
+                                                 TaxRules, defaultTaxData)
 import           FinancialMC.Core.Utilities     (AsFMCException (..), FMCException (FailedLookup, Other),
                                                  Year, noteM)
 
@@ -109,9 +109,6 @@ instance Show Accumulators where
 data FinState = FinState { _fsTaxData:: !TaxData, _fsCashFlow:: !MoneyValue, _fsAccumulators:: !Accumulators}
 makeClassy ''FinState
 
-class HasTaxData s where
-  taxData :: Lens' s TaxData
-
 instance HasTaxData FinState where
   taxData = fsTaxData
 
@@ -160,8 +157,8 @@ getAccumulatedValue accumName = do
   (Accumulators as) <- use getAccumulators
   noteM (FailedLookup ("Couldn't find accum named " <> (T.pack $ show accumName))) $ M.lookup accumName as
 
-zeroAccumulator::MonadState FinState m=>AccumName->m ()
-zeroAccumulator accumName = fsAccumulators.accums %= M.delete accumName
+zeroAccumulator :: (MonadState s m, HasAccumulators s) => AccumName -> m ()
+zeroAccumulator accumName = accumulators.accums %= M.delete accumName
 
 {-
 addCashFlow::(MonadState FinState m,MonadReader FinEnv m)=>MoneyValue->m ()

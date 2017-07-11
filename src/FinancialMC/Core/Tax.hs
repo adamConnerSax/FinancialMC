@@ -13,6 +13,7 @@ module FinancialMC.Core.Tax
        (
          TaxType(..)
        , TaxData
+       , HasTaxData (..)
        , defaultTaxData
 --       , TaxDataApp
        , TaxDataAppC
