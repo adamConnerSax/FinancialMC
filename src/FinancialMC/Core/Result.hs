@@ -12,6 +12,7 @@ module FinancialMC.Core.Result
 
 
 import           Control.Monad.Catch  (MonadThrow (..))
+import           Control.Monad.Except (MonadError (catchError, throwError))
 import           Control.Monad.Morph  (MFunctor (..))
 import           Control.Monad.Reader (MonadReader (..), local)
 import           Control.Monad.State  (MonadState, get, put)
@@ -104,5 +105,11 @@ instance MonadState s m=>MonadState s (ResultT o m) where
   get = lift get
   put k = lift $ put k
 
-instance MonadThrow m=>MonadThrow (ResultT o m) where
+instance MonadThrow m => MonadThrow (ResultT o m) where
   throwM = lift . throwM
+
+instance (MonadError e m, Monoid o) => MonadError e (ResultT o m) where
+  throwError = lift . throwError
+  catchError action handler = ResultT $ \o -> do
+    let lower = runResultT
+    catchError (lower action) (lower . handler)

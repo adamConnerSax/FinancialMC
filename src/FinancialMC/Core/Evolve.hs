@@ -84,7 +84,7 @@ instance Monoid EvolveOutput where
 type EvolveResult a = Result EvolveOutput a
 
 
-type EvolveC s rm m = (MonadResult EvolveOutput m, MonadState s m, IsRateModel rm, ReadsFinEnv s rm)
+type EvolveC s rm m = (MonadError FMCException m, MonadResult EvolveOutput m, MonadState s m, IsRateModel rm, ReadsFinEnv s rm)
 
 --type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
 

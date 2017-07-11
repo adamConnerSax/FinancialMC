@@ -6,16 +6,18 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE UndecidableInstances   #-}
 module FinancialMC.Core.FinancialStates
        (
          FinEnv(FinEnv)
        , HasFinEnv (..)
-       , ReadsFinEnv (..)
+       , ReadsFinEnv (getFinEnv)
        , FinState(FinState)
        , HasFinState(..)
-       , HasTaxData (..)
-       , HasCashFlow (..)
-       , HasAccumulators (..)
+       , ReadsFinState (getFinState)
+       , HasTaxData (taxData)
+       , HasCashFlow (cashFlow)
+       , HasAccumulators (accumulators)
        , zeroFinState
        , currentDate
        , changeRate
@@ -24,7 +26,6 @@ module FinancialMC.Core.FinancialStates
        , updateExchangeRateFunction
        , AccumName
        , Accumulators(Accumulators)
-       , HasAccumulators(..)
        , addToAccumulator
        , addToAccumulator'
        , getAccumulatedValue
@@ -110,22 +111,40 @@ instance Show Accumulators where
 data FinState = FinState { _fsTaxData:: !TaxData, _fsCashFlow:: !MoneyValue, _fsAccumulators:: !Accumulators}
 makeClassy ''FinState
 
-instance HasTaxData FinState where
-  taxData = fsTaxData
+class ReadsFinState s where
+  getFinState :: Getter s FinState
+  default getFinState :: HasFinState s => Getter s FinState
+  getFinState = finState
 
 class HasCashFlow s where
   cashFlow :: Lens' s MoneyValue
 
+instance HasTaxData FinState where
+  taxData = fsTaxData
+
 instance HasCashFlow FinState where
   cashFlow = fsCashFlow
+
+instance HasAccumulators FinState where
+  accumulators = fsAccumulators
+
+{-
+-- These cause an abundance of overlaps.  How to do this?
+instance HasFinState s => HasTaxData s where
+  taxData = finState . fsTaxData
+
+instance HasFinState s => HasCashFlow s where
+  cashFlow = finState . fsCashFlow
+
+instance HasFinState s => HasAccumulators s where
+  accumulators = finState . fsAccumulators
+-}
 
 class ReadsAccumulators s where
   getAccumulators :: Getter s Accumulators
   default getAccumulators :: HasAccumulators s => Getter s Accumulators
   getAccumulators = accumulators
 
-instance HasAccumulators FinState where
-  accumulators = fsAccumulators
 
 instance Show FinState where
   show fs = "Net flow: " ++ show (fs ^. fsCashFlow) ++ "\n" ++ show (fs ^. fsTaxData) ++ "\n" ++ show (fs ^. fsAccumulators)

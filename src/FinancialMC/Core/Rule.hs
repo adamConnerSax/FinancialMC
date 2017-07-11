@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE GADTs                 #-}
@@ -12,19 +13,21 @@ module FinancialMC.Core.Rule
        , IsRule(..)
        , showRuleCore
        , RuleOutput(..)
-       , RuleApp
+       , RuleAppC
        ) where
 
 import           FinancialMC.Core.Asset           (AccountGetter, AccountName,
                                                    IsAsset)
 import           FinancialMC.Core.Evolve          (AccumResult)
-import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
+import           FinancialMC.Core.FinancialStates (ReadsFinEnv, ReadsFinState)
 import           FinancialMC.Core.Rates           (IsRateModel)
-import           FinancialMC.Core.Result          (ResultT)
+import           FinancialMC.Core.Result          (MonadResult)
 import           FinancialMC.Core.TradingTypes    (Transaction)
 import           FinancialMC.Core.Utilities       (FMCException)
 
-import           Control.Monad.Reader             (ReaderT)
+import           Control.Monad.Except             (MonadError)
+import           Control.Monad.State              (MonadState)
+
 import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
 
@@ -33,7 +36,9 @@ instance Monoid RuleOutput where
   mempty = RuleOutput [] []
   mappend (RuleOutput x1 y1) (RuleOutput x2 y2) = RuleOutput (x1<>x2) (y1<>y2)
 
-type RuleApp rm = ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
+--type RuleApp rm = ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
+
+type RuleAppC s rm m = (MonadError FMCException m, MonadResult RuleOutput m, MonadState s m, ReadsFinState s, ReadsFinEnv s rm)
 
 data RuleWhen = Special | BeforeTax | AfterSweep  deriving (Enum,Ord,Eq,Show,Read)
 
@@ -43,7 +48,7 @@ class IsRule r where
   ruleName :: r -> RuleName
   ruleAccounts :: r -> [AccountName]
   ruleWhen :: r -> RuleWhen
-  doRule :: (IsAsset a, IsRateModel rm) => r -> AccountGetter a -> RuleApp rm ()
+  doRule :: (IsAsset a, IsRateModel rm, RuleAppC s rm m) => r -> AccountGetter a -> m ()
 
 showRuleCore :: IsRule r => r -> String
 showRuleCore r = show (ruleName r) ++" (involves " ++ show (ruleAccounts r) ++ ")"

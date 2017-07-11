@@ -56,6 +56,7 @@ import qualified Data.Text                        as T
 
 import           GHC.Generics                     (Generic)
 
+{-
 mvLift :: Monad m => MV.ER m a -> ReaderT FinState (ReaderT (FinEnv rm) m) a
 mvLift = lift . magnify feExchange
 
@@ -71,6 +72,7 @@ laERMV c = mvLift . CV.asERMV c
 
 liftGetA :: AccountGetter a -> AccountName -> ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) (Account a)
 liftGetA getA name = lift . lift $ getA name
+-}
 
 data BaseRuleDetails =
   PayFrom !AccountName !AccumName | -- pay from account to accumulator
@@ -100,7 +102,7 @@ instance Show BaseRuleDetails where
   show (Sweep acct) = "Moves excess/gets necessary cash to/from " ++ show acct
 
 
-data BaseRule = BaseRule { _brName :: !RuleName, _brDetails ::  BaseRuleDetails } deriving (Generic,FromJSON,ToJSON)
+data BaseRule = BaseRule { _brName :: !RuleName, _brDetails ::  BaseRuleDetails } deriving (Generic, FromJSON, ToJSON)
 makeClassy ''BaseRule
 
 instance Show BaseRule where
@@ -112,7 +114,7 @@ instance IsRule BaseRule where
   ruleWhen (BaseRule _ rd) = baseRuleWhen rd
   doRule (BaseRule _ rd) = doBaseRule rd
 
-baseRuleAccounts::BaseRuleDetails->[AccountName]
+baseRuleAccounts :: BaseRuleDetails -> [AccountName]
 baseRuleAccounts (PayFrom a _)                          = [a]
 baseRuleAccounts (Transfer aFrom _ aTo _ _ _)           = [aFrom, aTo]
 baseRuleAccounts (Contribution a _ _ _)                 = [a]
@@ -122,7 +124,7 @@ baseRuleAccounts (SellAsNeeded sana)                    = fst <$> sana
 baseRuleAccounts (TaxTrade a)                           = [a]
 baseRuleAccounts (Sweep a)                              = [a]
 
-baseRuleWhen::BaseRuleDetails->RuleWhen
+baseRuleWhen :: BaseRuleDetails->RuleWhen
 baseRuleWhen (PayFrom _ _)                   = BeforeTax
 baseRuleWhen (Transfer _ _ _ _ _ _)          = BeforeTax
 baseRuleWhen (Contribution _ _ _ _)          = BeforeTax
@@ -132,7 +134,7 @@ baseRuleWhen (SellAsNeeded _)                = AfterSweep
 baseRuleWhen (TaxTrade _)                    = Special
 baseRuleWhen (Sweep _)                       = Special
 
-doBaseRule :: IsAsset a=>BaseRuleDetails->AccountGetter a->RuleApp rm ()
+doBaseRule :: IsAsset a => BaseRuleDetails -> AccountGetter a -> RuleApp rm ()
 --If there is spending (in "accumName"), sell assets from acctName if available to cover with tax treatment from tt
 doBaseRule (PayFrom acctName accumName) getA = do
   output <- lift $ do

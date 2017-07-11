@@ -83,16 +83,16 @@ class Evolvable a => IsAsset a where
   revalueAsset :: a -> AssetRevaluation -> a
   tradeAsset :: TradeFunction s m a
 
-assetName::IsAsset a=>a->AssetName
+assetName :: IsAsset a => a -> AssetName
 assetName a = aName $ assetCore a
 
-assetValue::IsAsset a=>a->MoneyValue
+assetValue :: IsAsset a => a -> MoneyValue
 assetValue a = aValue $ assetCore a
 
-assetCostBasis::IsAsset a=>a->MoneyValue
+assetCostBasis :: IsAsset a => a -> MoneyValue
 assetCostBasis a = aCostBasis $ assetCore a
 
-assetCurrency::IsAsset a=>a->Currency
+assetCurrency::IsAsset a => a -> Currency
 assetCurrency a = assetValue a ^. mCurrency
 
 type AccountName = T.Text
@@ -103,21 +103,21 @@ makeClassy ''Account
 instance Functor Account where
   fmap f (Account n t c as) = Account n t c (f <$> as)
 
-instance ToJSON a=>ToJSON (Account a) where
+instance ToJSON a => ToJSON (Account a) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance FromJSON a=>FromJSON (Account a) where
+instance FromJSON a => FromJSON (Account a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance Show a=>Show (Account a) where
+instance Show a => Show (Account a) where
   show (Account n aType ccy as) = show n ++ "(" ++ show aType ++ " in " ++ show ccy ++ ")"
                                ++ foldr (\a s->s ++ "\n\t" ++ show a) " " as
 
-instance Evolvable a=>Evolvable (Account a) where
+instance Evolvable a => Evolvable (Account a) where
   evolve act = evolveWithin act acAssets
 
 
-accountValue::IsAsset a=>Account a->ExchangeRateFunction->MoneyValue
+accountValue :: IsAsset a => Account a -> ExchangeRateFunction -> MoneyValue
 accountValue acct e = foldr f (MV.zero ccy) assets where
   f a s = MV.inFirst e (+) s (assetValue a)
   ccy = acct ^. acCurrency
@@ -128,7 +128,7 @@ accountValue acct e = foldr f (MV.zero ccy) assets where
 --accountValueCEMV acct = foldr f MV.cer0 (acct ^. acAssets) where
 --  f a s = s |+| (MV.mv2cer $ assetValue a)
 
-accountValueCV::IsAsset a=>Account a->CV.CVD
+accountValueCV :: IsAsset a => Account a -> CV.CVD
 accountValueCV acct = foldr f (CV.mvZero (acct ^. acCurrency))  (acct ^. acAssets) where
   f a s = s |+| (CV.fromMoneyValue $ assetValue a)
 
