@@ -71,7 +71,7 @@ class IsLifeEvent e where
   type FlowType e :: *
   lifeEventCore::e->LifeEventCore
   -- do we need/want the constraints here
-  doLifeEvent::(IsAsset a, IsFlow fl, IsRateModel rm, LifeEventAppC s a fl rm m) => e -> LifeEventConverters a fl e -> AccountGetter a -> m ()
+  doLifeEvent::(IsAsset a, IsFlow fl, IsRateModel rm, LifeEventAppC s a fl rm m) => e -> LifeEventConverters a fl e -> AccountGetter m a -> m ()
 
 lifeEventName::IsLifeEvent e=>e->LifeEventName
 lifeEventName = leName . lifeEventCore

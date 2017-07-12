@@ -4,6 +4,7 @@
 {-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
 module FinancialMC.Builders.Rules
@@ -29,6 +30,8 @@ import           FinancialMC.Core.Evolve          (AccumResult (AddTo, Zero))
 import           FinancialMC.Core.FinancialStates (AccumName, FinEnv, FinState,
                                                    HasFinEnv (..),
                                                    HasFinState (..),
+                                                   ReadsFinEnv (getFinEnv),
+                                                   ReadsFinState (getFinState),
                                                    getAccumulatedValue)
 import           FinancialMC.Core.MoneyValue      (Currency, HasMoneyValue (..),
                                                    MoneyValue)
@@ -39,17 +42,16 @@ import           FinancialMC.Core.TradingTypes    (TradeType (..),
 import           FinancialMC.Core.Utilities       (DateRange, FMCException,
                                                    Year, between, mapMSl)
 
-import           FinancialMC.Core.Rule            (IsRule (..), RuleApp,
+import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
                                                    RuleName,
                                                    RuleOutput (RuleOutput),
                                                    RuleWhen (AfterSweep, BeforeTax, Special))
 
 import           FinancialMC.Core.Tax             (safeCapGainRateCV)
 
-import           Control.Lens                     (magnify, makeClassy, view,
-                                                   (^.))
-import           Control.Monad.Reader             (ReaderT)
-import           Control.Monad.Trans.Class        (lift)
+import           Control.Lens                     (magnify, makeClassy, use,
+                                                   view, (^.))
+import           Control.Monad.State              (MonadState)
 
 import           Data.Aeson                       (FromJSON, ToJSON)
 import qualified Data.Text                        as T
@@ -134,50 +136,50 @@ baseRuleWhen (SellAsNeeded _)                = AfterSweep
 baseRuleWhen (TaxTrade _)                    = Special
 baseRuleWhen (Sweep _)                       = Special
 
-doBaseRule :: IsAsset a => BaseRuleDetails -> AccountGetter a -> RuleApp rm ()
+doBaseRule :: (IsAsset a, RuleAppC s rm m) => BaseRuleDetails -> AccountGetter m a -> m ()
 --If there is spending (in "accumName"), sell assets from acctName if available to cover with tax treatment from tt
 doBaseRule (PayFrom acctName accumName) getA = do
-  output <- lift $ do
-    acct <- liftGetA getA acctName
+  output <- do
+    acct <- getA acctName
     let ccy = acct ^. acCurrency
         accountBal' = accountValueCV acct
     accumulated <- getAccumulatedValue accumName
-    toTrade <- laERMV ccy $ CV.cvMax (CV.fromMoneyValue accumulated) (CV.cvNegate accountBal')
+    toTrade <- CV.asERMV ccy $ CV.cvMax (CV.fromMoneyValue accumulated) (CV.cvNegate accountBal')
     let trade = Transaction acctName NormalTrade toTrade
         accumR = AddTo accumName (MV.negate toTrade)
-    mvLift . CV.asERFReader $ cvIf (CV.fromMoneyValue toTrade |/=| CV.mvZero ccy) (CV.toSV $ RuleOutput [trade] [accumR]) (CV.toSV $ RuleOutput [] [])
+    CV.asERFReader $ cvIf (CV.fromMoneyValue toTrade |/=| CV.mvZero ccy) (CV.toSV $ RuleOutput [trade] [accumR]) (CV.toSV $ RuleOutput [] [])
   appendAndReturn output ()
 
 doBaseRule (Transfer aFrom ttFrom aTo ttTo amt dateRange) _ = do
-    curDate <- liftFS . liftFE $ view feCurrentDate
+    curDate <- use $ getFinEnv.feCurrentDate
     let tFrom = [Transaction aFrom ttFrom (MV.negate amt) | between curDate dateRange]
         tTo = [Transaction aTo ttTo amt | between curDate dateRange]
     appendAndReturn (RuleOutput (tFrom ++ tTo) []) ()
 
 doBaseRule (Contribution acctName amount tradeType dateRange) _ = do
-    curDate <- liftFS . liftFE $ view feCurrentDate
+    curDate <- use $ getFinEnv.feCurrentDate
     let trades = [Transaction acctName tradeType amount | between curDate dateRange]
     appendAndReturn (RuleOutput trades []) ()
 
 doBaseRule (RequiredDistribution acctName yearTurning70) getA = do
-  trades <- lift $ do
-    curDate <- liftFE $ view feCurrentDate
+  trades <- do
+    curDate <- use $ getFinEnv.feCurrentDate
     let fraction = distributionFraction lifeExpectancyFrom70 curDate yearTurning70
-    acct <- liftGetA getA acctName
-    amount <- laERMV (acct ^. acCurrency) $ accountValueCV acct |*| (-1.0*fraction)
+    acct <- getA acctName
+    amount <- CV.asERMV (acct ^. acCurrency) $ accountValueCV acct |*| (-1.0*fraction)
     return [Transaction acctName NormalTrade amount]
   appendAndReturn (RuleOutput trades []) ()
 
 --rule to keep one account balance between limits by transferring to another.  E.g., keep cash position bounded by buying/selling investments
 doBaseRule (CashToInvestmentSweep cashAcctName invAcctName minCash maxCash) getA = do
   (cashTrade',invTrade') <- lift $ do
-    cashAcct <- liftGetA getA cashAcctName
-    invAcct <- liftGetA getA invAcctName
+    cashAcct <- getA cashAcctName
+    invAcct <- getA invAcctName
     let ccy = cashAcct ^. acCurrency
         toBankF minC maxC x y = CV.cvCase [(x CV.|<| minC, CV.cvMin (minC CV.|-| x) y),
                                            (x CV.|>| maxC, maxC CV.|-| x)]
                                 (CV.mvZero ccy)
-    toBank <- laERMV ccy $ toBankF (CV.fromMoneyValue minCash) (CV.fromMoneyValue maxCash) (accountValueCV cashAcct) (accountValueCV invAcct)
+    toBank <- CV.asERMV ccy $ toBankF (CV.fromMoneyValue minCash) (CV.fromMoneyValue maxCash) (accountValueCV cashAcct) (accountValueCV invAcct)
     let cashTrade = Transaction cashAcctName NormalTrade toBank
         invTrade = Transaction invAcctName NormalTrade (MV.negate toBank)
     return (cashTrade, invTrade)
@@ -187,12 +189,12 @@ doBaseRule (CashToInvestmentSweep cashAcctName invAcctName minCash maxCash) getA
 --input is list of accounts with penalty rates
 doBaseRule (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip accts) AfterSweep where
   trds <- lift $ do
-    cashPos <- view fsCashFlow
-    curDate <- liftFE $ view feCurrentDate
+    cashPos <- use getFinState.fsCashFlow
+    curDate <- use getFinEnv.feCurrentDate
     let ccy = cashPos ^. mCurrency
-        h::(AccountName,DateRange)->MoneyValue->MV.ER (Either FMCException) (Transaction,MoneyValue)
+--        h::(AccountName,DateRange)->MoneyValue->MV.ER (Either FMCException) (Transaction,MoneyValue)
         h (name,range) need = do
-          acct <- lift $ getA name
+          acct <- getA name
           let bal' = accountValueCV acct
               need' = CV.fromMoneyValue need
               toSell' = CV.cvMin need' bal'
@@ -218,12 +220,12 @@ doBaseRule (TaxTrade acctName) _ = do
         amt' = CV.cvNegate $ needed' |/| (CV.toSVD 1.0 |-| safeR')
     amt <- mvLift $ CV.asERMV ccy amt'
     let trade = Transaction acctName NormalTrade amt
-    mvLift . CV.asERFReader $ cvIf (cvOr (tax' |<=| CV.mvZero ccy) (tax' |<| cashOnHand')) (CV.toSV []) (CV.toSV [trade])
+    CV.asERFReader $ cvIf (cvOr (tax' |<=| CV.mvZero ccy) (tax' |<| cashOnHand')) (CV.toSV []) (CV.toSV [trade])
   appendAndReturn (RuleOutput trades [Zero (T.pack "TaxOwed")]) ()
 
 --rule to sweep remaining cashPos into given account.  Last rule executed
 doBaseRule (Sweep acctName) _ = do
-    cashPos <- liftFS $ view fsCashFlow
+    cashPos <- use getFinState.fsCashFlow
     let trade = Transaction acctName NormalTrade cashPos
     appendAndReturn (RuleOutput [trade] []) ()
 

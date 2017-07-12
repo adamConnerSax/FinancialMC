@@ -56,7 +56,7 @@ import           Data.Aeson.Types               (Options (fieldLabelModifier),
 
 import qualified Data.Text                      as T
 
---import           Control.Exception              (SomeException)
+import           Control.Monad.Except           (MonadError)
 
 import           GHC.Generics                   (Generic)
 
@@ -132,4 +132,4 @@ accountValueCV :: IsAsset a => Account a -> CV.CVD
 accountValueCV acct = foldr f (CV.mvZero (acct ^. acCurrency))  (acct ^. acAssets) where
   f a s = s |+| (CV.fromMoneyValue $ assetValue a)
 
-type AccountGetter a = AccountName -> Either FMCException (Account a)
+type AccountGetter m a = MonadError FMCException m => AccountName -> m (Account a)

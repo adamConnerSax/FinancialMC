@@ -38,9 +38,11 @@ import           FinancialMC.Core.Evolve          (Evolvable (..),
                                                    EvolveOutput (EvolveOutput),
                                                    Evolver, FlowResult (..),
                                                    TaxAmount (..))
-import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
+import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..),
+                                                   ReadsFinEnv (getFinEnv))
 import           FinancialMC.Core.MoneyValue      (Currency (USD),
-                                                   MoneyValue (MoneyValue))
+                                                   MoneyValue (MoneyValue),
+                                                   ReadsExchangeRateFunction (getExchangeRateFunction))
 import qualified FinancialMC.Core.MoneyValueOps   as MV
 import           FinancialMC.Core.Rates           (InterestType (..), RateTable,
                                                    RateTag (..),
@@ -50,29 +52,19 @@ import           FinancialMC.Core.Tax             (TaxType (..))
 import           FinancialMC.Core.Utilities       (Year)
 
 import           Control.Exception                (SomeException)
-import           Control.Lens                     (magnify, makeClassy,
-                                                   makePrisms)
-import           Control.Monad.Reader             (ReaderT, ask)
-import           Control.Monad.Trans              (lift)
+import           Control.Lens                     (makeClassy, makePrisms, use)
+import           Control.Monad.State (MonadState)
 
---import Data.Aeson
 import           Data.Aeson.TH                    (deriveJSON)
 import           Data.Aeson.Types                 (FromJSON (..), ToJSON (..),
                                                    defaultOptions,
                                                    fieldLabelModifier)
 
---import Data.Aeson.Existential (TypeNamed)
-
 import           GHC.Generics                     (Generic)
 
-laERMV :: Monad m => Currency -> CV.CVD -> ReaderT (FinEnv rm) m MoneyValue
-laERMV c = magnify feExchange . CV.asERMV c
 
-assetCVMult :: (IsAsset a,Monad m) => a -> Double -> ReaderT (FinEnv rm) m MoneyValue
-assetCVMult x rate = laERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (assetValue x)
-
-liftRates :: ReaderT (RateTable Double) (Either err) Double -> ReaderT (FinEnv rm) (Either err) Double
-liftRates = magnify feRates
+assetCVMult :: (IsAsset a, MonadState s m, ReadsExchangeRateFunction s) => a -> Double -> m MoneyValue
+assetCVMult x rate = CV.asERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (assetValue x)
 
 data MixedFundDetails = MixedFundDetails { _mfdStockPercentage :: !Double
                                          , _mfdDividendYield   :: !Double
@@ -116,8 +108,6 @@ instance Show BaseAssetDetails where
 data BaseAsset = BaseAsset { _baCore :: !AssetCore, _baDetails :: !BaseAssetDetails } deriving (Generic,ToJSON,FromJSON)
 makeClassy ''BaseAsset
 
-{- $(deriveJSON defaultOptions ''FMCBaseAsset) -}
-
 instance Show BaseAsset where
   show (BaseAsset (AssetCore n v b) (FixedRateMortgage (FixedRateMortgageDetails rate years))) =
     show n ++ " (Fixed " ++ show rate ++ " rate, "
@@ -126,7 +116,6 @@ instance Show BaseAsset where
     ++ " owed of " ++ show (MV.negate b) ++ " borrowed."
 
   show (BaseAsset ac dets) = show dets ++ " " ++ show ac
-
 
 instance IsAsset BaseAsset where
   assetCore (BaseAsset ac _) = ac
@@ -139,47 +128,44 @@ instance IsAsset BaseAsset where
 --  tradeAsset a@(BaseAsset _ (GuaranteedFund _)) = defaultAssetBuySellF
   tradeAsset a = defaultAssetBuySellF a
 
-
 instance Evolvable BaseAsset where
   evolve = baseAssetEvolve
 
-baseAssetEvolve::Evolver rm BaseAsset
+baseAssetEvolve :: Evolver s rm m BaseAsset
 baseAssetEvolve ca@(BaseAsset _ CashAsset) = do
-  (interest',v') <- lift $  do
-    rate <- magnify feRates $ rateRequest (Interest Savings)
+  (interest',v') <- do
+    rate <- rateRequest (Interest Savings)
     interest <- assetCVMult ca rate
     v <- assetCVMult ca (1.0 + rate)
     return (interest,v)
   appendAndReturn (EvolveOutput [OnlyTaxed (TaxAmount NonPayrollIncome interest')] []) (revalueAsset ca (NewValueAndBasis v' v'))
 
 baseAssetEvolve mf@(BaseAsset _ (MixedFund (MixedFundDetails fracStock stkYield bondInterest))) = do
-  (flows', newA') <- lift $ do
-    stockRet <- liftRates $ rateRequest (Return Stock)
-    bondRet <- liftRates $ rateRequest (Return Bond)
+  (flows', newA') <- do
+    stockRet <- rateRequest (Return Stock)
+    bondRet <- rateRequest (Return Bond)
     let ccy = assetCurrency mf
         oldV' = CV.fromMoneyValue (assetValue mf)
         stockDivs' = oldV' |*| (fracStock*stkYield*(1+((stockRet-stkYield)/2.0)))
         bondDivs'  = oldV' |*| ((1-fracStock)*bondInterest*(1+((bondRet-bondInterest)/2.0)))
-    stockDivs <- laERMV ccy stockDivs'
-    bondDivs  <- laERMV ccy bondDivs'
+    stockDivs <- CV.asERMV ccy stockDivs'
+    bondDivs  <- CV.asERMV ccy bondDivs'
     let flows =  [OnlyTaxed (TaxAmount Dividend stockDivs), OnlyTaxed (TaxAmount NonPayrollIncome bondDivs)]
         rate = fracStock*stockRet + (1.0-fracStock)*bondRet
     newV <- assetCVMult mf (1.0 + rate)
-    newB <- laERMV ccy $  CV.fromMoneyValue (assetCostBasis mf) |+| stockDivs' |+|  bondDivs'
+    newB <- CV.asERMV ccy $  CV.fromMoneyValue (assetCostBasis mf) |+| stockDivs' |+|  bondDivs'
     return (flows, revalueAsset mf (NewValueAndBasis newV newB))
   appendAndReturn (EvolveOutput flows' []) newA'
 
-
 baseAssetEvolve gf@(BaseAsset _ (GuaranteedFund (GuaranteedFundDetails rate))) = do
-  v' <- lift $ assetCVMult gf (1.0 + rate)
+  v' <- assetCVMult gf (1.0 + rate)
   returnOnly $! revalueAsset gf (NewValue v')
 
 baseAssetEvolve rre@(BaseAsset _ ResidentialRE) = do
-  v <- lift $ do
-    ret <- liftRates $ rateRequest (Return RealEstate)
+  v <- do
+    ret <- rateRequest (Return RealEstate)
     assetCVMult rre (1.0 + ret)
   returnOnly $! revalueAsset rre $ NewValue v
-
 
 baseAssetEvolve frm@(BaseAsset _ (FixedRateMortgage (FixedRateMortgageDetails rate years))) =  do
   let ccy = (assetCurrency frm)
@@ -189,7 +175,7 @@ baseAssetEvolve frm@(BaseAsset _ (FixedRateMortgage (FixedRateMortgageDetails ra
       n = (12::Int)*years
       x = (1+r)^n
       monthly' = borrowed' |*| (r*x/(x-1)) --amortization formula
-  (d,np,p)<- lift . magnify feExchange $ do
+  (d, np, p)<- do
         (newPrincipal',paid') <- doPayments ccy monthly' r curPrincipal' (12::Int)
         let interest' = paid' |-| (curPrincipal' |-| newPrincipal')
             deductible_fraction' = CV.cvMin (CV.toSVD 1.0) ((CV.toCV 1000000 USD) |/| curPrincipal')
@@ -202,10 +188,9 @@ baseAssetEvolve frm@(BaseAsset _ (FixedRateMortgage (FixedRateMortgageDetails ra
       cashFlow = PartiallyDeductible (MV.negate p) (TaxAmount OrdinaryIncome d)
   appendAndReturn (EvolveOutput [cashFlow] []) newAsset
 
-
-doPayments::MV.ERK m=>Currency->CV.CVD->Double->CV.CVD->Int->m (CV.CVD,CV.CVD)
+doPayments :: (MonadState s m, ReadsExchangeRateFunction s) => Currency -> CV.CVD -> Double -> CV.CVD -> Int -> m (CV.CVD, CV.CVD)
 doPayments ccy pmt' rate prin' n = do
-  e <- ask
+  e <- use getExchangeRateFunction
   let pmt = CV.unwrap ccy e pmt'
       prin  = CV.unwrap ccy e prin'
       SD pRemaining aPaid = foldl (\a _ -> doPayment pmt rate a) (SD prin 0) [1..n]
@@ -213,7 +198,7 @@ doPayments ccy pmt' rate prin' n = do
 
 
 data SD = SD !Double !Double
-doPayment::Double->Double->SD->SD
+doPayment :: Double->Double->SD->SD
 doPayment pmt rate (SD prin paidSoFar) =
   let int = rate * prin
       pRemaining = max 0 (prin + int - pmt)
@@ -221,10 +206,10 @@ doPayment pmt rate (SD prin paidSoFar) =
       aPaid = int + pPaid + paidSoFar
   in SD pRemaining aPaid
 
-doPayments''::Currency->CV.CVD->Double->CV.CVD->Int->(CV.CVD,CV.CVD)
+doPayments'' :: Currency -> CV.CVD -> Double -> CV.CVD -> Int -> (CV.CVD, CV.CVD)
 doPayments'' ccy pmt rate prin n = foldl (\a _ -> doPayment'' ccy pmt rate a) (prin,(CV.mvZero ccy)) [1..n]
 
-doPayment''::Currency->CV.CVD->Double->(CV.CVD,CV.CVD)->(CV.CVD,CV.CVD)
+doPayment'' :: Currency -> CV.CVD -> Double -> (CV.CVD, CV.CVD) -> (CV.CVD, CV.CVD)
 doPayment'' ccy pmt' rate (prin',paidSoFar') =
   let interest' = rate |*| prin'
       prinRemaining' = CV.cvMax (CV.mvZero ccy) (prin' |+| interest' |-| pmt')

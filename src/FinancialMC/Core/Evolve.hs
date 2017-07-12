@@ -10,6 +10,7 @@
 module FinancialMC.Core.Evolve
        (
          Evolver
+       , EvolveC
        , Evolvable(..)
        , EvolveOutput(..)
        , EvolveResult
@@ -37,7 +38,8 @@ import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction,
                                                    MoneyValue,
                                                    ReadsExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Rates           (IsRateModel)
+import           FinancialMC.Core.Rates           (IsRateModel, Rate,
+                                                   ReadsRateTable)
 import           FinancialMC.Core.Result          (MonadResult, Result (Result),
                                                    runResultT)
 import           FinancialMC.Core.Tax             (TaxDataAppC, TaxType,
@@ -83,20 +85,24 @@ instance Monoid EvolveOutput where
 
 type EvolveResult a = Result EvolveOutput a
 
-
-type EvolveC s rm m = (MonadError FMCException m, MonadResult EvolveOutput m, MonadState s m, IsRateModel rm, ReadsFinEnv s rm)
+type EvolveC s rm m = ( MonadError FMCException m
+                      , MonadState s m
+                      , ReadsExchangeRateFunction s
+                      , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+                      , IsRateModel rm
+                      , ReadsFinEnv s rm)
 
 --type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
 
-type Evolver s rm m a = EvolveC s rm m => a -> m a
+type Evolver s rm m a = (EvolveC s rm m, MonadResult EvolveOutput m) => a -> m a
 
 --liftER :: (MonadState s m, ReadsExchangeRateFunction s) => MV.ER (Either FMCException) a -> m a
 --liftER = readOnly
 
 class Evolvable a where
-  evolve :: EvolveC s rm m => a -> m a
+  evolve :: (EvolveC s rm m, MonadResult EvolveOutput m) => a -> m a
 
-evolveWithin :: (EvolveC s rm m, Evolvable a, TR.Traversable t) => b -> Lens' b (t a) -> m b
+evolveWithin :: (EvolveC s rm m, MonadResult EvolveOutput m, Evolvable a, TR.Traversable t) => b -> Lens' b (t a) -> m b
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
 
 
@@ -181,6 +187,7 @@ applyAccums :: ( MonadError FMCException m
 applyAccums  = mapM_ applyAccum
 
 
+-- ought to be able to replace HasTaxData, HasCashFlow and HasAccumulators with HasFinState.  THey are isomorphic.  But how?
 applyEvolveResult :: ( MonadError FMCException m
                      , MonadState s m
                      , HasTaxData s
@@ -192,15 +199,12 @@ applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyAccums accums
   return $! a
 
+-- ought to be able to replace HasTaxData, HasCashFlow and HasAccumulators with HasFinState.  THey are isomorphic.  But how?
 evolveAndApply :: ( Evolvable a
-                  , MonadError FMCException m
-                  , MonadState s m
-                  , IsRateModel rm
-                  , ReadsFinEnv s rm
+                  , EvolveC s rm m
                   , HasTaxData s
                   , HasCashFlow s
-                  , HasAccumulators s
-                  , ReadsExchangeRateFunction s) => a -> m a
+                  , HasAccumulators s) => a -> m a
 evolveAndApply x = do
   x <- runResultT $ evolve x
   applyEvolveResult x

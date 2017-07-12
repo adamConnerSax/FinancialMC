@@ -18,9 +18,9 @@ import           FinancialMC.Core.Utilities (DateRange(..),Frequency(..))
 import           FinancialMC.Core.Result (appendAndReturn)
 import           FinancialMC.Core.Asset (AssetCore(AssetCore),Account(Account),AccountGetter)
 import           FinancialMC.Core.Flow  (FlowCore(FlowCore))
-import           FinancialMC.Core.FinancialStates (HasFinEnv(feExchange),FinEnv)
+import           FinancialMC.Core.FinancialStates (HasFinEnv(feExchange),FinEnv, ReadsFinEnv (getFinEnv), ReadsFinState (getFinState))
 import           FinancialMC.Core.LifeEvent (LifeEventCore(..),IsLifeEvent(..),LifeEventConverters(LEC),
-                                             LifeEventApp,LifeEventOutput(LifeEventOutput))
+                                             LifeEventAppC,LifeEventOutput(LifeEventOutput))
 
 import           FinancialMC.Core.TradingTypes (AccountType(PrimaryHome))
 
@@ -29,17 +29,12 @@ import           FinancialMC.Builders.Flows (BaseFlow(..),BaseFlowDetails(Expens
 
 import           Control.Lens (magnify,(^.))
 import           Control.Monad.Trans.Class (MonadTrans,lift)
-import           Control.Monad.Reader (ReaderT)
+import           Control.Monad.State (MonadState)
 
 import Data.Aeson (genericToJSON, genericParseJSON)
 import           Data.Aeson.Types (Options(fieldLabelModifier),defaultOptions,FromJSON(..),ToJSON(..))
 import qualified Data.Text as T
 import           GHC.Generics (Generic)
-
---laERMV::_
-laERMV::(MonadTrans t1, MonadTrans t2, Monad m, Monad (t2 n), n ~ ReaderT (FinEnv rm) m)=>Currency->CV.CVD->t1 (t2 (ReaderT (FinEnv rm) m)) MoneyValue
-laERMV c a = lift . lift . magnify feExchange $ CV.asERMV c a
-
 
 -- TODO: Lensify
 data BaseLifeEvent = BaseLifeEvent { leCore::LifeEventCore,  leDetails::BaseLifeEventDetails } deriving (Generic)
@@ -70,7 +65,6 @@ data PropertyPurchase = PropertyPurchase { ppPropertyName:: !T.Text,
                                            ppAnnualMaintenance:: !MoneyValue
                                          } deriving (Generic)
 
-
 instance ToJSON PropertyPurchase where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 2}
 instance FromJSON PropertyPurchase where
@@ -85,7 +79,7 @@ instance IsLifeEvent BaseLifeEvent where
 instance Show BaseLifeEvent where
   show (BaseLifeEvent lec (BuyProperty pp)) = printPropertyPurchase lec pp
 
-doBaseLifeEvent::BaseLifeEvent->LifeEventConverters a fl BaseLifeEvent->AccountGetter a->LifeEventApp a fl rm ()
+doBaseLifeEvent :: LifeEventAppC s a fl rm m => BaseLifeEvent -> LifeEventConverters a fl BaseLifeEvent -> AccountGetter m a -> m ()
 -- should this get fixed to run underneath ResultT until the end?
 doBaseLifeEvent (BaseLifeEvent (LifeEventCore name y)
                  (BuyProperty (PropertyPurchase pName pValue downPmt cashC finC rate term ins tax maint)))
@@ -93,10 +87,10 @@ doBaseLifeEvent (BaseLifeEvent (LifeEventCore name y)
   let propertyA = convertA $ BaseAsset (AssetCore pName pValue pValue) ResidentialRE
       ccy = pValue ^. mCurrency
       borrowedF val dp c = CV.cvNegate (val |-| dp |+| c)
-  borrowed <- laERMV ccy $ borrowedF (CV.fromMoneyValue pValue) (CV.fromMoneyValue downPmt) (CV.fromMoneyValue finC)     
+  borrowed <- CV.asERMV ccy $ borrowedF (CV.fromMoneyValue pValue) (CV.fromMoneyValue downPmt) (CV.fromMoneyValue finC)     
   let mortgageA = convertA $ BaseAsset (AssetCore (T.append pName (T.pack "_mortgage")) borrowed borrowed) (FixedRateMortgage (FixedRateMortgageDetails rate term)) 
       pAccount = Account name PrimaryHome ccy [propertyA,mortgageA]
-  cashP <- laERMV ccy $ CV.fromMoneyValue downPmt |+| CV.fromMoneyValue cashC 
+  cashP <- CV.asERMV ccy $ CV.fromMoneyValue downPmt |+| CV.fromMoneyValue cashC 
   let cashExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " down payment and costs.")) cashP Annually (Only y)) Expense
       insExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " insurance.")) ins Annually (Starting y)) Expense
       taxExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " property tax")) tax Annually (Starting y)) DeductibleExpense

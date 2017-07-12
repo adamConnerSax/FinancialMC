@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE TypeFamilies          #-}
 {-# LANGUAGE UndecidableInstances  #-}
 module FinancialMC.Core.Rule
@@ -48,7 +49,7 @@ class IsRule r where
   ruleName :: r -> RuleName
   ruleAccounts :: r -> [AccountName]
   ruleWhen :: r -> RuleWhen
-  doRule :: (IsAsset a, IsRateModel rm, RuleAppC s rm m) => r -> AccountGetter a -> m ()
+  doRule :: (IsAsset a, IsRateModel rm, RuleAppC s rm m) => r -> AccountGetter m a -> m ()
 
 showRuleCore :: IsRule r => r -> String
 showRuleCore r = show (ruleName r) ++" (involves " ++ show (ruleAccounts r) ++ ")"

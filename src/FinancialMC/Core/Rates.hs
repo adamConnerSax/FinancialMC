@@ -10,6 +10,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE DefaultSignatures #-}
 module FinancialMC.Core.Rates 
        (
          RateType(..)
@@ -19,6 +21,8 @@ module FinancialMC.Core.Rates
        , InflationType(..)
        , RateTag(..)
        , RateTable(..)
+       , HasRateTable (..)
+       , ReadsRateTable (..)
        , fromMap
        , setToDefaults
        , defaultRateTable -- defaultRateTable is map based
@@ -32,11 +36,12 @@ module FinancialMC.Core.Rates
        ) where
 
 
-import           FinancialMC.Core.Utilities (noteM,FMCException(FailedLookup))
+import           FinancialMC.Core.Utilities (noteM, FMCException(FailedLookup))
 import           FinancialMC.Core.MoneyValue (Currency(..))
 
 import           Data.Random.Source.PureMT (PureMT)
 import           Data.Maybe (fromJust)
+import           Control.Lens (Lens', Getter, use)
 import           Control.Monad.State.Strict (runStateT,MonadState)
 import           Control.Monad.Reader (MonadReader(ask))
 --import           Control.Monad.Catch (MonadThrow)
@@ -60,7 +65,7 @@ data RateTag = Interest !InterestType |
                Exchange !Currency deriving (Ord,Eq,Read,Show,Generic,FromJSON,ToJSON)
 
 
-allTags::[RateTag]
+allTags :: [RateTag]
 allTags = [Interest x | x<-[(minBound::InterestType)..]] ++ 
           [Return x | x<-[(minBound::ReturnType)..]] ++ 
           [Inflation x | x<-[(minBound::InflationType)..]] ++ 
@@ -69,7 +74,7 @@ allTags = [Interest x | x<-[(minBound::InterestType)..]] ++
 data RateType = IsInterest | IsReturn | IsInflation | IsExchange  deriving (Enum,Eq,Ord,Show,Read,Generic,ToJSON,FromJSON)
 
 
-isRateType::RateType->RateTag->Bool
+isRateType :: RateType->RateTag->Bool
 isRateType IsInterest (Interest _) = True
 isRateType IsReturn (Return _) = True
 isRateType IsInflation (Inflation _) = True
@@ -79,20 +84,28 @@ isRateType _ _ = False
 type Rate = Double
 type RSource = PureMT
 
-defaultRates::RateTag->Rate
+defaultRates :: RateTag->Rate
 defaultRates (Interest _) = 0.01
 defaultRates (Return _) = 0.05
 defaultRates (Inflation _) = 0.015
 defaultRates (Exchange _) = 1.0
 
-showRateAsPct::Rate->String
+showRateAsPct :: Rate->String
 showRateAsPct r = (printf "%.2f" (r*100)) ++ "%"
 
-data RateTable a = RateTable { rLookup :: RateTag->Maybe a
-                             , rSet :: RateTag->a->RateTable a
+data RateTable a = RateTable { rLookup :: RateTag -> Maybe a
+                             , rSet :: RateTag -> a -> RateTable a
                              , rToList :: [(RateTag, a)]
-                             , rKeys::[RateTag]
+                             , rKeys:: [RateTag]
                              }    
+
+class HasRateTable s a | s -> a where
+  rateTable :: Lens' s (RateTable a)
+
+class ReadsRateTable s a | s -> a where
+  getRateTable :: Getter s (RateTable a)
+  default getRateTable :: HasRateTable s a => Getter s (RateTable a)
+  getRateTable = rateTable
 
 instance (PrintfArg a,Num a)=>Show (RateTable a) where
   show rt = "[" ++ show (fmap f (rKeys rt)) ++ "]" where
@@ -102,7 +115,7 @@ instance (PrintfArg a,Num a)=>Show (RateTable a) where
 fromMap :: M.Map RateTag a -> RateTable a   
 fromMap m = RateTable (`M.lookup` m) (\t r->fromMap $ M.insert t r m) (M.toList m) (M.keys m)    
 
-setToDefaults :: RateTable Double->RateTable Double
+setToDefaults :: RateTable Double -> RateTable Double
 setToDefaults t = foldl (\tbl key-> (rSet tbl) key (defaultRates key)) t allTags 
 
 defaultRateTable :: RateTable Double
@@ -111,8 +124,8 @@ defaultRateTable = setToDefaults $ fromMap M.empty
 throwingLookup :: MonadError FMCException m => RateTable a -> RateTag -> m a 
 throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not found")) $ rLookup rt t
 
-rateRequest :: (MonadReader (RateTable a) m, MonadError FMCException m)=>RateTag->m a
-rateRequest rTag = ask >>= flip throwingLookup rTag
+rateRequest :: (MonadError FMCException m, MonadState s m, ReadsRateTable s a) => RateTag -> m a
+rateRequest rTag = use getRateTable >>= flip throwingLookup rTag
 
 type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadError FMCException m)
 
@@ -120,7 +133,7 @@ applyModel :: (IsRateModel r, MonadError FMCException m) => (RateTable Rate, RSo
 applyModel (rates,src) model = runStateT (rateModelF model) (rates,src)
 
 class IsRateModel a where
-  rateModelF :: (MonadState (RateTable Rate, RSource) m, MonadError FMCException m) => a-> m a
+  rateModelF :: (MonadState (RateTable Rate, RSource) m, MonadError FMCException m) => a -> m a
 
 {-
 data RateModel where

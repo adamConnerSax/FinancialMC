@@ -47,7 +47,7 @@ module FinancialMC.Core.MCState
 import           FinancialMC.Core.Asset (IsAsset, AccountName,Account(Account),HasAccount(..),accountValueCV)
 import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Tax (HasTaxData)
-import           FinancialMC.Core.Evolve (Evolvable(evolve),evolveWithin,evolveAndApply)
+import           FinancialMC.Core.Evolve (Evolvable(evolve),EvolveC, evolveWithin,evolveAndApply)
 --import           FinancialMC.Core.FinApp (LoggableStepApp (..),zoomStep)
 import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..), ReadsFinEnv (..) , FinState,HasFinState(..), HasAccumulators, HasCashFlow)
 import           FinancialMC.Core.Flow (FlowName,FlowDirection(..),flowName,flowingAt,IsFlow(..),annualFlowAmount)
@@ -295,13 +295,10 @@ makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [
   z = MV.zero  (fe ^. feDefaultCCY)
 
 --NB: this is where all the evolution flows and accums finally get applied
+-- ought to be able to replace the HasTaxData, HasCashFlow, HasAccumulators with HasFinState.  But how?
 evolveMCS :: ( Evolvable a
              , Evolvable fl
-             , IsRateModel rm
-             , MonadError FMCException m
-             , MonadState s m
-             , ReadsExchangeRateFunction s
-             , ReadsFinEnv s rm
+             , EvolveC s rm m
              , HasAccumulators s
              , HasCashFlow s
              , HasTaxData s
