@@ -16,7 +16,7 @@
 module FinancialMC.Core.FinApp
        (
          LogLevel(..)
-       , PathState
+       , PathState (..)
        , HasPathState (..)
        , ReadsStepEnv (..)
        , Loggable (log)
@@ -38,14 +38,18 @@ module FinancialMC.Core.FinApp
 --       , taxDataApp2StepAppFSER
        ) where
 
+import           Prelude                          hiding (log)
+
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
                                                    HasFinEnv (..),
                                                    HasFinState (..))
 import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction)
 --import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
+import           FinancialMC.Core.Result          (ResultT (..))
 import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
                                                    HasFMCException, eitherToIO,
                                                    multS, readOnly)
+
 
 import           Control.Lens                     (Getter, Identity, Lens',
                                                    magnify, makeClassy, set,
@@ -272,6 +276,9 @@ instance LoggableStepApp s e (StepApp FMCException s e) where
 
 instance Loggable (PPathStack s e) where
   log ll = PPathStack . faLog ll
+
+instance (Monad m, Loggable m) => Loggable (ResultT o m) where
+  log ll msg = lift $ log ll msg
 
 {-
 instance LoggableStepApp s e (PStepApp s e) where

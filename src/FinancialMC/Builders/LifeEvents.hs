@@ -5,6 +5,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes #-}
 module FinancialMC.Builders.LifeEvents (
     BaseLifeEvent(..)
   , BaseLifeEventDetails(..)

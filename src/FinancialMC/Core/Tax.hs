@@ -9,11 +9,13 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DefaultSignatures #-}
 module FinancialMC.Core.Tax 
        (
          TaxType(..)
        , TaxData
        , HasTaxData (..)
+       , ReadsTaxData (..)
        , defaultTaxData
 --       , TaxDataApp
        , TaxDataAppC
@@ -48,7 +50,7 @@ import           FinancialMC.Core.CValued ((|+|),(|-|),(|*|),(|/|),(|>|),(|<|),c
 import Data.List (foldl',sortBy)
 import Data.Ord (comparing)
 import qualified Data.Map.Lazy as M
-import Control.Lens (makeClassy,makeLenses,(%=),(^.), use, (.=))
+import Control.Lens (Getter, makeClassy,makeLenses,(%=),(^.), use, (.=))
 
 import Control.Monad (liftM2)
 import Control.Monad.Reader (ReaderT,ask,lift,MonadReader)
@@ -92,6 +94,11 @@ taxDeduction _ mv = TaxDetails (MV.zero USD) mv
 type TaxMap = M.Map TaxType TaxDetails
 data TaxData = TaxData { _tdMap:: !TaxMap, _tdCcy:: !Currency } 
 makeClassy ''TaxData  
+
+class ReadsTaxData s where
+  getTaxData :: Getter s TaxData
+  default getTaxData :: HasTaxData s => Getter s TaxData
+  getTaxData = taxData
 
 --type TaxDataApp m = StateT TaxData (ReaderT ExchangeRateFunction m)
 
@@ -328,7 +335,7 @@ inflateTaxBrackets rt (TaxBrackets tbs) = makeTaxBrackets tbs' where
   inflateBracket (TopBracket bb br) = TopBracket (MV.multiply bb r) br
   tbs' = map inflateBracket tbs
                                       
-updateTaxRules :: TaxRules->Double->TaxRules
+updateTaxRules :: TaxRules -> Double -> TaxRules
 updateTaxRules  (TaxRules fed payroll estate fcg medstax st sCG city) taxBracketInflationRate = newRules where
   fed' = inflateTaxBrackets taxBracketInflationRate fed
   payroll' = inflateTaxBrackets taxBracketInflationRate payroll

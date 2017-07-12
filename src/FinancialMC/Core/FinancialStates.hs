@@ -17,7 +17,6 @@ module FinancialMC.Core.FinancialStates
        , ReadsFinState (getFinState)
        , HasTaxData (taxData)
        , HasCashFlow (cashFlow)
-       , HasAccumulators (accumulators)
        , zeroFinState
        , currentDate
        , changeRate
@@ -26,6 +25,8 @@ module FinancialMC.Core.FinancialStates
        , updateExchangeRateFunction
        , AccumName
        , Accumulators(Accumulators)
+       , HasAccumulators (accumulators)
+       , ReadsAccumulators (getAccumulators)
        , addToAccumulator
        , addToAccumulator'
        , getAccumulatedValue
@@ -70,20 +71,20 @@ class ReadsFinEnv s rm | s -> rm where
 instance Show rm => Show (FinEnv rm) where
   show (FinEnv rates _ cd ccy tr rm) = "rates: " ++ show rates ++ "\nmodel: " ++ show rm ++ "\ndate: " ++ show cd ++ "\ncurrency: " ++ show ccy ++ "\ntax: " ++ show tr
 
-currentDate::Reader (FinEnv rm) Year
+currentDate :: Reader (FinEnv rm) Year
 currentDate = reader $ \e->e ^. feCurrentDate
 
 -- functions to change external state between evolves
 
-changeRate::RateTag->Double->State (FinEnv rm) ()
+changeRate :: RateTag->Double->State (FinEnv rm) ()
 changeRate rateTag x = do
   rateTable <- use feRates
   feRates .= rSet rateTable rateTag x
 
-changeCurrentDate::Year->State (FinEnv rm) ()
+changeCurrentDate :: Year->State (FinEnv rm) ()
 changeCurrentDate d = feCurrentDate .= d
 
-exchangeRFFromRateTable::RateTable Rate->ExchangeRateFunction
+exchangeRFFromRateTable :: RateTable Rate -> ExchangeRateFunction
 exchangeRFFromRateTable rateTable ca cb =
   let ccys = [(minBound::Currency)..]
       pairs = [(x,y) | x<-ccys,y<-ccys]
@@ -91,10 +92,10 @@ exchangeRFFromRateTable rateTable ca cb =
       eRates = foldl (\m k->M.insert k (eRate k) m) M.empty pairs
   in fromJust (M.lookup (ca,cb) eRates)
 
-updateExchangeRateFunction::MonadState (FinEnv rm) m=>m ()
+updateExchangeRateFunction :: (MonadState s m, HasFinEnv s rm) => m ()
 updateExchangeRateFunction = do
-  rateTable <- use feRates
-  feExchange .= exchangeRFFromRateTable rateTable
+  rateTable <- use $ finEnv.feRates
+  (finEnv.feExchange) .= exchangeRFFromRateTable rateTable
 
 -- state for accumulating tax data, cashflows, transactions, etc.  Changes during evolve
 type AccumName = T.Text
@@ -156,7 +157,7 @@ zeroFinState c = FinState { _fsTaxData=defaultTaxData c,
 
 
 
-addToAccumulator :: (MonadError FMCException m, ReadsExchangeRateFunction s, HasAccumulators s, MonadState s m) => AccumName -> MoneyValue -> m ()
+addToAccumulator :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s, HasAccumulators s) => AccumName -> MoneyValue -> m ()
 addToAccumulator name amount = do
   when (T.null name) $ throwing _Other "No name specified in call to addToAccumulator"
   e <- use getExchangeRateFunction
@@ -164,7 +165,7 @@ addToAccumulator name amount = do
 --  let g (Accumulators a) = Accumulators $ M.insertWith f name a
   accumulators.accums %= M.insertWith f name amount
 
-addToAccumulator' :: (MonadError FMCException m, ReadsExchangeRateFunction s, HasAccumulators s, MonadState s m) => AccumName -> MoneyValue -> m ()
+addToAccumulator' :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s, HasAccumulators s) => AccumName -> MoneyValue -> m ()
 addToAccumulator' name amount = do
   when (T.null name) $ throwing _Other "No name specified in call to addToAccumulator"
   e <- use getExchangeRateFunction

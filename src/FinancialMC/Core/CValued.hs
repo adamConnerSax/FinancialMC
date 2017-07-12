@@ -93,8 +93,7 @@ mvZero::Currency->CVD
 mvZero ccy = fromMoneyValue (MoneyValue 0 ccy)
 --mvZero = const cvZero
 
--- this name should be consistent with asERMV.  asERDouble ?
-asERFReader :: (MonadState s m, ReadsExchangeRateFunction s) => SVD -> m Double
+asERFReader :: (MonadState s m, ReadsExchangeRateFunction s) => SValued Currency a -> m a
 asERFReader (CVS x) = return x
 asERFReader (CVEV f) = do
   e <- use getExchangeRateFunction

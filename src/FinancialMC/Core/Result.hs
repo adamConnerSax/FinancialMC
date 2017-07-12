@@ -41,10 +41,10 @@ instance Monoid o => Monad (Result o) where
      in ot `seq` Result b (o `mappend` o')
 
 -- NB: fundep below (m->o) required for returnOnly to work since nothing of type o is an arg.  This is confusing.
-class (Monoid o, Monad m) => MonadResult o m | m->o where
+class (Monoid o, Monad m) => MonadResult o m | m -> o where
   returnOnly :: a -> m a
   appendAndReturn :: o -> a -> m a
-  adjust::(o -> m o) -> m a -> m a
+  adjust :: (o -> m o) -> m a -> m a
 
 instance Monoid o => MonadResult o (Result o) where
   returnOnly a = Result a mempty

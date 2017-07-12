@@ -18,16 +18,21 @@ module FinancialMC.Core.MCState
        , makeNewBalanceSheet
        , insertAccount --NB: replaces if already present, like Map.insert
        , CashFlows (CashFlows)
+       , HasCashFlows
        , makeNewCashFlows
        , addFlow
        , MCState(MCState)
        , HasMCState(..)
+       , ReadsMCState (..)
+       , HasRules
+       , HasLifeEvents
        , makeMCState
        , getAccount
        , addRule
        , addLifeEvent
        , CombinedState(CombinedState)
        , HasCombinedState(..)
+       , ReadsCombinedState (..)
        , evolveMCS
        , netWorth
        , netWorthBreakout
@@ -48,7 +53,6 @@ import           FinancialMC.Core.Asset (IsAsset, AccountName,Account(Account),H
 import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Tax (HasTaxData)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),EvolveC, evolveWithin,evolveAndApply)
---import           FinancialMC.Core.FinApp (LoggableStepApp (..),zoomStep)
 import           FinancialMC.Core.FinancialStates (FinEnv,HasFinEnv(..), ReadsFinEnv (..) , FinState,HasFinState(..), HasAccumulators, HasCashFlow)
 import           FinancialMC.Core.Flow (FlowName,FlowDirection(..),flowName,flowingAt,IsFlow(..),annualFlowAmount)
 import           FinancialMC.Core.MapLike (IsMap(..))
@@ -59,7 +63,6 @@ import           FinancialMC.Core.TradingTypes (LiquidityType(NearCash),liquidit
 import           FinancialMC.Core.Utilities (noteM,FMCException(Other),Year)
 
 import qualified Data.Map as M
---import qualified Data.HashMap.Strict as HM
 import qualified Data.Foldable as F
 import Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -68,19 +71,14 @@ import           Data.Aeson.Types hiding ((.=))
 import           GHC.Generics (Generic)
 
 import           Control.DeepSeq (NFData(..))
---import           Control.Exception (SomeException)
-import           Control.Lens (makeClassy,use,(^.),(%=),(.=),(<>=), Getter)
+import           Control.Lens (makeClassy,use,(^.),(%=),(.=),(<>=), Getter, Lens')
 import Control.Monad.Except (MonadError)
 
 import           Control.Monad (when)
 import           Control.Monad.Reader (ask)
 import           Control.Monad.State.Strict (State,MonadState,get)
---import Control.Monad.Catch (MonadThrow)
---import qualified Data.Text as T 
 
 type MyMap k v = M.Map k v
-
-
 type AccountMap a = MyMap AccountName (Account a)
 type FlowMap fl = MyMap FlowName fl
 
@@ -124,23 +122,22 @@ instance FromJSON fl=>FromJSON (CashFlows fl) where
 
 -- NB: These are unsafe adds and could overwrite if the names are the same 
     
-makeNewBalanceSheet::BalanceSheet a
+makeNewBalanceSheet :: BalanceSheet a
 makeNewBalanceSheet = BalanceSheet mEmpty
 
-makeNewCashFlows::CashFlows fl
+makeNewCashFlows :: CashFlows fl
 makeNewCashFlows = CashFlows mEmpty
                       
-insertAccount::MonadState (BalanceSheet a) m=>Account a->m ()
-insertAccount acct@(Account name _ _ _) = bsAccountMap %=  mInsert name acct
+insertAccount :: (MonadState s m, HasBalanceSheet s a) => Account a -> m ()
+insertAccount acct@(Account name _ _ _) = balanceSheet.bsAccountMap %=  mInsert name acct
   
-
-addFlow::IsFlow fl=>fl->State (CashFlows fl) ()
-addFlow f = cfdFlowMap %= mInsert (flowName f) f
+addFlow :: (MonadState s m, HasCashFlows s fl, IsFlow fl) => fl -> m ()
+addFlow f = cashFlows.cfdFlowMap %= mInsert (flowName f) f
 
 getAccount :: MonadError FMCException m => AccountName -> BalanceSheet a -> m (Account a) --Either SomeException (Account a)
 getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" <> (T.pack $ show name) <> "\"")) $ mLookup name am 
 
-putAccount::Account a->AccountName->BalanceSheet a->BalanceSheet a
+putAccount :: Account a->AccountName->BalanceSheet a->BalanceSheet a
 putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am) 
 
 data PathSummary = FinalNW !MoneyValue | ZeroNW !Year
@@ -203,6 +200,29 @@ makeClassy ''FSSummary
 makeClassy ''DatedSummary
 makeClassy ''MCState
 
+class ReadsMCState s a fl le ru | s -> a, s -> fl, s -> le, s -> ru where
+  getMCState :: Getter s (MCState a fl le ru)
+  default getMCState :: HasMCState s a fl le ru => Getter s (MCState a fl le ru)
+  getMCState = mCState
+
+instance HasBalanceSheet (MCState a fl le ru) a where
+  balanceSheet = mcsBalanceSheet
+
+instance HasCashFlows (MCState a fl le ru) fl where
+  cashFlows = mcsCashFlows
+
+class HasRules s ru | s -> ru where
+  rules :: Lens' s [ru]
+
+instance HasRules (MCState a fl le ru) ru where
+  rules = mcsRules
+
+class HasLifeEvents s le | s -> le where
+  lifeEvents :: Lens' s [le]
+
+instance HasLifeEvents (MCState a fl le ru) le where
+  lifeEvents = mcsLifeEvents
+
 instance (Evolvable a, Evolvable fl)=>Evolvable (MCState a fl le ru) where
   evolve (MCState bs cfd les rs sr ttr ps hist) = do 
     newBS <- evolve bs
@@ -221,15 +241,17 @@ instance (Show le,Show fl, Show ru, Show a)=>Show (MCState a fl le ru) where
     "\nHistory: " ++ show history
                                                          
     
-addRule::ru->State (MCState a fl le ru) ()
-addRule r = do
-  rs <- use mcsRules
-  mcsRules .= rs++[r] -- NB this is append so do I need to think about ordering?
+addRule :: (MonadState s m, HasRules s ru) => ru -> m ()
+addRule r = rules %= flip (++) [r]
+-- do
+--  rs <- use mcsRules
+--  mcsRules .= rs++[r] -- NB this is append so do I need to think about ordering?
   
-addLifeEvent::le->State (MCState a fl le ru) ()
-addLifeEvent le = do
-  les <- use mcsLifeEvents
-  mcsLifeEvents .= les++[le] -- NB this is append so do I need to think about ordering?
+addLifeEvent :: (MonadState s m, HasLifeEvents s le) => le -> m ()
+addLifeEvent le = lifeEvents %= flip (++) [le]
+--  do
+--  les <- use mcsLifeEvents
+--  mcsLifeEvents .= les++[le] -- NB this is append so do I need to think about ordering?
 
 
 data CombinedState a fl le ru = CombinedState { _csFinancial:: !FinState,
@@ -276,13 +298,13 @@ netWorthBreakout cs fe = M.fromList (zip lts nws) where
 
 
 data FlowAccum' = FlowAccum' !CV.CVD !CV.CVD
-grossFlows :: IsFlow fl => CashFlows fl -> FinEnv rm -> (MoneyValue, MoneyValue)
+
+grossFlows :: IsFlow fl =>  CashFlows fl -> FinEnv rm -> (MoneyValue, MoneyValue)
 grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy e outF) where
   e = fe ^. feExchange
   d = fe ^. feCurrentDate
   ccy = fe ^. feDefaultCCY
   z = CV.mvZero ccy
---  CashFlows flows = cs ^. csMC.mcsCashFlows
   amt' flow = if flowingAt d flow then (CV.fromMoneyValue $ annualFlowAmount flow) else z
   g flow (FlowAccum' x y) = case flowDirection flow of
     InFlow  -> FlowAccum' (x CV.|+| amt' flow) y
@@ -348,9 +370,9 @@ computeFlows :: ( IsFlow fl
                 , MonadError FMCException m
                 , MonadState s m
                 , ReadsCombinedState s a fl le ru
-                , ReadsFinEnv s rm) => m  (MoneyValue,MoneyValue)
+                , ReadsFinEnv s rm) => m  (MoneyValue, MoneyValue)
 computeFlows = do
-  cs <- use (getCombinedState.csMC.mcsCashFlows) --use (csMC.mcsCashFlows)
+  cs <- use $ getCombinedState.csMC.mcsCashFlows
   fe <- use getFinEnv  
   return $ grossFlows cs fe
 

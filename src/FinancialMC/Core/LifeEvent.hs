@@ -22,6 +22,7 @@ import           FinancialMC.Core.Asset           (Account, AccountGetter,
                                                    IsAsset)
 import           FinancialMC.Core.FinancialStates (ReadsFinEnv, ReadsFinState)
 import           FinancialMC.Core.Flow            (IsFlow)
+import           FinancialMC.Core.MoneyValue      (ReadsExchangeRateFunction)
 import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Result          (MonadResult)
 import           FinancialMC.Core.Utilities       (FMCException, Year)
@@ -48,7 +49,12 @@ instance Bifunctor LifeEventOutput where
   second f (LifeEventOutput accts flows) = LifeEventOutput accts (f <$> flows)
 
 --type LifeEventApp a fl rm = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
-type LifeEventAppC s a fl rm m = (MonadError FMCException m, MonadResult (LifeEventOutput a fl) m, MonadState s m, ReadsFinState s, ReadsFinEnv s rm)
+type LifeEventAppC s a fl rm m = ( MonadError FMCException m
+                                 , MonadResult (LifeEventOutput a fl) m
+                                 , MonadState s m
+                                 , ReadsFinState s
+                                 , ReadsFinEnv s rm
+                                 , ReadsExchangeRateFunction s)
 
 type LifeEventName = T.Text
 

@@ -172,7 +172,7 @@ doBaseRule (RequiredDistribution acctName yearTurning70) getA = do
 
 --rule to keep one account balance between limits by transferring to another.  E.g., keep cash position bounded by buying/selling investments
 doBaseRule (CashToInvestmentSweep cashAcctName invAcctName minCash maxCash) getA = do
-  (cashTrade',invTrade') <- lift $ do
+  (cashTrade',invTrade') <- do
     cashAcct <- getA cashAcctName
     invAcct <- getA invAcctName
     let ccy = cashAcct ^. acCurrency
@@ -188,9 +188,9 @@ doBaseRule (CashToInvestmentSweep cashAcctName invAcctName minCash maxCash) getA
 --rule to sell retirement or educational assets instead of bankrupting
 --input is list of accounts with penalty rates
 doBaseRule (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip accts) AfterSweep where
-  trds <- lift $ do
-    cashPos <- use getFinState.fsCashFlow
-    curDate <- use getFinEnv.feCurrentDate
+  trds <- do
+    cashPos <- use $ getFinState.fsCashFlow
+    curDate <- use $ getFinEnv.feCurrentDate
     let ccy = cashPos ^. mCurrency
 --        h::(AccountName,DateRange)->MoneyValue->MV.ER (Either FMCException) (Transaction,MoneyValue)
         h (name,range) need = do
@@ -203,14 +203,14 @@ doBaseRule (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip ac
           let makeT = Transaction name tt toSell
           remainingNeed <- CV.asERMV ccy $ need' |-| toSell'
           return (makeT, remainingNeed)
-    mvLift $ if MV.isPositive cashPos  then return [] else mapMSl h (MV.negate cashPos) as
+    if MV.isPositive cashPos  then return [] else mapMSl h (MV.negate cashPos) as
   appendAndReturn (RuleOutput trds []) ()
 
 
 doBaseRule (TaxTrade acctName) _ = do
-  trades <- lift $ do
-    tr <- liftFE $ view feTaxRules
-    cashOnHand <- view fsCashFlow
+  trades <- do
+    tr <- use $ getFinEnv.feTaxRules
+    cashOnHand <- use $ getFinState.fsCashFlow
     tax <- getAccumulatedValue (T.pack "TaxOwed")
     let safeR' = safeCapGainRateCV tr
         ccy = cashOnHand ^. mCurrency
@@ -218,14 +218,14 @@ doBaseRule (TaxTrade acctName) _ = do
         cashOnHand' = CV.fromMoneyValue cashOnHand
         needed' = CV.cvMin tax' (tax' |-| cashOnHand')
         amt' = CV.cvNegate $ needed' |/| (CV.toSVD 1.0 |-| safeR')
-    amt <- mvLift $ CV.asERMV ccy amt'
+    amt <- CV.asERMV ccy amt'
     let trade = Transaction acctName NormalTrade amt
     CV.asERFReader $ cvIf (cvOr (tax' |<=| CV.mvZero ccy) (tax' |<| cashOnHand')) (CV.toSV []) (CV.toSV [trade])
   appendAndReturn (RuleOutput trades [Zero (T.pack "TaxOwed")]) ()
 
 --rule to sweep remaining cashPos into given account.  Last rule executed
 doBaseRule (Sweep acctName) _ = do
-    cashPos <- use getFinState.fsCashFlow
+    cashPos <- use $ getFinState.fsCashFlow
     let trade = Transaction acctName NormalTrade cashPos
     appendAndReturn (RuleOutput [trade] []) ()
 
