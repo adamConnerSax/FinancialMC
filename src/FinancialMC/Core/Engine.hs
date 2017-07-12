@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
@@ -9,6 +10,7 @@ module FinancialMC.Core.Engine
          RandomSeed
        , PathSummaryAndSeed (..)
        , HasPathSummaryAndSeed (..)
+       , FMCPathState
        , doOneYear
        , doPath
        , execOnePathIO
@@ -23,8 +25,7 @@ import           FinancialMC.Core.Asset           (IsAsset)
 import           FinancialMC.Core.AssetTrading    (tradeAccount)
 import           FinancialMC.Core.Evolve          (Evolvable, applyAccums,
                                                    applyFlows)
-import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
-                                                   HasAccumulators,
+import           FinancialMC.Core.FinancialStates (FinEnv, FinState, HasAccumulators (accumulators),
                                                    HasCashFlow (cashFlow),
                                                    HasFinEnv (..),
                                                    HasFinState (..),
@@ -36,7 +37,8 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
                                                    updateExchangeRateFunction,
                                                    zeroAccumulator)
 import           FinancialMC.Core.Flow            (IsFlow)
-import           FinancialMC.Core.Rates           (IsRateModel, Rate,
+import           FinancialMC.Core.Rates           (HasRateTable (rateTable),
+                                                   IsRateModel, Rate,
                                                    ReadsRateTable)
 import           FinancialMC.Core.Result          (Result (Result), ResultT,
                                                    runResultT)
@@ -45,9 +47,10 @@ import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
                                                    RuleWhen (..))
 import           FinancialMC.Core.TradingTypes    (Transaction (..))
 
-import           FinancialMC.Core.FinApp          (LogLevel (..),
+import           FinancialMC.Core.FinApp          (HasPathState (stepEnv, stepState),
+                                                   LogLevel (..),
                                                    Loggable (log),
-                                                   PathState (..),
+                                                   PathState (PathState),
                                                    execPPathStack,
                                                    execPathStack)
 
@@ -69,7 +72,7 @@ import           FinancialMC.Core.LifeEvent       (IsLifeEvent (..),
                                                    LifeEventConverters,
                                                    LifeEventOutput (..),
                                                    lifeEventName, lifeEventYear)
-import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction,
+import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction, HasExchangeRateFunction (exchangeRateFunction),
                                                    HasMoneyValue (..),
                                                    MoneyValue (MoneyValue),
                                                    ReadsExchangeRateFunction (getExchangeRateFunction))
@@ -77,7 +80,7 @@ import qualified FinancialMC.Core.MoneyValueOps   as MV
 import           FinancialMC.Core.Rates           (InflationType (TaxBracket),
                                                    RateTag (Inflation),
                                                    applyModel, rateRequest)
-import           FinancialMC.Core.Tax             (HasTaxData,
+import           FinancialMC.Core.Tax             (HasTaxData (taxData),
                                                    ReadsTaxData (getTaxData),
                                                    TaxData, TaxDataAppC,
                                                    carryForwardTaxData,
@@ -124,64 +127,118 @@ getNSeedsStrict pMT n = (head l)  `deepseq` l where
  l = getNSeeds pMT n
 -}
 
-type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
-                             IsAsset a, Show a,
-                             IsFlow fl, Show fl,
-                             IsRule ru, Show ru,
-                             IsRateModel rm)
+type EngineC a fl le ru rm= ( IsLifeEvent le
+                            , Show le
+                            , IsAsset a
+                            , Show a
+                            , IsFlow fl
+                            , Show fl
+                            , IsRule ru
+                            , Show ru
+                            , IsRateModel rm)
 
 type FullPathC s a fl le ru rm m = ( EngineC a fl le ru rm
+                                   , Evolvable a
+                                   , Evolvable fl
                                    , Loggable m
                                    , MonadError FMCException m
                                    , MonadState s m
                                    , ReadsFinState s
                                    , ReadsTaxData s
+                                   , ReadsAccumulators s
+                                   , HasFinEnv s rm
                                    , ReadsFinEnv s rm
                                    , ReadsExchangeRateFunction s
-                                   , Evolvable a
-                                   , Evolvable fl
                                    , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
                                    , IsRateModel rm
                                    , HasAccumulators s
                                    , HasCashFlow s
                                    , HasBalanceSheet s a
+                                   , HasCashFlows s fl
                                    , HasTaxData s
+                                   , HasCombinedState s a fl le ru
                                    , HasMCState s a fl le ru
                                    , ReadsMCState s a fl le ru)
+
+type FMCPathState a fl le ru rm = PathState (CombinedState a fl le ru) (FinEnv rm)
+
+-- Make all the instances for PathState
+instance HasTaxData (FMCPathState a fl le ru rm) where
+  taxData = stepState . csFinancial . fsTaxData
+
+instance ReadsTaxData (FMCPathState a fl le ru rm)
+
+instance HasCashFlow (FMCPathState a fl le ru rm) where
+  cashFlow = stepState . csFinancial . fsCashFlow
+
+instance  HasAccumulators (FMCPathState a fl le ru rm) where
+  accumulators = stepState . csFinancial . fsAccumulators
+
+instance ReadsAccumulators (FMCPathState a fl le ru rm)
+
+instance HasFinState (FMCPathState a fl le ru rm) where
+  finState = stepState . csFinancial
+
+instance ReadsFinState (FMCPathState a fl le ru rm)
+
+instance HasExchangeRateFunction (FMCPathState a fl le ru rm) where
+  exchangeRateFunction = stepEnv . feExchange
+
+instance ReadsExchangeRateFunction (FMCPathState a fl le ru rm)
+
+instance HasRateTable (FMCPathState a fl le ru rm) Rate where
+  rateTable = stepEnv . feRates
+
+instance ReadsRateTable (FMCPathState a fl le ru rm) Rate
+
+instance HasFinEnv (FMCPathState a fl le ru rm) rm where
+  finEnv = stepEnv
+
+instance ReadsFinEnv (FMCPathState a fl le ru rm) rm
+
+instance HasBalanceSheet (FMCPathState a fl le ru rm) a where
+  balanceSheet = stepState . csMC . mcsBalanceSheet
+
+instance HasCashFlows (FMCPathState a fl le ru rm) fl where
+  cashFlows = stepState . csMC . mcsCashFlows
+
+instance HasMCState (FMCPathState a fl le ru rm) a fl le ru where
+  mCState = stepState . csMC
+
+instance ReadsMCState (FMCPathState a fl le ru rm) a fl le ru
+
+instance HasCombinedState (FMCPathState a fl le ru rm) a fl le ru where
+  combinedState = stepState
 
 -- The IO versions are required for logging.
 -- If we only use IO for entropy, config loading and result reporting, we can use the pure stack.
 -- But to do realtime logging to stdout we need IO in the stack all the time.
 
---type EnginePathState a fl le ru rm = PathState (CombinedState a fl le ru) (FinEnv rm)
-
 execOnePathIO :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
   -> [LogLevel]
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> RandomSeed
   -> Int
-  -> IO (PathState (CombinedState a fl le ru) (FinEnv rm))
-execOnePathIO convertLE logDetails cs fe seed years = do
+  -> IO (FMCPathState a fl le ru rm)
+execOnePathIO convertLE logDetails ps0 seed years = do
   let newSource = pureMT seed
-  execPPathStack (doPath convertLE newSource years) logDetails (PathState cs fe)
+  execPPathStack (doPath convertLE newSource years) logDetails ps0
 
 doPathsIO :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
   -> [LogLevel]
   -> Bool
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> Bool
   -> PureMT
   -> Int
   -> Int
   -> IO [PathSummaryAndSeed] --[(PathSummary,RandomSeed)]
-doPathsIO convertLE logDetails showFinalStates cs0 fe0 singleThreaded pMT yearsPerPath paths = do
+doPathsIO convertLE logDetails showFinalStates ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds = getNSeeds pMT paths
   let g seed = do
-        PathState cs' _  <- execOnePathIO convertLE logDetails cs0 fe0 seed yearsPerPath
+        PathState cs' _  <- execOnePathIO convertLE logDetails ps0 seed yearsPerPath
         when showFinalStates $ print cs'
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` (return $ PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
@@ -191,28 +248,26 @@ doPathsIO convertLE logDetails showFinalStates cs0 fe0 singleThreaded pMT yearsP
 
 execOnePathPure :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> RandomSeed
   -> Int
-  -> Either FMCException (PathState (CombinedState a fl le ru) (FinEnv rm))
-execOnePathPure convertLE cs fe seed years = do
+  -> Either FMCException (FMCPathState a fl le ru rm)
+execOnePathPure convertLE ps0 seed years = do
   let newSource = pureMT seed
-  execPathStack (doPath convertLE newSource years) (PathState cs fe)
+  execPathStack (doPath convertLE newSource years) ps0
 
 doPaths :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> Bool
   -> PureMT
   -> Int
   -> Int
   -> Either FMCException [PathSummaryAndSeed]
-doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do
+doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds =  getNSeeds pMT paths
       g seed = do
-        PathState cs' _ <-  execOnePathPure convertLE cs0 fe0 seed yearsPerPath
+        PathState cs' _ <-  execOnePathPure convertLE ps0 seed yearsPerPath
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds

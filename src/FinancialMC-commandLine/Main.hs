@@ -33,6 +33,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseRule,
                                                           CombinedState,
                                                           DatedSummary (..),
+                                                          FMCPathState,
                                                           FSSummary (..),
                                                           FinEnv,
                                                           HasCombinedState (..),
@@ -41,6 +42,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           HasMCState (..),
                                                           HasPathSummaryAndSeed (..),
                                                           LiquidityType (..),
+                                                          PathState (PathState),
                                                           PathSummary,
                                                           PathSummaryAndSeed (..),
                                                           RandomSeed, doPaths,
@@ -65,40 +67,41 @@ ccs = C.FMCComponentConverters id id id id id
 lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 lec = LEC id id
 
-runWithOptions::FinEnv BaseRateModelT->CombinedState BaseAsset BaseFlow BaseLifeEvent BaseRule->FinMCOptions->IO [PathSummaryAndSeed]
-runWithOptions fe0 cs0 options = do
+type BasePathState = FMCPathState BaseAsset BaseFlow BaseLifeEvent BaseRule BaseRateModelT
+
+runWithOptions :: BasePathState -> FinMCOptions -> IO [PathSummaryAndSeed]
+runWithOptions ps0 options = do
   let showFS = optShowFinalStates options -- NB: if showFinalStates is true, paths will be run serially rather than in parallel
       logLevels = optLogLevels options
-      srcF::Maybe Word64->IO PureMT
+      srcF :: Maybe Word64 -> IO PureMT
       srcF (Just x) = return (pureMT x) -- if seed is present in options, use it.
       srcF Nothing  = newPureMT  -- otherwise, get pseudo-random seed via IO
       needsIO = not (null logLevels) || showFS
   src <- srcF (optSeed options)
-  let runW x = x cs0 fe0 (optSingleThreaded options) src (optYears options) (optPaths options)
+  let runW x = x ps0 (optSingleThreaded options) src (optYears options) (optPaths options)
+      pureThreaded = if (optSingleThreaded options) then "single" else "multi"
   if needsIO
-    then runW (doPathsIO lec logLevels showFS) -- cs0 fe0 singleThreaded src years paths
-    else eitherToIO $ runW (doPaths lec) -- cs0 fe0 singleThreaded src years paths
+    then putStrLn "Running IO (single-threaded) stack...\n" >> runW (doPathsIO lec logLevels showFS)
+    else putStrLn ("Running pure (" ++ pureThreaded ++ "-threaded) stack...\n") >> (eitherToIO $ runW (doPaths lec))
 
 parseOptions::IO FinMCOptions
 parseOptions = execParser finMCOptionParser
 
-
-outputPath::Maybe String->Maybe String->Maybe String
+outputPath :: Maybe String->Maybe String->Maybe String
 outputPath Nothing Nothing = Nothing
 outputPath (Just optPath) Nothing = Just optPath
 outputPath Nothing (Just confPrefix) = Just confPrefix
 outputPath (Just optPath) (Just confPrefix) = Just (optPath ++ "/" ++ confPrefix)
 
-
-runAndOutput::Bool->FinMCOptions->IO ()
+runAndOutput :: Bool -> FinMCOptions -> IO ()
 runAndOutput doOutput options = do
   let writeIf x = when doOutput $ putStrLn x
   writeIf ("Running configs from " ++ optConfigFile options)
-  (configInfo,configMap) <- loadConfigurations ccs (optSchemaPath options) (C.UnparsedFile (optConfigFile options))
+  (configInfo, configMap) <- loadConfigurations ccs (optSchemaPath options) (C.UnparsedFile (optConfigFile options))
   writeIf ("Loaded " ++ show (M.keys configMap))
-  let runConfig::String->IO ()
+  let runConfig :: String -> IO ()
       runConfig cfgName = do
-        (mOPrefix,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
+        (mOPrefix, fe0, cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
         let nw =  netWorth cs0 fe0
             (inFlow,outFlow) = grossFlows (cs0 ^. (csMC.mcsCashFlows)) fe0
         writeIf $ "Running config=" ++ cfgName
@@ -107,7 +110,7 @@ runAndOutput doOutput options = do
         writeIf $ "Initial positive cashflow: " ++ show inFlow
         writeIf $ "Initial gross spending: " ++ show outFlow
 
-        summaries <- runWithOptions fe0 cs0 options
+        summaries <- runWithOptions (PathState cs0 fe0) options
         let histData = nwHistFromSummaries summaries (optBins options)
             bankruptcies = view psasSummary <$> filter (isZeroNW . view psasSummary) summaries
             (numB,medianB,modeB) = analyzeBankruptcies bankruptcies
@@ -145,11 +148,11 @@ benchmarkMain = defaultMain [
                         ]
   ]
 --}
-main::IO ()
+main :: IO ()
 main = normalMain
 
 
-output::Maybe String->(V.Vector Double,V.Vector Int)->[V.Vector DatedMoneyValue] ->MoneyValue->V.Vector DatedSummary->IO ()
+output :: Maybe String -> (V.Vector Double, V.Vector Int) -> [V.Vector DatedMoneyValue] -> MoneyValue -> V.Vector DatedSummary -> IO ()
 output Nothing histData _ medianNW _ = do
   let histTSV = formatHistogramOutput histData
   putStrLn ("\n" ++ histTSV)
@@ -174,17 +177,16 @@ output (Just prefix) histData history _ medianHist = do
   hPutStrLn gnuplotHandle $ formatGnuplotOutput prefix paths quantiles
   hClose gnuplotHandle
 
-divFloat::(Integral a, Integral b)=>a->b->Float
+divFloat :: (Integral a, Integral b) => a -> b -> Float
 divFloat a b = (fromIntegral a::Float)/(fromIntegral b::Float)
 
-formatHistogramOutput::(V.Vector Double, V.Vector Int)->String
+formatHistogramOutput :: (V.Vector Double, V.Vector Int) -> String
 formatHistogramOutput (lowerBound,count) = str where
   (sm,sumL) = foldl (\(s,l) n -> (s+(count V.! n),l++[s+(count V.! n)])) (0,[]) [0..(V.length count-1)]
   fmtLB x = printf "%.0f" (x/1000.0)
   str = foldl (\s n->s ++ fmtLB (lowerBound V.! n) ++ "\t" ++ show (count V.! n) ++ "\t" ++ show (divFloat (sumL !! n) sm) ++ "\n") "#k$\tcount\tCum Density\n" [0..(V.length lowerBound - 1)]
 
-
-formatHistoryOutput::[V.Vector DatedMoneyValue]->String
+formatHistoryOutput :: [V.Vector DatedMoneyValue] -> String
 formatHistoryOutput hists = str where
   histsL = V.toList <$> hists
   days = view dmYear <$> head histsL
@@ -193,8 +195,7 @@ formatHistoryOutput hists = str where
   fmtNWs = foldl (\s (MoneyValue x _) -> s ++ printf "%.0f" x ++ "\t") ""
   str = foldl (\s (d,nw)-> s ++ show d ++ "\t" ++ fmtNWs nw ++ "\n") header hists'
 
-
-formatMedianSummaryOutput::V.Vector DatedSummary->String
+formatMedianSummaryOutput :: V.Vector DatedSummary -> String
 formatMedianSummaryOutput medianHist = str where
   wrs = addReturns medianHist
   header = "Date\t\tNet Worth($)\tReturn($)\tReturn(%)\tNear Cash\tInflow($)\tOutflow($)\tTax($)\tTax Rate(%)\n"
@@ -207,8 +208,7 @@ formatMedianSummaryOutput medianHist = str where
     ++ f i ++ "\t\t" ++ f o ++ "\t\t" ++ f t ++ "\t" ++ g (100*tr) ++ "\n"
   str = V.foldl' (\s x -> s ++ h x) header wrs
 
-
-formatGnuplotOutput::String->Int->Int->String
+formatGnuplotOutput :: String -> Int -> Int -> String
 formatGnuplotOutput prefix paths quantiles = str where
   x = elemIndex '/' (reverse prefix)
   prefixWOPath = case x of

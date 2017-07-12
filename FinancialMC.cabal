@@ -106,7 +106,7 @@ executable FinancialMC-cl
   hs-source-dirs:      src/FinancialMC-commandLine
   main-is:             Main.hs
   other-modules:       OptionParser
-  ghc-options:	       -Wall -O2 -rtsopts -threaded -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches 
+  ghc-options:	       -Wall -O2 -rtsopts -threaded "-with-rtsopts=-N" -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches 
   ghc-prof-options:    -fprof-auto -auto-all -fprof-cafs 
   build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq, vector, exceptions,mtl	       
   default-language:    Haskell2010

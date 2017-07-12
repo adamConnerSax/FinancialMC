@@ -18,7 +18,7 @@ module FinancialMC.Core.MCState
        , makeNewBalanceSheet
        , insertAccount --NB: replaces if already present, like Map.insert
        , CashFlows (CashFlows)
-       , HasCashFlows
+       , HasCashFlows (..)
        , makeNewCashFlows
        , addFlow
        , MCState(MCState)
@@ -82,7 +82,7 @@ type MyMap k v = M.Map k v
 type AccountMap a = MyMap AccountName (Account a)
 type FlowMap fl = MyMap FlowName fl
 
-data BalanceSheet a = BalanceSheet {_bsAccountMap:: !(AccountMap a) } deriving (Generic)
+data BalanceSheet a = BalanceSheet { _bsAccountMap:: !(AccountMap a) } deriving (Generic)
 makeClassy ''BalanceSheet
 
 instance Functor BalanceSheet where
@@ -103,7 +103,7 @@ instance FromJSON a=>FromJSON (BalanceSheet a) where
 getAccountNames::BalanceSheet a->[AccountName]                           
 getAccountNames bs = mKeys (bs ^. bsAccountMap)
                            
-data CashFlows fl = CashFlows { _cfdFlowMap:: !(FlowMap fl) } deriving (Generic)
+data CashFlows fl = CashFlows { _cfdFlowMap :: !(FlowMap fl) } deriving (Generic)
 makeClassy ''CashFlows
 
 instance Functor CashFlows where
@@ -369,10 +369,10 @@ summarize  inF outF tax taxRate = do
 computeFlows :: ( IsFlow fl
                 , MonadError FMCException m
                 , MonadState s m
-                , ReadsCombinedState s a fl le ru
+                , ReadsMCState s a fl le ru
                 , ReadsFinEnv s rm) => m  (MoneyValue, MoneyValue)
 computeFlows = do
-  cs <- use $ getCombinedState.csMC.mcsCashFlows
+  cs <- use $ getMCState.mcsCashFlows
   fe <- use getFinEnv  
   return $ grossFlows cs fe
 

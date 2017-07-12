@@ -81,7 +81,7 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
-data PathState s e = PathState { _stepState :: s, _stepEnv :: e }
+data PathState s e = PathState { _stepState :: s, _stepEnv :: e } deriving (Show)
 makeClassy ''PathState
 
 class ReadsStepEnv s e where

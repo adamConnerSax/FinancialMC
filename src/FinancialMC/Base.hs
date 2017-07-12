@@ -27,13 +27,16 @@ import           FinancialMC.Builders.RateModels  (BaseRateModel,
                                                    BaseRateModelT)
 import           FinancialMC.Builders.Rules       (BaseRule)
 import           FinancialMC.Core.Asset           (accountValue)
-import           FinancialMC.Core.Engine          (HasPathSummaryAndSeed (..),
+import           FinancialMC.Core.Engine          (FMCPathState,
+                                                   HasPathSummaryAndSeed (..),
                                                    PathSummaryAndSeed (..),
                                                    RandomSeed, doPaths,
                                                    doPathsIO, execOnePathIO,
                                                    execOnePathPure)
 import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
-import           FinancialMC.Core.FinApp          (LogLevel (..))
+import           FinancialMC.Core.FinApp          (HasPathState (stepEnv, stepState),
+                                                   LogLevel (..),
+                                                   PathState (PathState))
 import           FinancialMC.Core.MapLike         (IndexedList (..), IsMap (..))
 import           FinancialMC.Core.MCState         (CombinedState (..),
                                                    DatedSummary (..),
