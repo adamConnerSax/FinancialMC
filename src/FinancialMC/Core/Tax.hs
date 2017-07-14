@@ -296,7 +296,7 @@ fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm 
       net' (TaxDetails inFlow deds) = CV.fromMoneyValue inFlow |-| CV.fromMoneyValue deds
       gross (TaxDetails inFlow _) = inFlow
       details tt = noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
-
+  
   ordinaryD <- details OrdinaryIncome             
   nonPayrollD <- details NonPayrollIncome
   capGainD <- details CapitalGain
