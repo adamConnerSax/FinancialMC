@@ -8,10 +8,15 @@ module BenchEngine
 
 import           BenchTypes
 import           FinancialMC.Base           (CombinedState, FinEnv, MoneyValue,
-                                             PathSummary)
+                                             PathSummary, csFinancial)
+
 import           FinancialMC.Core.Utilities (FMCException)
-import           FinancialMC.Internal       (EngineC, LoggableStepApp, PathApp,
-                                             doTax, evolveMCS, execPathApp)
+import           FinancialMC.Internal       (EngineC, HasCombinedState (..),
+                                             HasFinState (..),
+                                             LoggablePathApp (stepToPath),
+                                             LoggableStepApp, PathApp, StepApp,
+                                             computeTax, doTax, evolveMCS,
+                                             execPathApp, zoomStepApp)
 
 import           Control.Monad              (replicateM_)
 import           Criterion
@@ -20,21 +25,25 @@ import           Data.Maybe                 (fromJust)
 type BenchEngineC m = ( EngineC BenchAsset BenchFlow BenchLifeEvent BenchRule BenchRateModel
                       , LoggableStepApp (CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule) (FinEnv BenchRateModel) m)
 
-runEngineFunction :: BenchCS -> BenchFE -> PathApp FMCException BenchCS BenchFE x -> PathSummary
-runEngineFunction cs0 fe0 ef = do
-  fromJust . getSummaryS  $ execPathApp ef cs0 fe0
+runStepFunction :: BenchCS -> BenchFE -> StepApp FMCException BenchCS BenchFE x -> PathSummary
+runStepFunction cs0 fe0 ef = do
+  fromJust . getSummaryS  $ execPathApp (stepToPath ef) cs0 fe0
+
+benchComputeTax :: BenchCS -> BenchFE  -> Int -> PathSummary
+benchComputeTax cs0 fe0 n =
+  let ef = replicateM_ n $ zoomStepApp csFinancial $ zoomStepApp fsTaxData $ computeTax
+  in runStepFunction cs0 fe0 ef
 
 benchDoTax :: BenchCS -> BenchFE  -> Int -> PathSummary
 benchDoTax cs0 fe0 n =
-  let ef :: BenchEngineC (PathApp FMCException BenchCS BenchFE) => PathApp FMCException BenchCS BenchFE ()
-      ef = replicateM_ n doTax
-  in runEngineFunction cs0 fe0 ef
+  let ef = replicateM_ n doTax
+  in runStepFunction cs0 fe0 ef
 
 benchEvolveMCS :: BenchCS -> BenchFE -> Int -> PathSummary
 benchEvolveMCS cs0 fe0 n =
-  let ef :: BenchEngineC (PathApp FMCException BenchCS BenchFE) => PathApp FMCException BenchCS BenchFE ()
-      ef = replicateM_ n evolveMCS
-  in runEngineFunction cs0 fe0 ef
+  let ef = replicateM_ n evolveMCS
+  in runStepFunction cs0 fe0 ef
+
 
 benchEngineF ::  (String, (BenchCS -> BenchFE -> Int -> PathSummary)) -> [(FilePath, [(String, String, [Int])])] -> IO [Benchmark]
 benchEngineF (efName,ef) pathsToBench = do
@@ -55,8 +64,9 @@ pathConfigs =
   ]
 
 engineFs :: [(String, (BenchCS -> BenchFE -> Int -> PathSummary))]
-engineFs = [ ("doTax",benchDoTax)
-           , ("evolveMCS",benchEvolveMCS)
+engineFs = [ ("computeTax", benchComputeTax)
+           , ("doTax", benchDoTax)
+           , ("evolveMCS", benchEvolveMCS)
            ]
 
 benchEngineIO :: IO Benchmark

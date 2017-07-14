@@ -235,7 +235,7 @@ baseStep2basePath = BasePathApp . multS . hoist readOnly . unBaseStepApp
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
-class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
+class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m | m->s, m->e where
   stepLift :: StepApp FMCException s e z -> m z
 
 zoomStep :: LoggableStepApp s e m => Lens' s sInner -> StepApp FMCException sInner e x -> m x
@@ -253,7 +253,7 @@ instance Loggable (PStepApp s e) where
 instance LoggableStepApp s e (PStepApp s e) where
   stepLift = liftStepApp
 
-class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m where
+class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m | m->s, m->e where
   type Step s e m :: * -> *
   pathLift :: PathApp FMCException s e a -> m a
   stepToPath :: Step s e m a -> m a
