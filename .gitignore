@@ -8,3 +8,9 @@
 *.prof
 *.gnuplot
 *.tsv
+*.prof
+*.csv
+*.svg
+*.hp
+*.folded
+*.html
