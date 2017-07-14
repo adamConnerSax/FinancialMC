@@ -20,22 +20,8 @@ module FinancialMC.Core.FinApp
        , HasPathState (..)
        , ReadsStepEnv (..)
        , Loggable (log)
---       , faLog
-{-
-       , toStepApp
-       , toPathApp
-       , zoomStepApp
-       , zoomStep
-       , magnifyStepApp
-       , zoomPathAppS
-       , zoomPathAppE
-       , LoggableStepApp (..)
-       , LoggablePathApp (..)
-       , StepApp
--}
        , execPathStack
        , execPPathStack
---       , taxDataApp2StepAppFSER
 -- only for Bench/Profiling
        , BasePathStack (..)
        , PathStack (..)
@@ -48,12 +34,10 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
                                                    HasFinEnv (..),
                                                    HasFinState (..))
 import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction)
---import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
 import           FinancialMC.Core.Result          (ResultT (..))
 import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
                                                    HasFMCException, eitherToIO,
                                                    multS, readOnly)
-
 
 import           Control.Lens                     (Getter, Identity, Lens',
                                                    magnify, makeClassy, set,
@@ -95,11 +79,13 @@ class ReadsStepEnv s e where
 
 newtype BasePathStack s e m a =
   BasePathStack { unBasePathStack :: StateT (PathState s e) m a }
-  deriving (Functor, Applicative, MonadState (PathState s e))
+  deriving (Functor, Applicative, Monad, MonadState (PathState s e))
 
+{-
 instance (Monad m, Applicative (BasePathStack s e m)) => Monad (BasePathStack s e m) where
   return = pure
   bpsa >>= f = BasePathStack $ (unBasePathStack bpsa) >>= unBasePathStack . f
+-}
 
 instance MFunctor (BasePathStack s e) where
   hoist f (BasePathStack bsa) = BasePathStack $ hoist f bsa
@@ -128,7 +114,13 @@ instance (MTC.MonadBaseControl m (BasePathStack s e m), MonadError err m) => Mon
 
 instance MonadThrow m => MonadThrow (BasePathStack s e m) where
   throwM = lift . throwM
+{-
+class ZoomState s1 s2 e f (m :: * -> *) where
+  zoomState :: Lens' s1 s2 -> f s2 e m a -> f s1 e m a
 
+instance (Monad m) => ZoomState s1 s2 e BasePathStack m where
+  zoomState ls = BasePathStack . (zoom (stepState.ls))  . unBasePathStack
+-}
 newtype PathStack err s e a =
   PathStack { unPathStack :: BasePathStack s e (Either err) a } deriving (Functor, Applicative, Monad, MonadState (PathState s e))
 

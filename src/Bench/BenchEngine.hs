@@ -7,8 +7,8 @@ module BenchEngine
 import           BenchTypes
 import           FinancialMC.Base           (PathSummary)
 import           FinancialMC.Core.Utilities (FMCException)
-import           FinancialMC.Internal       (PathStack, doTax, evolveMCS,
-                                             execPathStack)
+import           FinancialMC.Internal       (PathStack, computeTax, doChecks,
+                                             doTax, evolveMCS, execPathStack)
 
 import           Control.Monad              (replicateM_)
 import           Criterion
@@ -17,6 +17,16 @@ import           Data.Maybe                 (fromJust)
 runEngineFunction :: BenchPathState -> PathStack FMCException BenchCS BenchFE x -> PathSummary
 runEngineFunction ps0 ef = do
   fromJust . getSummaryS  $ execPathStack ef ps0
+
+benchDoChecks :: BenchPathState -> Int -> PathSummary
+benchDoChecks ps0 n =
+  let ef = replicateM_ n doChecks
+  in runEngineFunction ps0 ef
+
+benchComputeTax :: BenchPathState -> Int -> PathSummary
+benchComputeTax ps0 n =
+  let ef = replicateM_ n computeTax
+  in runEngineFunction ps0 ef
 
 benchDoTax :: BenchPathState -> Int -> PathSummary
 benchDoTax ps0 n =
@@ -27,7 +37,6 @@ benchEvolveMCS :: BenchPathState -> Int -> PathSummary
 benchEvolveMCS ps0 n =
   let ef = replicateM_ n evolveMCS
   in runEngineFunction ps0 ef
-
 
 benchEngineF ::  (String, (BenchPathState -> Int -> PathSummary)) -> [(FilePath, [(String, String, [Int])])] -> IO [Benchmark]
 benchEngineF (efName,ef) pathsToBench = do
@@ -48,7 +57,9 @@ pathConfigs =
   ]
 
 engineFs :: [(String, (BenchPathState -> Int -> PathSummary))]
-engineFs = [ ("doTax",benchDoTax)
+engineFs = [ ("doCheck", benchDoChecks)
+           , ("computeTax", benchComputeTax)
+           , ("doTax",benchDoTax)
            , ("evolveMCS",benchEvolveMCS)
            ]
 
