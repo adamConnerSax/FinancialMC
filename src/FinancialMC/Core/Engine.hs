@@ -19,6 +19,7 @@ module FinancialMC.Core.Engine
        , doPaths
        , EngineC
          -- Only for Benchmarking
+       , doTax
        ) where
 
 import           FinancialMC.Core.Asset           (IsAsset)
@@ -94,8 +95,8 @@ import qualified Data.Text                        as T
 
 import           Control.DeepSeq                  (deepseq)
 import           Control.Lens                     (Lens', magnify, makeClassy,
-                                                   use, view, zoom, (%=), (+=),
-                                                   (.=), (^.), _2)
+                                                   use, view, zoom, (%=), (&),
+                                                   (+=), (.=), (.~), (^.), _2)
 import           Control.Monad                    (foldM, unless, when)
 import           Control.Monad.Morph              (hoist, lift)
 import qualified Control.Monad.Parallel           as CMP
@@ -302,12 +303,6 @@ doPath :: ( EngineC a fl le ru rm
   -> m PureMT
 doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1..years]
 
-lensFinEnv :: Lens' (s,FinEnv rm) (FinEnv rm)
-lensFinEnv = _2
-
-lensToEmpty :: Lens' a ()
-lensToEmpty q x = const x <$> q ()
-
 doOneStepOnPath :: ( EngineC a fl le ru rm
                    , Loggable m
                    , MonadError FMCException m
@@ -353,11 +348,12 @@ updateRates' :: ( IsRateModel rm
                 , MonadState s m
                 , HasFinEnv s rm) => PureMT -> m PureMT
 updateRates' pMT = do
-  rates <- use $ finEnv.feRates
-  model <- use $ finEnv.feRateModel
-  (newModel,(newRates,newPMT)) <- applyModel (rates, pMT) model
-  finEnv.feRates .= newRates
-  finEnv.feRateModel .= newModel
+  fe <- use finEnv
+--  model <- use $ finEnv.feRateModel
+  (newModel,(newRates,newPMT)) <- applyModel (fe ^. feRates, pMT) (fe ^. feRateModel)
+  finEnv %= (feRates .~ newRates) . (feRateModel .~ newModel)
+--  finEnv.feRates .= newRates
+--  finEnv.feRateModel .= newModel
   return $! newPMT
 
 
@@ -461,14 +457,12 @@ doRules :: ( Loggable m
            , ReadsMCState s a fl le ru)
   => RuleWhen -> m ()
 doRules w = do
-  rs <- use $ getMCState.mcsRules
-  bs <- use $ getMCState.mcsBalanceSheet
+  mcs <- use getMCState
+--  rs <- use $ getMCState.mcsRules
+--  bs <- use $ getMCState.mcsBalanceSheet
   let isRuleNow r = ruleWhen r == w
-      liveRules = filter isRuleNow rs
-      getA name = getAccount name bs
---      f :: ( IsRule ru
---           , IsRateModel rm
---           , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => ru -> ResultT RuleOutput m ()
+      liveRules = filter isRuleNow (mcs ^. mcsRules)
+      getA name = getAccount name (mcs ^. mcsBalanceSheet)
       f r = do
         log Debug ("Doing " <> (T.pack $ show (ruleName r)))
         doRule r getA
@@ -504,12 +498,12 @@ doLifeEvents :: ( EngineC a fl le ru rm
   => LifeEventConverters a fl le -> m ()
 doLifeEvents convertLE = do
   curDate <- use $ getFinEnv.feCurrentDate
-  les <- use $ getMCState.mcsLifeEvents
-  bs <- use $ getMCState.mcsBalanceSheet
+  mcs <- use getMCState
+--  les <- use $ getMCState.mcsLifeEvents
+--  bs <- use $ getMCState.mcsBalanceSheet
   let happeningThisYear le = (lifeEventYear le == curDate)
-      liveEvents = filter happeningThisYear les
-      getA name = getAccount name bs
---      f :: le -> ResultT (LifeEventOutput a fl) m ()
+      liveEvents = filter happeningThisYear (mcs ^. mcsLifeEvents)
+      getA name = getAccount name (mcs ^. mcsBalanceSheet)
       f x = do
         log Debug ("Doing " <> (T.pack $ show (lifeEventName x)))
         doLifeEvent x convertLE getA
@@ -549,7 +543,6 @@ doTax = do
 doTaxTrade :: ( IsAsset a
               , Show a
               , IsRule ru
---              , IsRateModel rm
               , Loggable m
               , MonadError FMCException m
               , MonadState s m
@@ -563,13 +556,14 @@ doTaxTrade :: ( IsAsset a
               , HasAccumulators s
               , ReadsMCState s a fl le ru) => m ()
 doTaxTrade = do
-  bs <- use balanceSheet
   curPos <- use cashFlow
-  taxTrade <- use $ getMCState.mcsTaxTrade
-  let getA name = getAccount name bs
+--  taxTrade <- use $ getMCState.mcsTaxTrade
+--  bs <- use balanceSheet
+  mcs <- use getMCState
+  let getA name = getAccount name (mcs ^. mcsBalanceSheet)
   log Debug ("Current cash on hand is " <> (T.pack $ show curPos))
   log Debug "Generating tax trade, if necessary"
-  Result _ result <- runResultT (doRule taxTrade getA)
+  Result _ result <- runResultT (doRule (mcs ^. mcsTaxTrade) getA)
   doRuleResult result
 
 payTax :: ( MonadError FMCException m
@@ -598,10 +592,11 @@ doSweepTrades :: ( IsAsset a
                  , ReadsExchangeRateFunction s
                  , ReadsMCState s a fl le ru) => m ()
 doSweepTrades = do
-  bs <- use balanceSheet
-  sweepRule <- use $ getMCState.mcsSweep
-  let getA name = getAccount name bs
-  Result _ result <- runResultT (doRule sweepRule getA)
+--  bs <- use balanceSheet
+--  sweepRule <- use $ getMCState.mcsSweep
+  mcs <- use getMCState
+  let getA name = getAccount name (mcs ^. mcsBalanceSheet)
+  Result _ result <- runResultT (doRule (mcs ^. mcsSweep) getA)
   doRuleResult result
 
 doAccountTransaction :: ( IsAsset a
@@ -615,10 +610,8 @@ doAccountTransaction :: ( IsAsset a
                         , HasBalanceSheet s a) => Transaction -> m ()
 doAccountTransaction tr@(Transaction target typ amt)= do
   bs <- use balanceSheet
-  Result after flows <- do
-    acct <- getAccount target bs
-    runResultT $ tradeAccount acct typ amt
-
+  acct <- getAccount target bs
+  Result after flows <- runResultT $ tradeAccount acct typ amt
   applyFlows flows
   insertAccount after
 
@@ -626,7 +619,6 @@ doAccountTransaction tr@(Transaction target typ amt)= do
   log Debug ("Current net cash flow is " <> (T.pack $ show cf))
   log Debug ("Did Transaction (" <> (T.pack $ show tr) <> ")")
   log Debug ("With resulting account " <> (T.pack $ show after) <> " and flows " <> (T.pack $ show flows))
-
 
 isNonZeroTransaction :: Transaction -> Bool
 isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
@@ -654,7 +646,7 @@ computeTax :: ( MonadError FMCException m
 computeTax = do
   tr <- use $ getFinEnv.feTaxRules
   td <- use getTaxData
-  (total,rate) <- fullTaxCV tr td
+  (total, rate) <- fullTaxCV tr td
   log Debug ("Computed tax of "
              <> (T.pack $ show total)
              <> " (eff rate of "

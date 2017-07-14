@@ -328,7 +328,7 @@ fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm 
 
 
 
-inflateTaxBrackets :: Double->TaxBrackets->TaxBrackets    
+inflateTaxBrackets :: Double -> TaxBrackets -> TaxBrackets    
 inflateTaxBrackets rt (TaxBrackets tbs) = makeTaxBrackets tbs' where
   r = 1.0 + rt
   inflateBracket (Bracket bb bt br) = Bracket (MV.multiply bb r) (MV.multiply bt r) br 

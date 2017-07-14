@@ -36,6 +36,8 @@ module FinancialMC.Core.FinApp
        , execPathStack
        , execPPathStack
 --       , taxDataApp2StepAppFSER
+-- only for Bench
+       , PathStack
        ) where
 
 import           Prelude                          hiding (log)
@@ -81,7 +83,7 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
-data PathState s e = PathState { _stepState :: s, _stepEnv :: e } deriving (Show)
+data PathState s e = PathState { _stepState :: !s, _stepEnv :: !e } deriving (Show)
 makeClassy ''PathState
 
 class ReadsStepEnv s e where

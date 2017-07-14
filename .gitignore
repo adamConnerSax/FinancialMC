@@ -4,3 +4,7 @@
 *~
 *#
 /dist
+*.csv
+*.prof
+*.gnuplot
+*.tsv

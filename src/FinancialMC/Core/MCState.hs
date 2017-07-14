@@ -356,14 +356,13 @@ summarize :: ( IsAsset a
 summarize  inF outF tax taxRate = do
   cs <- use combinedState
   fe <- use getFinEnv
-  needHistory <- use (combinedState.csNeedHistory)
   let nw = netWorth cs fe
       endDate =  (fe ^. feCurrentDate) + 1 -- date is an integer year
       ps =  netWorth2PathSummary nw endDate
       prevPS =  cs ^. csMC.mcsPathSummary
       ps' =  ps `seq` addPathSummary prevPS ps
   combinedState.csMC.mcsPathSummary .=  ps'
-  when needHistory $  addHistory inF outF tax taxRate
+  when (cs ^. csNeedHistory) $  addHistory inF outF tax taxRate
   return ()
 
 computeFlows :: ( IsFlow fl
