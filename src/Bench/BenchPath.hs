@@ -3,24 +3,35 @@ module BenchPath
          benchPathsIO
        ) where
 
-import Criterion
-import BenchUtils (bgroupM)
+import           BenchUtils                              (bgroupM)
+import           Criterion
 
-import Control.Exception (SomeException)
-import Control.Lens ((^.))
-import Data.Maybe (fromJust)
-import System.Random.Mersenne.Pure64 (pureMT)
-import Data.Word (Word64)
-import FinancialMC.Core.LifeEvent (LifeEventConverters(..))
+import           Control.Lens                            (view, (^.))
+import           Data.Maybe                              (fromJust)
+import           Data.Word                               (Word64)
+import           FinancialMC.Core.LifeEvent              (LifeEventConverters (..))
+import           System.Random.Mersenne.Pure64           (pureMT)
 
-import FinancialMC.Base (CombinedState,HasCombinedState(..),FinEnv,HasMCState(..),PathSummary,execOnePathPure,doPaths,
-                        BaseAsset,BaseFlow,BaseLifeEvent,BaseRule,BaseRateModelT)
+import           FinancialMC.Base                        (BaseAsset, BaseFlow,
+                                                          BaseLifeEvent,
+                                                          BaseRateModelT,
+                                                          BaseRule,
+                                                          CombinedState, FinEnv,
+                                                          HasCombinedState (..),
+                                                          HasMCState (..),
+                                                          PathSummary,
+                                                          PathSummaryAndSeed,
+                                                          doPaths,
+                                                          execOnePathPure,
+                                                          psasSummary)
 
-import qualified FinancialMC.Parsers.Configuration as C
-import FinancialMC.Parsers.ConfigurationLoader (loadConfigurations,buildInitialStateFromConfig)
+import qualified FinancialMC.Parsers.Configuration       as C
+import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
+                                                          loadConfigurations)
 
 
-import FinancialMC.Core.Utilities (eitherToIO)
+import           FinancialMC.Core.Utilities              (FMCException,
+                                                          eitherToIO)
 
 type BenchAsset = BaseAsset
 type BenchFlow = BaseFlow
@@ -35,9 +46,9 @@ lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 lec = LEC id id
 
 
-getSummaryS::Either SomeException (CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule,FinEnv BenchRateModel)->Maybe PathSummary
+getSummaryS::Either FMCException (CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule,FinEnv BenchRateModel)->Maybe PathSummary
 getSummaryS x = case x of
-  Left _ -> Nothing
+  Left _       -> Nothing
   Right (cs,_) -> Just $ cs ^. csMC.mcsPathSummary
 
 setupEnv::FilePath->String->IO (CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule,FinEnv BenchRateModel)
@@ -56,15 +67,15 @@ benchSinglePath  pathsToBench = do
   let fYears (cs,fe) name years = bench (name ++ "_" ++ show years) $ nf (benchPathF cs fe) years
       fcfg cFile cfgName benchName lYears = do
         s0 <- setupEnv cFile cfgName
-        return $ bgroup benchName $ fmap (\y -> fYears s0 benchName y) lYears 
+        return $ bgroup benchName $ fmap (\y -> fYears s0 benchName y) lYears
       fFile cFile cfgsToBench = mapM (\(cN,bN,lYears) -> fcfg cFile cN bN lYears) cfgsToBench
   mconcat <$> mapM (uncurry fFile) pathsToBench
 
 
-getSummaryM::Either SomeException [(PathSummary,Word64)]->Maybe [PathSummary]
+getSummaryM::Either FMCException [PathSummaryAndSeed]->Maybe [PathSummary]
 getSummaryM x = case x of
-  Left _ -> Nothing
-  Right result -> Just . fst . unzip $ result
+  Left _       -> Nothing
+  Right result -> Just $ view psasSummary <$> result
 
 benchMultiPathF::Bool->CombinedState BenchAsset BenchFlow BenchLifeEvent BenchRule->FinEnv BenchRateModel->Int->Int->[PathSummary]
 benchMultiPathF singleThreaded cs0 fe0 years paths =
@@ -84,7 +95,7 @@ benchMultiPath singleThreaded pathsToBench = do
 
 
 benchPathsIO::IO Benchmark
-benchPathsIO = bgroup "Paths" <$> sequence 
+benchPathsIO = bgroup "Paths" <$> sequence
                [ bgroup "Singles" <$> benchSinglePath
                  [
                    ("Configs/Tests/AssetTestConfigurations.xml",[("BankTest","BankTest",[1,10])])

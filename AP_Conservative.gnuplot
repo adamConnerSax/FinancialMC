@@ -5,7 +5,7 @@ set key top right
 set ylabel "% in Bin"
 set xlabel "Final Net Worth (in $1000s)"
 set title "Final Net Worth: Histogram"
-plot histogramFile u 1:($2*0.10) with boxes t ""
+plot histogramFile u 1:($2*1.00) with boxes t ""
 set key top left
 set ylabel "USD (in 1000s)"
 set xlabel "Year"
