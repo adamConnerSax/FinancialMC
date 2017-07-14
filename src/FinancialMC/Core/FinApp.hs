@@ -30,6 +30,8 @@ module FinancialMC.Core.FinApp
        , execPathApp
        , execPPathApp
        , taxDataApp2StepAppFSER
+-- for bench/profiling
+       , PathApp
        ) where
 
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,

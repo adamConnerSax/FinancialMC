@@ -141,10 +141,11 @@ benchmark bench-all
   type:                exitcode-stdio-1.0
   hs-source-dirs:      src/bench
   other-modules:       BenchUtils
+                     , BenchTypes
                      , BenchMoneyOps
                      , BenchPath
                      , BenchMapLike
---                     , BenchEngine
+                     , BenchEngine
   ghc-options:         -O2 -threaded "-with-rtsopts=-N" -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches
   main-is:             BenchAll.hs
   build-depends:       FinancialMC, base, criterion, deepseq, lens, mersenne-random-pure64, unordered-containers, containers, text 

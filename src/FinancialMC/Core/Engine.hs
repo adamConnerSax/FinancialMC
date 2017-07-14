@@ -16,7 +16,8 @@ module FinancialMC.Core.Engine
        , doPathsIO
        , doPaths
        , EngineC
-         -- Only for Benchmarking
+         -- Only for Benchmarking/Profiling
+       , doTax
        ) where
 
 import           FinancialMC.Core.Asset           (IsAsset)
