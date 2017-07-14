@@ -17,6 +17,7 @@ module FinancialMC.Core.Engine
        , doPaths
        , EngineC
          -- Only for Benchmarking/Profiling
+       , doChecks
        , computeTax
        , doTax
        ) where

@@ -15,8 +15,9 @@ import           FinancialMC.Internal       (EngineC, HasCombinedState (..),
                                              HasFinState (..),
                                              LoggablePathApp (stepToPath),
                                              LoggableStepApp, PathApp, StepApp,
-                                             computeTax, doTax, evolveMCS,
-                                             execPathApp, zoomStepApp)
+                                             computeTax, doChecks, doTax,
+                                             evolveMCS, execPathApp,
+                                             zoomStepApp)
 
 import           Control.Monad              (replicateM_)
 import           Criterion
@@ -28,6 +29,11 @@ type BenchEngineC m = ( EngineC BenchAsset BenchFlow BenchLifeEvent BenchRule Be
 runStepFunction :: BenchCS -> BenchFE -> StepApp FMCException BenchCS BenchFE x -> PathSummary
 runStepFunction cs0 fe0 ef = do
   fromJust . getSummaryS  $ execPathApp (stepToPath ef) cs0 fe0
+
+benchDoChecks :: BenchCS -> BenchFE  -> Int -> PathSummary
+benchDoChecks cs0 fe0 n =
+  let ef = replicateM_ n doChecks
+  in runStepFunction cs0 fe0 ef
 
 benchComputeTax :: BenchCS -> BenchFE  -> Int -> PathSummary
 benchComputeTax cs0 fe0 n =
@@ -64,7 +70,8 @@ pathConfigs =
   ]
 
 engineFs :: [(String, (BenchCS -> BenchFE -> Int -> PathSummary))]
-engineFs = [ ("computeTax", benchComputeTax)
+engineFs = [ ("doChecks", benchDoChecks)
+           , ("computeTax", benchComputeTax)
            , ("doTax", benchDoTax)
            , ("evolveMCS", benchEvolveMCS)
            ]
