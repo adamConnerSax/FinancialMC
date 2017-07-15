@@ -5,6 +5,7 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module FinancialMC.Core.Engine
        (
          RandomSeed
@@ -55,7 +56,7 @@ import           FinancialMC.Core.FinApp          (HasPathState (stepEnv, stepSt
                                                    Loggable (log),
                                                    PathState (PathState),
                                                    execPPathStack,
-                                                   execPathStack)
+                                                   execPathStack, zoomPathState)
 
 import           FinancialMC.Core.MCState         (CombinedState,
                                                    HasBalanceSheet (..),
@@ -96,14 +97,15 @@ import           Prelude                          hiding (log)
 import qualified Data.Text                        as T
 
 import           Control.DeepSeq                  (deepseq)
-import           Control.Lens                     (Lens', magnify, makeClassy,
-                                                   use, view, zoom, (%=), (&),
-                                                   (+=), (.=), (.~), (^.), _2)
+import           Control.Lens                     (Lens', Zoom, Zoomed, magnify,
+                                                   makeClassy, use, view, zoom,
+                                                   (%=), (&), (+=), (.=), (.~),
+                                                   (^.), _2)
 import           Control.Monad                    (foldM, unless, when)
 import           Control.Monad.Morph              (hoist, lift)
 import qualified Control.Monad.Parallel           as CMP
 import           Control.Monad.Reader             (ReaderT, ask)
-import           Control.Monad.State.Strict       (MonadState, execState, get)
+import           Control.Monad.State.Strict       (MonadState, get)
 import           Control.Parallel.Strategies      (parList, rpar, rseq, using)
 import           Data.Monoid                      ((<>))
 import           Data.Word                        (Word64)
@@ -171,6 +173,9 @@ instance HasTaxData (FMCPathState a fl le ru rm) where
 
 instance ReadsTaxData (FMCPathState a fl le ru rm)
 
+instance HasCashFlow (CombinedState a fl le ru) where
+  cashFlow = csFinancial . fsCashFlow
+
 instance HasCashFlow (FMCPathState a fl le ru rm) where
   cashFlow = stepState . csFinancial . fsCashFlow
 
@@ -183,6 +188,9 @@ instance HasFinState (FMCPathState a fl le ru rm) where
   finState = stepState . csFinancial
 
 instance ReadsFinState (FMCPathState a fl le ru rm)
+
+instance HasExchangeRateFunction (FinEnv rm) where
+  exchangeRateFunction = feExchange
 
 instance HasExchangeRateFunction (FMCPathState a fl le ru rm) where
   exchangeRateFunction = stepEnv . feExchange
@@ -212,6 +220,12 @@ instance ReadsMCState (FMCPathState a fl le ru rm) a fl le ru
 
 instance HasCombinedState (FMCPathState a fl le ru rm) a fl le ru where
   combinedState = stepState
+
+
+-- special ones for zooming
+instance HasCashFlowExchangeRateFunction (FMCPathState a fl le ru rm) where
+  cashFlowExchangeRateFunction = zoomPathState cashFlow exchangeRateFunction
+
 
 -- The IO versions are required for logging.
 -- If we only use IO for entropy, config loading and result reporting, we can use the pure stack.
@@ -280,6 +294,7 @@ doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
 doPath :: ( EngineC a fl le ru rm
           , Loggable m
           , MonadError FMCException m
+          , CashFlowExchangeRateFunctionZoom s m0 m
           , MonadState s m
           , ReadsFinState s
           , ReadsTaxData s
@@ -308,6 +323,7 @@ doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1.
 doOneStepOnPath :: ( EngineC a fl le ru rm
                    , Loggable m
                    , MonadError FMCException m
+                   , CashFlowExchangeRateFunctionZoom s m0 m
                    , MonadState s m
                    , ReadsFinState s
                    , ReadsTaxData s
@@ -377,6 +393,7 @@ updateTaxBrackets' = do
 doOneYear :: ( EngineC a fl le ru rm
              , Loggable m
              , MonadError FMCException m
+             , CashFlowExchangeRateFunctionZoom s m0 m
              , MonadState s m
              , ReadsFinState s
              , ReadsTaxData s
@@ -427,12 +444,27 @@ checkEndingCash = do
   cash <- use $ getFinState.fsCashFlow
   checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
 
+class HasCashFlowExchangeRateFunction s where
+  cashFlowExchangeRateFunction :: Lens' s (PathState MoneyValue ExchangeRateFunction)
+
+type CashFlowExchangeRateFunctionZoom s m0 m = ( MonadError FMCException m0
+                                               , Functor (Zoomed m0 ())
+                                               , Zoom m0 m (PathState MoneyValue ExchangeRateFunction) s
+                                               , HasCashFlowExchangeRateFunction s)
+
+checkEndingCash' :: CashFlowExchangeRateFunctionZoom s m0 m => m ()
+checkEndingCash' = zoom cashFlowExchangeRateFunction $ do
+  PathState cash e <- get
+  checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
+
+
 doChecks :: ( MonadError FMCException m
+            , CashFlowExchangeRateFunctionZoom s m0 m
             , MonadState s m
             , ReadsExchangeRateFunction s
             , ReadsFinState s) => m ()
 doChecks = do
-  checkEndingCash
+  checkEndingCash'
 
 {-
 morphInnerRuleStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
