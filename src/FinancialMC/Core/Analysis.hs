@@ -38,8 +38,7 @@ import           FinancialMC.Core.Engine          (EngineC,
                                                    execOnePathPure)
 
 import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
-import           FinancialMC.Core.FinApp          (HasPathState (stepState),
-                                                   PathState (PathState))
+import           FinancialMC.Core.FinApp          (PathState, stepState)
 import           FinancialMC.Core.MCState         (CombinedState,
                                                    HasCombinedState (..),
                                                    HasMCState (..),
@@ -103,7 +102,7 @@ historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles ye
       sorted = sortSummaries summaries
       PathSummaryAndSeed  _ medianSeed = sorted !! (length sorted `div` 2)
       csHist = cs0 & (csNeedHistory .~ True)
-      getH seed = V.fromList . view (stepState . csMC . mcsHistory) <$> execOnePathPure convertLE (PathState csHist fe0) seed years
+      getH seed = V.fromList . view (stepState . csMC . mcsHistory) <$> execOnePathPure convertLE (csHist, fe0) seed years
       getNW :: V.Vector DatedSummary -> V.Vector DatedMoneyValue
       getNW = V.cons (DatedMoneyValue year0 nw0) . fmap (\(DatedSummary d (FSSummary nw _ _ _ _ _))->DatedMoneyValue d nw)
       inds = qIndices (length sorted) quantiles

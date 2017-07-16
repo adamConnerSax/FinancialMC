@@ -24,8 +24,7 @@ import           FinancialMC.Base                  (BaseAsset, BaseFlow,
                                                     HasCombinedState (..),
                                                     HasMCState (..),
                                                     HasPathSummaryAndSeed (..),
-                                                    PathState (PathState),
-                                                    PathSummary,
+                                                    PathState, PathSummary,
                                                     PathSummaryAndSeed, doPaths,
                                                     execOnePathPure)
 

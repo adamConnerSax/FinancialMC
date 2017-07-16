@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 module FinancialMC.Base
        (
          module FinancialMC.Core.MoneyValue
@@ -34,9 +35,10 @@ import           FinancialMC.Core.Engine          (FMCPathState,
                                                    doPathsIO, execOnePathIO,
                                                    execOnePathPure)
 import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
-import           FinancialMC.Core.FinApp          (HasPathState (stepEnv, stepState),
-                                                   LogLevel (..),
-                                                   PathState (PathState))
+import           FinancialMC.Core.FinApp          (LogLevel (..),
+                                                   PathState (..),
+                                                   pattern PathState, stepEnv,
+                                                   stepState)
 import           FinancialMC.Core.MapLike         (IndexedList (..), IsMap (..))
 import           FinancialMC.Core.MCState         (CombinedState (..),
                                                    DatedSummary (..),

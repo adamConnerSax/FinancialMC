@@ -1,8 +1,10 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE UndecidableInstances  #-}
@@ -51,12 +53,15 @@ import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
                                                    RuleWhen (..))
 import           FinancialMC.Core.TradingTypes    (Transaction (..))
 
-import           FinancialMC.Core.FinApp          (HasPathState (stepEnv, stepState),
-                                                   LogLevel (..),
+import           FinancialMC.Core.FinApp          (LogLevel (..),
                                                    Loggable (log),
-                                                   PathState (PathState),
+                                                   PathStackable (..),
+                                                   PathState (..),
+                                                   pattern PathState,
+                                                   ReadOnly (..),
                                                    execPPathStack,
-                                                   execPathStack, zoomPathState)
+                                                   execPathStack, stepEnv,
+                                                   stepState, zoomPathState)
 
 import           FinancialMC.Core.MCState         (CombinedState,
                                                    HasBalanceSheet (..),
@@ -296,6 +301,8 @@ doPath :: ( EngineC a fl le ru rm
           , MonadError FMCException m
           , CashFlowExchangeRateFunctionZoom s m0 m
           , MonadState s m
+          , PathStackable s m
+          , s ~ (PathState x y)
           , ReadsFinState s
           , ReadsTaxData s
           , ReadsAccumulators s
@@ -325,6 +332,8 @@ doOneStepOnPath :: ( EngineC a fl le ru rm
                    , MonadError FMCException m
                    , CashFlowExchangeRateFunctionZoom s m0 m
                    , MonadState s m
+                   , PathStackable s m
+                   , s ~ (PathState x y)
                    , ReadsFinState s
                    , ReadsTaxData s
                    , ReadsAccumulators s
@@ -395,6 +404,8 @@ doOneYear :: ( EngineC a fl le ru rm
              , MonadError FMCException m
              , CashFlowExchangeRateFunctionZoom s m0 m
              , MonadState s m
+             , PathStackable s m
+             , s ~ (PathState x y)
              , ReadsFinState s
              , ReadsTaxData s
              , ReadsAccumulators s
@@ -438,6 +449,8 @@ checkFalse cond errMsg = when cond $ throwing _Other (T.pack errMsg)
 checkEndingCash :: ( MonadError FMCException m
                    , MonadState s m
                    , ReadsExchangeRateFunction s
+                   , PathStackable s m
+                   , s ~ (PathState x y)
                    , ReadsFinState s) => m ()
 checkEndingCash = do
   e <- use getExchangeRateFunction
@@ -450,20 +463,24 @@ class HasCashFlowExchangeRateFunction s where
 type CashFlowExchangeRateFunctionZoom s m0 m = ( MonadError FMCException m0
                                                , Functor (Zoomed m0 ())
                                                , Zoom m0 m (PathState MoneyValue ExchangeRateFunction) s
+                                               , ReadOnly (PathState MoneyValue ExchangeRateFunction) m0
+                                               , MonadError FMCException (ReaderM (PathState MoneyValue ExchangeRateFunction) m0)
                                                , HasCashFlowExchangeRateFunction s)
 
 checkEndingCash' :: CashFlowExchangeRateFunctionZoom s m0 m => m ()
-checkEndingCash' = zoom cashFlowExchangeRateFunction $ do
-  PathState cash e <- get
+checkEndingCash' = zoom cashFlowExchangeRateFunction $ makeReadOnly $ do
+  PathState cash e <- ask
   checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
 
 
 doChecks :: ( MonadError FMCException m
             , CashFlowExchangeRateFunctionZoom s m0 m
             , MonadState s m
+            , PathStackable s m
+            , s ~ (PathState x y)
             , ReadsExchangeRateFunction s
             , ReadsFinState s) => m ()
-doChecks = do
+doChecks = asPathStack $ do
   checkEndingCash'
 
 {-

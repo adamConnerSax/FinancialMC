@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 module BenchTypes where
 
 import           FinancialMC.Base                        (BaseAsset, BaseFlow,
@@ -9,7 +10,8 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           FMCPathState, FinEnv,
                                                           HasCombinedState (..),
                                                           HasMCState (..),
-                                                          PathState (PathState),
+                                                          PathState (..),
+                                                          pattern PathState,
                                                           PathSummary)
 import           FinancialMC.Core.LifeEvent              (LifeEventConverters (LEC))
 import qualified FinancialMC.Parsers.Configuration       as C
@@ -43,12 +45,12 @@ setupEnv :: FilePath -> String -> IO BenchPathState
 setupEnv cFile cfgName = do
   (configInfo, configMap) <- loadConfigurations ccs Nothing (C.UnparsedFile cFile)
   (_,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
-  return (PathState cs0 fe0)
+  return (cs0, fe0)
 
 getSummaryS :: Either FMCException BenchPathState -> Maybe PathSummary
 getSummaryS x = case x of
-  Left _                 -> Nothing
-  Right (PathState cs _) -> Just $ cs ^. csMC.mcsPathSummary
+  Left _                  -> Nothing
+  Right (PathState cs  _) -> Just $ cs ^. csMC.mcsPathSummary
 
 
 
