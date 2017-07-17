@@ -90,7 +90,8 @@ instance Functor BalanceSheet where
 
 instance Evolvable a=>Evolvable (BalanceSheet a) where
   evolve bs  = evolveWithin bs bsAccountMap    
-    
+  {-# INLINE evolve #-}
+  
 instance Show a=>Show (BalanceSheet a) where    
   show (BalanceSheet as) = "Balance Sheet:" ++ mShow as 
 
@@ -100,7 +101,7 @@ instance ToJSON a=>ToJSON (BalanceSheet a) where
 instance FromJSON a=>FromJSON (BalanceSheet a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-getAccountNames::BalanceSheet a->[AccountName]                           
+getAccountNames :: BalanceSheet a -> [AccountName]                           
 getAccountNames bs = mKeys (bs ^. bsAccountMap)
                            
 data CashFlows fl = CashFlows { _cfdFlowMap :: !(FlowMap fl) } deriving (Generic)
@@ -111,12 +112,14 @@ instance Functor CashFlows where
   
 instance Evolvable fl=>Evolvable (CashFlows fl) where
   evolve cfd = evolveWithin cfd cfdFlowMap
-    
+  {-# INLINE evolve #-}
+  
 instance Show fl=>Show (CashFlows fl) where    
   show (CashFlows ps) = "Payments:" ++ mShow ps
    
 instance ToJSON fl=>ToJSON (CashFlows fl) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 4}
+
 instance FromJSON fl=>FromJSON (CashFlows fl) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 4}
 
@@ -130,15 +133,19 @@ makeNewCashFlows = CashFlows mEmpty
                       
 insertAccount :: (MonadState s m, HasBalanceSheet s a) => Account a -> m ()
 insertAccount acct@(Account name _ _ _) = balanceSheet.bsAccountMap %=  mInsert name acct
+{-# INLINE insertAccount #-}
   
 addFlow :: (MonadState s m, HasCashFlows s fl, IsFlow fl) => fl -> m ()
 addFlow f = cashFlows.cfdFlowMap %= mInsert (flowName f) f
+{-# INLINE addFlow #-}
 
 getAccount :: MonadError FMCException m => AccountName -> BalanceSheet a -> m (Account a) --Either SomeException (Account a)
 getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" <> (T.pack $ show name) <> "\"")) $ mLookup name am 
+{-# INLINE getAccount #-}
 
 putAccount :: Account a->AccountName->BalanceSheet a->BalanceSheet a
 putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am) 
+{-# INLINE putAccount #-}
 
 data PathSummary = FinalNW !MoneyValue | ZeroNW !Year
 
@@ -228,7 +235,8 @@ instance (Evolvable a, Evolvable fl)=>Evolvable (MCState a fl le ru) where
     newBS <- evolve bs
     newCFD <- evolve cfd
     let newMCS = MCState newBS newCFD les rs sr ttr ps hist
-    return $! newMCS 
+    return $! newMCS
+  {-# INLINE evolve #-}
       
 instance (Show le,Show fl, Show ru, Show a)=>Show (MCState a fl le ru) where
   show (MCState bs cfd les rs sr ttr ps history) = 
@@ -243,16 +251,11 @@ instance (Show le,Show fl, Show ru, Show a)=>Show (MCState a fl le ru) where
     
 addRule :: (MonadState s m, HasRules s ru) => ru -> m ()
 addRule r = rules %= flip (++) [r]
--- do
---  rs <- use mcsRules
---  mcsRules .= rs++[r] -- NB this is append so do I need to think about ordering?
+{-# INLINE addRule #-}
   
 addLifeEvent :: (MonadState s m, HasLifeEvents s le) => le -> m ()
 addLifeEvent le = lifeEvents %= flip (++) [le]
---  do
---  les <- use mcsLifeEvents
---  mcsLifeEvents .= les++[le] -- NB this is append so do I need to think about ordering?
-
+{-# INLINE addLifeEvent #-}
 
 data CombinedState a fl le ru = CombinedState { _csFinancial:: !FinState,
                                                 _csMC:: !(MCState a fl le ru),
@@ -329,13 +332,13 @@ evolveMCS = do -- mCState %= evolveAndApply
   mcs <- use mCState
   mcs' <- evolveAndApply mcs
   mCState .= mcs'
+{-# INLINE evolveMCS #-}
 
-
-netWorth2PathSummary::MoneyValue->Year->PathSummary
+netWorth2PathSummary :: MoneyValue -> Year -> PathSummary
 netWorth2PathSummary mv@(MoneyValue x _) y = ps where
   ps = if x>0 then FinalNW mv else ZeroNW y
 
-addPathSummary::PathSummary->PathSummary->PathSummary
+addPathSummary :: PathSummary -> PathSummary -> PathSummary
 addPathSummary (ZeroNW day) _ = ZeroNW day
 addPathSummary (FinalNW _) (FinalNW y) = FinalNW y
 addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day 
@@ -364,6 +367,7 @@ summarize  inF outF tax taxRate = do
   combinedState.csMC.mcsPathSummary .=  ps'
   when (cs ^. csNeedHistory) $  addHistory inF outF tax taxRate
   return ()
+{-# INLINE summarize #-}
 
 computeFlows :: ( IsFlow fl
                 , MonadError FMCException m
@@ -374,6 +378,7 @@ computeFlows = do
   cs <- use $ getMCState.mcsCashFlows
   fe <- use getFinEnv  
   return $ grossFlows cs fe
+{-# INLINE computeFlows #-}
 
 -- TODO: More specific constraints
 -- ReadsCombinedstate
@@ -395,4 +400,4 @@ addHistory inF outF tax effRate  = do
       nwbo = netWorthBreakout cs fe
       endDate = (fe ^. feCurrentDate) + 1
   combinedState.csMC.mcsHistory <>= [DatedSummary endDate (FSSummary nw nwbo inF outF tax effRate)]
-  
+{-# INLINE addHistory #-}  

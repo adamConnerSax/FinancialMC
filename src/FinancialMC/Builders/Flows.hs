@@ -96,6 +96,7 @@ instance Evolvable BaseFlow where
   evolve fl@(BaseFlow _ (Payment _)) = paymentEvolve fl
   evolve fl@(BaseFlow _ SalaryPayment) = wageEvolve fl
   evolve fl@(BaseFlow _ (RentalIncome _)) = rentalIncomeEvolve fl
+  {-# INLINE evolve #-}
 
 expenseWithInflation :: IsFlow f => Bool -> AccumName -> InflationType -> Evolver s rm m f
 expenseWithInflation deductible accumName iType f = do
@@ -108,6 +109,7 @@ expenseWithInflation deductible accumName iType f = do
       flowResult = if deductible then AllDeductible (TaxAmount OrdinaryIncome expense) else UnTaxed cashFlow
       accums = if T.null accumName then [] else [AddTo accumName cashFlow]
   appendAndReturn (EvolveOutput [flowResult] accums) newExpense
+{-# INLINE expenseWithInflation #-}
 
 paymentEvolve :: Evolver s rm m BaseFlow
 paymentEvolve p@(BaseFlow _ (Payment growth_rate)) = do
@@ -116,6 +118,7 @@ paymentEvolve p@(BaseFlow _ (Payment growth_rate)) = do
   let newA = if flowingAt curDate p then MV.multiply (flowAmount p) (1.0 + growth_rate) else flowAmount p
       cashFlow = flowF curDate p
   appendAndReturn (EvolveOutput [AllTaxed (TaxAmount OrdinaryIncome cashFlow)] []) (revalueFlow p newA)
+{-# INLINE paymentEvolve #-}
 
 wageEvolve :: Evolver s rm m BaseFlow
 wageEvolve p = do
@@ -126,6 +129,7 @@ wageEvolve p = do
         cashFlow = flowF curDate p
     return (cashFlow,newA)
   appendAndReturn (EvolveOutput [AllTaxed (TaxAmount OrdinaryIncome cashFlow')] []) (revalueFlow p newA')
+{-# INLINE wageEvolve #-}
 
 --Need test for this.
 rentalIncomeEvolve :: Evolver s rm m BaseFlow
@@ -140,7 +144,7 @@ rentalIncomeEvolve ri@(BaseFlow _ (RentalIncome maxAnnualDed)) = do
     taxable <- CV.asERMV ccy $ cvMax (CV.mvZero ccy) (CV.fromMoneyValue cashFlow |-| CV.fromMoneyValue maxAnnualDed)
     return (cashFlow,newPayment,taxable)
   appendAndReturn (EvolveOutput [PartiallyTaxed cashFlow' (TaxAmount NonPayrollIncome taxable')] []) newPayment'
-
+{-# INLINE rentalIncomeEvolve #-}
 
 {-
 data Expense = Expense { eFlowCore:: !FlowCore } deriving (Generic)

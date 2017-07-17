@@ -65,6 +65,7 @@ import           GHC.Generics                     (Generic)
 
 assetCVMult :: (IsAsset a, MonadState s m, ReadsExchangeRateFunction s) => a -> Double -> m MoneyValue
 assetCVMult x rate = CV.asERMV (assetCurrency x) $ rate CV.|*| CV.fromMoneyValue (assetValue x)
+{-# INLINE assetCVMult #-}
 
 data MixedFundDetails = MixedFundDetails { _mfdStockPercentage :: !Double
                                          , _mfdDividendYield   :: !Double
@@ -127,9 +128,11 @@ instance IsAsset BaseAsset where
 --  tradeAsset a@(BaseAsset _ (MixedFund _ _ _)) = defaultAssetBuySellF a
 --  tradeAsset a@(BaseAsset _ (GuaranteedFund _)) = defaultAssetBuySellF
   tradeAsset a = defaultAssetBuySellF a
+  {-# INLINE tradeAsset #-}
 
 instance Evolvable BaseAsset where
   evolve = baseAssetEvolve
+  {-# INLINE evolve #-}
 
 baseAssetEvolve :: Evolver s rm m BaseAsset
 baseAssetEvolve ca@(BaseAsset _ CashAsset) = do
@@ -187,6 +190,7 @@ baseAssetEvolve frm@(BaseAsset _ (FixedRateMortgage (FixedRateMortgageDetails ra
   let newAsset = revalueAsset frm (NewValue $ MV.negate np)
       cashFlow = PartiallyDeductible (MV.negate p) (TaxAmount OrdinaryIncome d)
   appendAndReturn (EvolveOutput [cashFlow] []) newAsset
+{-# INLINE baseAssetEvolve #-}
 
 doPayments :: (MonadState s m, ReadsExchangeRateFunction s) => Currency -> CV.CVD -> Double -> CV.CVD -> Int -> m (CV.CVD, CV.CVD)
 doPayments ccy pmt' rate prin' n = do
@@ -195,7 +199,7 @@ doPayments ccy pmt' rate prin' n = do
       prin  = CV.unwrap ccy e prin'
       SD pRemaining aPaid = foldl (\a _ -> doPayment pmt rate a) (SD prin 0) [1..n]
   return (CV.fromMoneyValue (MoneyValue pRemaining ccy),CV.fromMoneyValue (MoneyValue aPaid ccy))
-
+{-# INLINE doPayments #-}
 
 data SD = SD !Double !Double
 doPayment :: Double->Double->SD->SD

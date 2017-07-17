@@ -76,12 +76,12 @@ currentDate = reader $ \e->e ^. feCurrentDate
 
 -- functions to change external state between evolves
 
-changeRate :: RateTag->Double->State (FinEnv rm) ()
+changeRate :: RateTag -> Double -> State (FinEnv rm) ()
 changeRate rateTag x = do
   rateTable <- use feRates
   feRates .= rSet rateTable rateTag x
 
-changeCurrentDate :: Year->State (FinEnv rm) ()
+changeCurrentDate :: Year -> State (FinEnv rm) ()
 changeCurrentDate d = feCurrentDate .= d
 
 exchangeRFFromRateTable :: RateTable Rate -> ExchangeRateFunction
@@ -96,6 +96,7 @@ updateExchangeRateFunction :: (MonadState s m, HasFinEnv s rm) => m ()
 updateExchangeRateFunction = do
   rateTable <- use $ finEnv.feRates
   (finEnv.feExchange) .= exchangeRFFromRateTable rateTable
+{-# INLINE updateExchangeRateFunction #-}
 
 -- state for accumulating tax data, cashflows, transactions, etc.  Changes during evolve
 type AccumName = T.Text
@@ -164,6 +165,8 @@ addToAccumulator name amount = do
   let f = MV.inFirst e (+)
 --  let g (Accumulators a) = Accumulators $ M.insertWith f name a
   accumulators.accums %= M.insertWith f name amount
+{-# INLINE addToAccumulator #-}
+
 
 addToAccumulator' :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s, HasAccumulators s) => AccumName -> MoneyValue -> m ()
 addToAccumulator' name amount = do
@@ -171,15 +174,17 @@ addToAccumulator' name amount = do
   e <- use getExchangeRateFunction
   let f = MV.inFirst e (+)
   accumulators.accums %= M.insertWith f name amount
-
+{-# INLINE addToAccumulator' #-}
 
 getAccumulatedValue :: (MonadError FMCException m, ReadsAccumulators s, MonadState s m) => AccumName -> m MoneyValue
 getAccumulatedValue accumName = do
   (Accumulators as) <- use getAccumulators
   noteM (FailedLookup ("Couldn't find accum named " <> (T.pack $ show accumName))) $ M.lookup accumName as
+{-# INLINE getAccumulatedValue #-}
 
 zeroAccumulator :: (MonadState s m, HasAccumulators s) => AccumName -> m ()
 zeroAccumulator accumName = accumulators.accums %= M.delete accumName
+{-# INLINE zeroAccumulator #-}
 
 {-
 addCashFlow::(MonadState FinState m,MonadReader FinEnv m)=>MoneyValue->m ()
@@ -192,3 +197,4 @@ addCashFlow :: (HasCashFlow s, ReadsExchangeRateFunction s, MonadState s m) => M
 addCashFlow cf = do
   e <- use getExchangeRateFunction
   cashFlow %= MV.inFirst e (+) cf
+{-# INLINE addCashFlow #-}

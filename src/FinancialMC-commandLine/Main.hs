@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE FlexibleContexts    #-}
+{-# LANGUAGE PatternSynonyms     #-}
 {-# LANGUAGE QuasiQuotes         #-}
 module Main where
 
@@ -43,6 +44,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           HasPathSummaryAndSeed (..),
                                                           LiquidityType (..),
                                                           PathState,
+                                                          pattern PathState,
                                                           PathSummary,
                                                           PathSummaryAndSeed (..),
                                                           RandomSeed, doPaths,
@@ -110,7 +112,7 @@ runAndOutput doOutput options = do
         writeIf $ "Initial positive cashflow: " ++ show inFlow
         writeIf $ "Initial gross spending: " ++ show outFlow
 
-        summaries <- runWithOptions (cs0, fe0) options
+        summaries <- runWithOptions (PathState cs0 fe0) options
         let histData = nwHistFromSummaries summaries (optBins options)
             bankruptcies = view psasSummary <$> filter (isZeroNW . view psasSummary) summaries
             (numB,medianB,modeB) = analyzeBankruptcies bankruptcies

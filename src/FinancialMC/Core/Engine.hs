@@ -228,8 +228,8 @@ instance HasCombinedState (FMCPathState a fl le ru rm) a fl le ru where
 
 
 -- special ones for zooming
-instance HasCashFlowExchangeRateFunction (FMCPathState a fl le ru rm) where
-  cashFlowExchangeRateFunction = zoomPathState cashFlow exchangeRateFunction
+--instance HasCashFlowExchangeRateFunction (FMCPathState a fl le ru rm) where
+--  cashFlowExchangeRateFunction = zoomPathState cashFlow exchangeRateFunction
 
 
 -- The IO versions are required for logging.
@@ -277,6 +277,7 @@ execOnePathPure :: EngineC a fl le ru rm
 execOnePathPure convertLE ps0 seed years = do
   let newSource = pureMT seed
   execPathStack (doPath convertLE newSource years) ps0
+{-# INLINEABLE execOnePathPure #-}
 
 doPaths :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
@@ -295,14 +296,12 @@ doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds
                              else g <$> seeds `using` parList rseq
   sequence eMap
+{-# INLINEABLE doPaths #-}
 
 doPath :: ( EngineC a fl le ru rm
           , Loggable m
           , MonadError FMCException m
-          , CashFlowExchangeRateFunctionZoom s m0 m
           , MonadState s m
-          , PathStackable s m
-          , s ~ (PathState x y)
           , ReadsFinState s
           , ReadsTaxData s
           , ReadsAccumulators s
@@ -326,14 +325,12 @@ doPath :: ( EngineC a fl le ru rm
   -> Int
   -> m PureMT
 doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1..years]
+{-# INLINEABLE doPath #-}
 
 doOneStepOnPath :: ( EngineC a fl le ru rm
                    , Loggable m
                    , MonadError FMCException m
-                   , CashFlowExchangeRateFunctionZoom s m0 m
                    , MonadState s m
-                   , PathStackable s m
-                   , s ~ (PathState x y)
                    , ReadsFinState s
                    , ReadsTaxData s
                    , ReadsAccumulators s
@@ -357,7 +354,7 @@ doOneStepOnPath :: ( EngineC a fl le ru rm
   -> m PureMT
 doOneStepOnPath convertLE pMT = do
   newPMT <- do
-    x <- updateRates' pMT -- order matters here.  We need to update rates to get the updated exchange rate.
+    x <- updateRates pMT -- order matters here.  We need to update rates to get the updated exchange rate.
     updateExchangeRateFunction
     return x
   (inFlow, outFlow) <- computeFlows
@@ -366,15 +363,17 @@ doOneStepOnPath convertLE pMT = do
   updateCurrentDate
   updateTaxBrackets --fix??
   return $! newPMT
+{-# INLINEABLE doOneStepOnPath #-}
 
 updateCurrentDate :: (MonadState s m, HasFinEnv s rm) => m ()
 updateCurrentDate = (finEnv.feCurrentDate) += 1
+{-# INLINEABLE updateCurrentDate #-}
 
-updateRates' :: ( IsRateModel rm
+updateRates :: ( IsRateModel rm
                 , MonadError FMCException m
                 , MonadState s m
                 , HasFinEnv s rm) => PureMT -> m PureMT
-updateRates' pMT = do
+updateRates pMT = do
   fe <- use finEnv
 --  model <- use $ finEnv.feRateModel
   (newModel,(newRates,newPMT)) <- applyModel (fe ^. feRates, pMT) (fe ^. feRateModel)
@@ -382,7 +381,7 @@ updateRates' pMT = do
 --  finEnv.feRates .= newRates
 --  finEnv.feRateModel .= newModel
   return $! newPMT
-
+{-# INLINEABLE updateRates #-}
 
 updateTaxBrackets :: ( MonadError FMCException m
                      , MonadState s m
@@ -391,21 +390,12 @@ updateTaxBrackets :: ( MonadError FMCException m
 updateTaxBrackets = do
   taxBracketInflationRate <- rateRequest (Inflation TaxBracket)
   (finEnv.feTaxRules) %= flip updateTaxRules taxBracketInflationRate
-
-{-
-updateTaxBrackets' :: (MonadState FinEnv m, MonadThrow m)=>m ()
-updateTaxBrackets' = do
-  taxBracketInflationRate <- readOnly . zoom feRates $ rateRequest (Inflation TaxBracket)
-  feTaxRules %= flip updateTaxRules taxBracketInflationRate
--}
+{-# INLINEABLE updateTaxBrackets #-}
 
 doOneYear :: ( EngineC a fl le ru rm
              , Loggable m
              , MonadError FMCException m
-             , CashFlowExchangeRateFunctionZoom s m0 m
              , MonadState s m
-             , PathStackable s m
-             , s ~ (PathState x y)
              , ReadsFinState s
              , ReadsTaxData s
              , ReadsAccumulators s
@@ -439,24 +429,27 @@ doOneYear convertLE = do
   doChecks
   log Debug ("Completed " <> (T.pack $ show year) <> ".")
   return (tax, effRate)
+{-# INLINEABLE doOneYear #-}
 
 checkTrue :: MonadError FMCException m => Bool -> String -> m ()
 checkTrue cond errMsg = unless cond $ throwing _Other (T.pack errMsg)
+{-# INLINEABLE checkTrue #-}
 
 checkFalse :: MonadError FMCException m => Bool -> String -> m ()
 checkFalse cond errMsg = when cond $ throwing _Other (T.pack errMsg)
+{-# INLINEABLE checkFalse #-}
 
 checkEndingCash :: ( MonadError FMCException m
                    , MonadState s m
                    , ReadsExchangeRateFunction s
-                   , PathStackable s m
-                   , s ~ (PathState x y)
                    , ReadsFinState s) => m ()
 checkEndingCash = do
   e <- use getExchangeRateFunction
   cash <- use $ getFinState.fsCashFlow
   checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
+{-# INLINEABLE checkEndingCash #-}
 
+{-
 class HasCashFlowExchangeRateFunction s where
   cashFlowExchangeRateFunction :: Lens' s (PathState MoneyValue ExchangeRateFunction)
 
@@ -468,32 +461,19 @@ type CashFlowExchangeRateFunctionZoom s m0 m = ( MonadError FMCException m0
                                                , HasCashFlowExchangeRateFunction s)
 
 checkEndingCash' :: CashFlowExchangeRateFunctionZoom s m0 m => m ()
-checkEndingCash' = zoom cashFlowExchangeRateFunction $ makeReadOnly $ do
-  PathState cash e <- ask
+checkEndingCash' = zoom cashFlowExchangeRateFunction $ do
+  PathState cash e <- get
   checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
-
+{-# INLINEABLE checkEndingCash' #-}
+-}
 
 doChecks :: ( MonadError FMCException m
---            , CashFlowExchangeRateFunctionZoom s m0 m
             , MonadState s m
-            , PathStackable s m
-            , s ~ (PathState x y)
             , ReadsExchangeRateFunction s
             , ReadsFinState s) => m ()
-doChecks = asPathStack $ do
+doChecks = do
   checkEndingCash
-{-# SPECIALIZE doChecks :: PathStack FMCException s e () #-}
-
-
-{-
-morphInnerRuleStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
-  => ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) b -> m b
-morphInnerRuleStack = zoomStep csFinancial . toStepApp . readOnly
-
-morphResultStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
-  => ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException))) b -> ResultT o m b
-morphResultStack =  hoist morphInnerRuleStack
--}
+{-# INLINEABLE doChecks #-}
 
 doRules :: ( Loggable m
            , EngineC a fl le ru rm
@@ -522,6 +502,7 @@ doRules w = do
   log Debug ("Doing " <> (T.pack $ show w) <> " rules.")
   Result _ ruleOutput <- runResultT $ mapM_ f liveRules -- can/should move zoom/hoist to here?  Does it matter?
   doRuleResult ruleOutput
+{-# INLINEABLE doRules #-}
 
 doRuleResult :: ( IsAsset a
                 , Show a
@@ -537,6 +518,7 @@ doRuleResult (RuleOutput trades accs) = do
   log Debug ("Resulting in trades:" <> (T.pack $ show trades) <> " and accums=" <> (T.pack $ show accs))
   applyAccums accs
   doTransactions trades
+{-# INLINEABLE doRuleResult #-}
 
 doLifeEvents :: ( EngineC a fl le ru rm
                 , Loggable m
@@ -563,6 +545,7 @@ doLifeEvents convertLE = do
   log Debug ("Doing " <> (T.pack $ show curDate) <> " life events.")
   Result _ results <- runResultT $ mapM_ f liveEvents
   doLifeEventResult results
+{-# INLINEABLE doLifeEvents #-}
 
 doLifeEventResult :: ( IsFlow fl
                      , MonadState s m
@@ -571,6 +554,7 @@ doLifeEventResult :: ( IsFlow fl
 doLifeEventResult (LifeEventOutput newAccounts newFlows) = do
   mapM_ insertAccount newAccounts
   mapM_ addFlow newFlows
+{-# INLINEABLE doLifeEventResult #-}
 
 doTax :: ( EngineC a fl le ru rm
          , Loggable m
@@ -592,6 +576,7 @@ doTax = do
   payTax tax'  -- pay tax, zero tax counters and carry forward losses
   zeroAccumulator ("TaxOwed")
   return (tax',rate')
+{-# INLINEABLE doTax #-}
 
 doTaxTrade :: ( IsAsset a
               , Show a
@@ -618,6 +603,7 @@ doTaxTrade = do
   log Debug "Generating tax trade, if necessary"
   Result _ result <- runResultT (doRule (mcs ^. mcsTaxTrade) getA)
   doRuleResult result
+{-# INLINEABLE doTaxTrade #-}
 
 payTax :: ( MonadError FMCException m
           , Loggable m
@@ -628,6 +614,7 @@ payTax tax = do
   addCashFlow taxPmt
   carryForwardTaxData
   log Debug ("Paid Tax of " <> (T.pack $ show tax))
+{-# INLINEABLE payTax #-}
 
 doSweepTrades :: ( IsAsset a
                  , Show a
@@ -651,6 +638,7 @@ doSweepTrades = do
   let getA name = getAccount name (mcs ^. mcsBalanceSheet)
   Result _ result <- runResultT (doRule (mcs ^. mcsSweep) getA)
   doRuleResult result
+{-# INLINEABLE doSweepTrades #-}
 
 doAccountTransaction :: ( IsAsset a
                         , Show a
@@ -672,6 +660,7 @@ doAccountTransaction tr@(Transaction target typ amt)= do
   log Debug ("Current net cash flow is " <> (T.pack $ show cf))
   log Debug ("Did Transaction (" <> (T.pack $ show tr) <> ")")
   log Debug ("With resulting account " <> (T.pack $ show after) <> " and flows " <> (T.pack $ show flows))
+{-# INLINEABLE doAccountTransaction #-}
 
 isNonZeroTransaction :: Transaction -> Bool
 isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
@@ -688,6 +677,7 @@ doTransactions :: ( IsAsset a
   => [Transaction]
   -> m ()
 doTransactions ts = mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
+{-# INLINEABLE doTransactions #-}
 
 computeTax :: ( MonadError FMCException m
               , Loggable m
@@ -707,4 +697,4 @@ computeTax = do
              <> "%) given tax data: "
              <> (T.pack $ show td))
   return  (total,rate)
-
+{-# INLINEABLE computeTax #-}

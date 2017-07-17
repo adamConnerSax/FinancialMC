@@ -228,6 +228,8 @@ doBaseRule (Sweep acctName) _ = do
     cashPos <- use $ getFinState.fsCashFlow
     let trade = Transaction acctName NormalTrade cashPos
     appendAndReturn (RuleOutput [trade] []) ()
+{-# INLINE doBaseRule #-}
+
 
 makeCashToInvestmentSweepRule::AccountName->AccountName->MoneyValue->MoneyValue->BaseRule
 makeCashToInvestmentSweepRule from to min max = BaseRule "CashToInvestmentSweep" (CashToInvestmentSweep from to min max)

@@ -19,12 +19,10 @@ module FinancialMC.Core.FinApp
          LogLevel(..)
        , PathState (..)
        , pattern PathState
---       , HasPathState (..)
        , stepState
        , stepEnv
        , zoomPathState
        , ReadOnly (..)
---       , ReadsStepEnv (..)
        , Loggable (log)
        , execPathStack
        , execPPathStack
@@ -81,10 +79,11 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
-{-
-data PathState s e = PathState { _stepState :: !s, _stepEnv :: !e } deriving (Show)
+
+data PathState s e = MkPathState { _stepState :: !s, _stepEnv :: !e } deriving (Show)
 makeClassy ''PathState
--}
+
+{-
 type PathState s e = (s, e)
 
 stepState :: Lens' (PathState s e) s
@@ -92,22 +91,12 @@ stepState = _1
 
 stepEnv :: Lens' (PathState s e) e
 stepEnv = _2
+-}
 
-pattern PathState s e = (s, e)
+pattern PathState s e = MkPathState s e
 
 zoomPathState :: Lens' s1 s2 -> Lens' e1 e2 -> Lens' (PathState s1 e1) (PathState s2 e2)
 zoomPathState ls le = lens (\(PathState s e) -> PathState (view ls s) (view le e)) (\(PathState s1 e1) (PathState s2 e2) -> PathState (set ls s2 s1) (set le e2 e1))
-
-{-
-zoomPathState :: Lens' s1 s2 -> Lens' e1 e2 -> Lens' (PathState s1 e1) (PathState s2 e2)
-zoomPathState ls le = lens (\(s, e) -> ((view ls s), (view le e))) (\(s1, e1) (s2, e2) -> ((set ls s2 s1), (set le e2 e1)))
-
-
-class ReadsStepEnv s e where
-  getEnv :: Getter (PathState s e) e
-  default getEnv :: HasPathState s e e => Getter (PathState s e) e
-  getEnv = stepEnv
--}
 
 newtype BasePathStack s m a =
   BasePathStack { unBasePathStack :: StateT s m a }
@@ -155,14 +144,6 @@ instance PathStackable s (PathStack FMCException s) where
 
 newtype PPathStack s a =
   PPathStack { unPPathStack :: BasePathStack s (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadState s)
-
-{-
-instance MonadIO (PPathStack s) where
-  liftIO  = PPathStack . liftIO
-
-instance MonadThrow (PPathStack s) where
-  throwM  = liftIO . throwM
--}
 
 instance PathStackable s (PPathStack s) where
   asPathStack = PPathStack . hoist lift . hoist eitherToIO

@@ -1,11 +1,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 module BenchEngine
   (
     benchEngineIO
   ) where
 
 import           BenchTypes
-import           FinancialMC.Base           (PathSummary)
+import           FinancialMC.Base           (PathState, pattern PathState,
+                                             PathSummary)
 import           FinancialMC.Core.Utilities (FMCException)
 import           FinancialMC.Internal       (PathStack, computeTax, doChecks,
                                              doTax, evolveMCS, execPathStack)
@@ -14,7 +16,7 @@ import           Control.Monad              (replicateM_)
 import           Criterion
 import           Data.Maybe                 (fromJust)
 
-runEngineFunction :: BenchPathState -> PathStack FMCException BenchCS BenchFE x -> PathSummary
+runEngineFunction :: BenchPathState -> PathStack FMCException (PathState BenchCS BenchFE) x -> PathSummary
 runEngineFunction ps0 ef = do
   fromJust . getSummaryS  $ execPathStack ef ps0
 

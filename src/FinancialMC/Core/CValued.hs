@@ -83,10 +83,11 @@ asERMV c (CVMV x c' f)
   | otherwise = do
       e <- use getExchangeRateFunction
       return $! MoneyValue (f e c c' x) c
+{-# INLINE asERMV #-}
 
 asCERMV :: (MonadState s m, ReadsExchangeRateFunction s, ReadsCurrency s) => CVD -> m MoneyValue
 asCERMV a = use getCurrency >>= flip asERMV a
-
+{-# INLINE asCERMV #-}
 
 -- This is here so that calculations using 0 and all in same ccy can stay in simple form.
 mvZero::Currency->CVD
@@ -98,4 +99,4 @@ asERFReader (CVS x) = return x
 asERFReader (CVEV f) = do
   e <- use getExchangeRateFunction
   return $! f e
-{-# INLINABLE asERFReader #-}
+{-# INLINE asERFReader #-}

@@ -104,7 +104,7 @@ class Evolvable a where
 
 evolveWithin :: (EvolveC s rm m, MonadResult EvolveOutput m, Evolvable a, TR.Traversable t) => b -> Lens' b (t a) -> m b
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
-
+{-# INLINE evolveWithin #-}
 
 applyTax :: ( MonadError FMCException m
             , MonadState s m
@@ -114,6 +114,7 @@ applyTax (TaxAmount tt y) =
   let taxFlow = addTaxableFlow tt y
       onError = throwing _Other "Can't call applyTax with a -ve number."
   in if MV.isNonNegative y then taxFlow else onError
+{-# INLINE applyTax #-}
 
 {-
 applyTax ::( MonadError FMCException m
@@ -135,7 +136,7 @@ applyDeduction (TaxAmount tt y) =
   let taxFlow = addDeductibleFlow tt y
       errorAction = throwing _Other "Can't call applyTax with a -ve number."
   in if MV.isNonNegative y then taxFlow else errorAction
-
+{-# INLINE applyDeduction #-}
 --
 
 applyFlowAndTax :: ( MonadError FMCException m
@@ -144,6 +145,7 @@ applyFlowAndTax :: ( MonadError FMCException m
                    , HasCashFlow s
                    , ReadsExchangeRateFunction s) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndTax x ta =   addCashFlow x >> applyTax ta
+{-# INLINE applyFlowAndTax #-}
 
 applyFlowAndDeduction :: ( MonadError FMCException m
                          , MonadState s m
@@ -151,6 +153,7 @@ applyFlowAndDeduction :: ( MonadError FMCException m
                          , HasCashFlow s
                          , ReadsExchangeRateFunction s) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndDeduction x ta = addCashFlow x >> applyDeduction ta
+{-# INLINE applyFlowAndDeduction #-}
 
 applyFlow :: ( MonadError FMCException m
              , MonadState s m
@@ -164,6 +167,7 @@ applyFlow (OnlyTaxed ta) = applyTax ta
 applyFlow (OnlyDeductible ta) = applyDeduction ta
 applyFlow (PartiallyTaxed x ta) = applyFlowAndTax x ta
 applyFlow (PartiallyDeductible x ta) = applyFlowAndDeduction x ta
+{-# INLINE applyFlow #-}
 
 applyFlows :: ( MonadError FMCException m
               , MonadState s m
@@ -171,6 +175,7 @@ applyFlows :: ( MonadError FMCException m
               , HasCashFlow s
               , ReadsExchangeRateFunction s) => [FlowResult] -> m ()
 applyFlows = mapM_ applyFlow
+{-# INLINE applyFlows #-}
 
 applyAccum :: ( MonadError FMCException m
               , MonadState s m
@@ -178,14 +183,14 @@ applyAccum :: ( MonadError FMCException m
               , ReadsExchangeRateFunction s) => AccumResult -> m ()
 applyAccum (AddTo name amt) = addToAccumulator' name amt
 applyAccum (Zero name)      = zeroAccumulator name
-
+{-# INLINE applyAccum #-}
 
 applyAccums :: ( MonadError FMCException m
                , MonadState s m
                , HasAccumulators s
                , ReadsExchangeRateFunction s) => [AccumResult] -> m ()
 applyAccums  = mapM_ applyAccum
-
+{-# INLINE applyAccums #-}
 
 -- ought to be able to replace HasTaxData, HasCashFlow and HasAccumulators with HasFinState.  THey are isomorphic.  But how?
 applyEvolveResult :: ( MonadError FMCException m
@@ -198,6 +203,7 @@ applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyFlows flows
   applyAccums accums
   return $! a
+{-# INLINE applyEvolveResult #-}
 
 -- ought to be able to replace HasTaxData, HasCashFlow and HasAccumulators with HasFinState.  THey are isomorphic.  But how?
 evolveAndApply :: ( Evolvable a
@@ -208,3 +214,4 @@ evolveAndApply :: ( Evolvable a
 evolveAndApply x = do
   x <- runResultT $ evolve x
   applyEvolveResult x
+{-# INLINE evolveAndApply #-}

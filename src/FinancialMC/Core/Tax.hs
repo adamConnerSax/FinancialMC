@@ -325,7 +325,7 @@ fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm 
       rateER = CV.asERFReader rate'
       totalER = CV.asERMV ccy total'
   liftM2 (,) totalER rateER
-
+{-# INLINE fullTaxCV #-}
 
 
 inflateTaxBrackets :: Double -> TaxBrackets -> TaxBrackets    

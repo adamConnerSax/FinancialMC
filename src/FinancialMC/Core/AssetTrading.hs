@@ -36,12 +36,12 @@ import           Prelude                        hiding ((*>), (<*))
 import           Control.Lens                   (set, (^.), use)
 import           Control.Monad.Reader           (ask)
 import           Data.Monoid                    ((<>))
---import           Control.Monad.Catch (SomeException)
 
 --refuses all trades, current default for liabilities
 -- gives back original asset and zero spent, zero cap gain
 noTrade:: TradeAppC s m => a -> m a
 noTrade = return
+{-# INLINE noTrade #-}
 
 type AssetTrader s m a = IsAsset a => TradeFunction s m a
 type AssetLiquidator s m a = IsAsset a => LiquidateFunction s m a
@@ -50,7 +50,7 @@ type AccountTrader s m a = TradeAppC s m => Account a -> TradeType -> MoneyValue
 --useful default for most assets
 defaultAssetBuySellF :: AssetTrader s m a
 defaultAssetBuySellF = buySellAssetHelper
-
+{-# INLINE defaultAssetBuySellF #-}
 
 buySellAssetHelper :: AssetTrader s m a
 buySellAssetHelper target aTp tTp am = do
@@ -61,7 +61,7 @@ buySellAssetHelper target aTp tTp am = do
     [((am' |>| CV.mvZero (assetCurrency target)),CV.toCS $ buyAsset target aTp tTp am),
      ((CV.cvNegate am' |<| target'),CV.toCS $ sellAsset target aTp tTp (MV.negate am))]
     (CV.toCS $ liquidateAsset target aTp tTp)
-
+{-# INLINE buySellAssetHelper #-}
 
 nullAssetTradeF :: AssetTrader s m a
 nullAssetTradeF a _ _ _ = return a
@@ -76,7 +76,7 @@ nonCapital flows = flows' where
 
 defaultNonCapitalAssetBuySellF :: AssetTrader s m a
 defaultNonCapitalAssetBuySellF a aTp tTp am = adjust (return . nonCapital) $ defaultAssetBuySellF a aTp tTp am
-
+{-# INLINE defaultNonCapitalAssetBuySellF #-}
 
 getCapGain :: Currency -> [FlowResult] -> CV.CVD
 getCapGain ccy flows = foldl (|+|) (CV.mvZero ccy) cgs where
@@ -105,7 +105,7 @@ liquidateOnlyBuySellF a aTp tTp am = do
          else noTrade a
 
   returnOnly a'
-
+{-# INLINE liquidateOnlyBuySellF #-}
 
 deductibleBuy :: TradeType -> AccountType -> Bool
 deductibleBuy OverFund _ = False
@@ -126,10 +126,11 @@ buyAsset a aTp tTp am = do
              else UnTaxed (MV.negate am)
 
   appendAndReturn [flow] a'
-
+{-# INLINE buyAsset #-}
 
 liquidateAsset :: AssetLiquidator s m a
 liquidateAsset a aTp tTp = sellAsset a aTp tTp (assetValue a)
+{-# INLINE liquidateAsset #-}
 
 retirementAccount :: AccountType -> Bool
 retirementAccount A401k   = True
@@ -184,7 +185,7 @@ sellAsset a aTp tTp am = do
         | otherwise                  = PartiallyTaxed proceeds (TaxAmount CapitalGain capGain)
 
   appendAndReturn [flow] a'
-
+{-# INLINE sellAsset #-}
 
 tradeAccount :: IsAsset a => AccountTrader s m a
 tradeAccount acct@(Account _ aTp ccy as) tTp am = do
@@ -198,4 +199,4 @@ tradeAccount acct@(Account _ aTp ccy as) tTp am = do
       trades =  zip as amts
   newAssets <- mapM (\(a,amt')->tradeAsset a aTp tTp amt') trades -- flows get added here
   returnOnly $ set acAssets newAssets acct
-
+{-# INLINE tradeAccount #-}

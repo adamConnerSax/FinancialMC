@@ -1,14 +1,14 @@
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE ConstraintKinds       #-}
+{-# LANGUAGE DeriveAnyClass        #-}
+{-# LANGUAGE DeriveGeneric         #-}
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE DeriveAnyClass #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ConstraintKinds #-}
-{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TupleSections         #-}
+{-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module FinancialMC.Builders.RateModels (
     IsRateModelFactor
   , BaseRateModelFactor (Fixed,Normal)
@@ -18,22 +18,28 @@ module FinancialMC.Builders.RateModels (
   , RateModelFactorC
   ) where
 
-import FinancialMC.Core.Utilities (eitherToIO)
-import FinancialMC.Core.Rates (IsRateModel(..),RateType(..),
-                               applyModel, RSource, ReturnType(Stock),
-                               Rate,showRateAsPct,RateType(..),isRateType,RateTag(..),RateTable(..),defaultRateTable,RateModelC)
+import           FinancialMC.Core.Rates     (IsRateModel (..), RSource, Rate,
+                                             RateModelC, RateTable (..),
+                                             RateTag (..), RateType (..),
+                                             RateType (..), ReturnType (Stock),
+                                             applyModel, defaultRateTable,
+                                             isRateType, showRateAsPct)
+import           FinancialMC.Core.Utilities (eitherToIO)
 
 
-import Control.Monad (foldM)
-import Control.Monad.State.Strict (State,get,put,runState,MonadState)
-import qualified Data.Random as Rand --(sample,Normal(Normal),MonadRandom)
-import Data.Random.Source.PureMT (newPureMT)
-import GHC.Generics (Generic)
+import           Control.Monad              (foldM)
+import           Control.Monad.State.Strict (MonadState, State, get, put,
+                                             runState)
+import qualified Data.Random                as Rand
+import           Data.Random.Source.PureMT  (newPureMT)
+import           GHC.Generics               (Generic)
 
-import Data.Aeson (ToJSON(toJSON),FromJSON(parseJSON),genericToJSON,Value(Object),object,(.:),(.=))
+import           Data.Aeson                 (FromJSON (parseJSON),
+                                             ToJSON (toJSON), Value (Object),
+                                             genericToJSON, object, (.:), (.=))
 
-import Data.Aeson.Types (defaultOptions,Options(..))
-import Data.Maybe (fromMaybe)
+import           Data.Aeson.Types           (Options (..), defaultOptions)
+import           Data.Maybe                 (fromMaybe)
 
 type RateModelFactorC m = (MonadState RSource m, Rand.MonadRandom m)
 
@@ -55,28 +61,28 @@ instance Show BaseRateModelFactor where
 
 instance IsRateModelFactor BaseRateModelFactor where
   rateModelFactorF f@(Fixed rate) = return (rate, f)
-  rateModelFactorF n@(Normal mean var) = (,n) <$> Rand.sample (Rand.Normal mean var) 
+  rateModelFactorF n@(Normal mean var) = (,n) <$> Rand.sample (Rand.Normal mean var)
   rateModelFactorF (LogNormal mean var mMuS) = logNormalRateModelF mean var mMuS
 
 -- smart constructor
-makeLogNormalFactor::Double->Double->BaseRateModelFactor
+makeLogNormalFactor :: Double -> Double -> BaseRateModelFactor
 makeLogNormalFactor mean var = LogNormal mean var Nothing
 
-logNormalParams::Double->Double->(Double,Double)
+logNormalParams :: Double -> Double -> (Double, Double)
 logNormalParams mean vol = (mu,s) where
   m2 = mean*mean
   v = vol*vol
   mu = log (m2/sqrt (v+m2))
   s = sqrt (log (1.0 + (v/m2)))
 
-logNormalRateModelF::RateModelFactorC m=>Double->Double->Maybe (Double,Double)->m (Rate,BaseRateModelFactor)    
+logNormalRateModelF :: RateModelFactorC m => Double -> Double -> Maybe (Double,Double) -> m (Rate,BaseRateModelFactor)
 logNormalRateModelF mean vol mMuS= do
   let (mu,s) = fromMaybe (logNormalParams mean vol) mMuS
   x <- Rand.sample (Rand.Normal mu s)
   return  (exp x, LogNormal mean vol (Just (mu,s)))
 
 
-applyFactor::(IsRateModelFactor rmf,RateModelC m)=>RateTag->rmf->m rmf
+applyFactor :: (IsRateModelFactor rmf, RateModelC m) => RateTag -> rmf -> m rmf
 applyFactor tag factor = do
   (rates,src) <- get
   let ((newRate,newF),newSrc) = runState (rateModelFactorF factor) src
@@ -101,12 +107,12 @@ instance Show rmf=>Show (BaseRateModel rmf) where
   show (GroupedModel rType factor) = "Same single-factor for type=" ++ show rType ++ "=>" ++ show factor
 
 instance IsRateModelFactor rmf=>IsRateModel (BaseRateModel rmf) where
-  rateModelF = baseRateModelF 
+  rateModelF = baseRateModelF
 
 
-baseRateModelF::IsRateModelFactor rmf=>RateModelC m=>BaseRateModel rmf->m (BaseRateModel rmf)
+baseRateModelF :: (IsRateModelFactor rmf, RateModelC m) => BaseRateModel rmf -> m (BaseRateModel rmf)
 baseRateModelF s@(SingleFactorModel tag factor) = applyFactor tag factor >> return s
-baseRateModelF (ListModel models) = ListModel <$> mapM rateModelF models 
+baseRateModelF (ListModel models) = ListModel <$> mapM rateModelF models
 baseRateModelF (SameModel rType rmf) = do
   (rates,_) <- get
   let keys = filter (isRateType rType) (rKeys rates)
@@ -119,7 +125,7 @@ baseRateModelF (GroupedModel rType rmf) = do
   let newRates = foldl (\table key->(rSet table) key newRate) rates keys
   put (newRates,newSrc)
   return $! GroupedModel rType rmf -- why isn't this newF ??
-  
+
 
 {-
 listModelF::RateModelC m=>[RateModel]->m RateModel
@@ -158,10 +164,10 @@ instance EnvFromJSON e RateModelFactor=>EnvFromJSON e SingleFactorModel where
   envParseJSON = genericEnvParseJSON defaultOptions { fieldLabelModifier = drop 3}
 
 
-                         
+
 
 instance IsRateModel SingleFactorModel where
-  rateModelF (SingleFactorModel tag factor) = factorModelF tag factor 
+  rateModelF (SingleFactorModel tag factor) = factorModelF tag factor
 
 data ListModel = ListModel  { lmModels::[RateModel] } deriving (Generic)
 
@@ -175,7 +181,7 @@ instance HasParsers e RateModel=>EnvFromJSON e ListModel where
   envParseJSON = genericEnvParseJSON defaultOptions { fieldLabelModifier = drop 2 }
 
 
-        
+
 instance IsRateModel ListModel where
   rateModelF (ListModel models) = listModelF models
 
@@ -191,7 +197,7 @@ instance EnvFromJSON e RateModelFactor=>EnvFromJSON e SameFactorModel where
 
 
 instance IsRateModel SameFactorModel where
-  rateModelF (SameFactorModel rType factor) = sameFactorModelF rType factor 
+  rateModelF (SameFactorModel rType factor) = sameFactorModelF rType factor
 
 data GroupedFactorModel = GroupedFactorModel { gfType::RateType, gfFactor::RateModelFactor } deriving (Generic)
 
@@ -214,46 +220,46 @@ testF::IO ()
 testF = do
   src<-newPureMT
   let rt = defaultRateTable
-      srm = SingleFactorModel (Return Stock) $ makeLogNormalFactor 0.005 0.002 
+      srm = SingleFactorModel (Return Stock) $ makeLogNormalFactor 0.005 0.002
       grm = SameModel IsReturn $ Normal 0 0.1
       mrm = ListModel [srm, grm]
-  rt' <- eitherToIO $ applyModel (rt,src) srm  
+  rt' <- eitherToIO $ applyModel (rt,src) srm
   rt'' <- eitherToIO $ applyModel (rt,src) grm
   rt''' <- eitherToIO $ applyModel (rt,src) mrm
   print rt
   print $ fst $ snd rt'
   print $ fst(snd rt'' )
   print $ (fst.snd) rt'''
-  
+
 
 {-
 instance IsRateFactor LogNormalRateModelFactor where
   rateFactorF (LogNormalRateModelFactor mean vol mMu mS) = logNormalRateModelF mean vol mMu mS
 
-    
+
 data FixedRateModelFactor = FixedRateModelFactor { fRate::Rate } deriving (Generic,ToJSON,FromJSON)
 
 instance TypeNamed FixedRateModelFactor
 
 fixedRateModelF::RateFactorC m=>Rate->m (Rate,RateModelFactor)
 fixedRateModelF x = return (x, MkRateModelFactor $ FixedRateModelFactor x)
-  
+
 instance IsRateFactor FixedRateModelFactor where
   rateFactorF (FixedRateModelFactor r) = fixedRateModelF r
-  
+
 data NormalRateModelFactor = NormalRateModelFactor {nMean::Double, nVol::Double } deriving (Show,Generic,ToJSON,FromJSON)
 
-instance TypeNamed NormalRateModelFactor 
+instance TypeNamed NormalRateModelFactor
 
 normalRateModelF::RateFactorC m=>Double->Double->m (Rate,RateModelFactor)
 normalRateModelF mean vol = do
   x <- sample (Normal mean vol)
-  return (x,MkRateModelFactor $ NormalRateModelFactor mean vol) 
-  
+  return (x,MkRateModelFactor $ NormalRateModelFactor mean vol)
+
 instance IsRateFactor NormalRateModelFactor where
   rateFactorF (NormalRateModelFactor mean vol) = normalRateModelF mean vol
-  
- 
+
+
 data LogNormalRateModelFactor = LogNormalRateModelFactor { lnMean::Double, lnVol::Double, lnMu::Maybe Double, lnS::Maybe Double } deriving (Generic)
 
 
@@ -262,7 +268,7 @@ instance ToJSON LogNormalRateModelFactor where
   toJSON (LogNormalRateModelFactor m v _ _) = object [ "lnMean" .= m, "lnVol" .= v]
 
 instance FromJSON LogNormalRateModelFactor where
-  parseJSON (Object v) = (\x y -> LogNormalRateModelFactor x y Nothing Nothing) <$> v .: "lnMean" <*> v .: "lnVol" 
+  parseJSON (Object v) = (\x y -> LogNormalRateModelFactor x y Nothing Nothing) <$> v .: "lnMean" <*> v .: "lnVol"
   parseJSON _          = fail "LogNormalRateModelFactor: non-object"
 
 instance TypeNamed LogNormalRateModelFactor
@@ -270,7 +276,7 @@ instance TypeNamed LogNormalRateModelFactor
 -}
 
 {-
-data RateModelFactor where 
+data RateModelFactor where
   MkRateModelFactor::(TypeNamed a, IsRateFactor a, ToJSON a)=> a->RateModelFactor
 
 instance JSON_Existential RateModelFactor where
@@ -278,7 +284,7 @@ instance JSON_Existential RateModelFactor where
   containedJSON (MkRateModelFactor a) = toJSON a
 
 instance ToJSON RateModelFactor where
-  toJSON = existentialToJSON 
+  toJSON = existentialToJSON
 
 instance HasParsers e RateModelFactor => EnvFromJSON e RateModelFactor where
   envParseJSON = parseJSON_Existential

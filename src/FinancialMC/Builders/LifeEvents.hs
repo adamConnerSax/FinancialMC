@@ -97,7 +97,7 @@ doBaseLifeEvent (BaseLifeEvent (LifeEventCore name y)
       taxExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " property tax")) tax Annually (Starting y)) DeductibleExpense
       maintExpense = convertF $ BaseFlow (FlowCore (T.append pName (T.pack " maintenance.")) maint Annually (Starting y)) Expense
   appendAndReturn (LifeEventOutput [pAccount] [cashExpense,insExpense,taxExpense,maintExpense]) ()
-
+{-# INLINE doBaseLifeEvent #-}
 
     
 printPropertyPurchase::LifeEventCore->PropertyPurchase->String

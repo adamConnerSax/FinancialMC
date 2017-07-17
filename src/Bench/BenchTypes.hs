@@ -45,7 +45,7 @@ setupEnv :: FilePath -> String -> IO BenchPathState
 setupEnv cFile cfgName = do
   (configInfo, configMap) <- loadConfigurations ccs Nothing (C.UnparsedFile cFile)
   (_,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
-  return (cs0, fe0)
+  return $ PathState cs0 fe0
 
 getSummaryS :: Either FMCException BenchPathState -> Maybe PathSummary
 getSummaryS x = case x of
