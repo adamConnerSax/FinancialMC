@@ -109,104 +109,106 @@ class ReadsStepEnv s e where
   getEnv = stepEnv
 -}
 
-newtype BasePathStack s e m a =
-  BasePathStack { unBasePathStack :: StateT (PathState s e) m a }
-  deriving (Functor, Applicative, Monad, MonadTrans, MFunctor, MonadIO, MonadState (PathState s e))
+newtype BasePathStack s m a =
+  BasePathStack { unBasePathStack :: StateT s m a }
+  deriving (Functor, Applicative, Monad, MonadTrans, MFunctor, MonadIO, MonadState s)
 
-deriving instance MB.MonadBase b m => MB.MonadBase b (BasePathStack s e m)
+deriving instance MB.MonadBase b m => MB.MonadBase b (BasePathStack s m)
 
-instance MTC.MonadTransControl (BasePathStack s e) where
-  type StT (BasePathStack s e) a = MTC.StT (StateT (PathState s e)) a
+instance MTC.MonadTransControl (BasePathStack s) where
+  type StT (BasePathStack s) a = MTC.StT (StateT s) a
   liftWith = MTC.defaultLiftWith BasePathStack unBasePathStack
   restoreT = MTC.defaultRestoreT BasePathStack
 
-instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BasePathStack s e m) where
-  type StM (BasePathStack s e m) a = MTC.ComposeSt (BasePathStack s e) m a
+instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BasePathStack s m) where
+  type StM (BasePathStack s m) a = MTC.ComposeSt (BasePathStack s) m a
   liftBaseWith = MTC.defaultLiftBaseWith
   restoreM = MTC.defaultRestoreM
 
-instance (MTC.MonadBaseControl m (BasePathStack s e m), MonadError err m) => MonadError err (BasePathStack s e m) where
+instance (MTC.MonadBaseControl m (BasePathStack s m), MonadError err m) => MonadError err (BasePathStack s m) where
   throwError = lift . throwError
   catchError action handler = MTC.control $ \run -> catchError (run action) (run . handler)
 
-instance MonadThrow m => MonadThrow (BasePathStack s e m) where
+instance MonadThrow m => MonadThrow (BasePathStack s m) where
   throwM = lift . throwM
 
-type instance Zoomed (BasePathStack s e m)  = Zoomed (StateT (PathState s e) m)
+type instance Zoomed (BasePathStack s m)  = Zoomed (StateT s m)
 
-instance Monad m => Zoom (BasePathStack s1 e1 m) (BasePathStack s2 e2 m) (PathState s1 e1) (PathState s2 e2) where
+instance Monad m => Zoom (BasePathStack s1 m) (BasePathStack s2 m) s1 s2 where
   zoom l = BasePathStack . zoom l . unBasePathStack
 
 class (MonadReader s (ReaderM s m), MonadState s m) => ReadOnly s m where
   type ReaderM s m :: * -> *
   makeReadOnly :: ReaderM s m a -> m a
 
-instance Monad m => ReadOnly (PathState s e) (BasePathStack s e m) where
-  type ReaderM (PathState s e) (BasePathStack s e m) = ReaderT (PathState s e) m
+instance Monad m => ReadOnly s (BasePathStack s m) where
+  type ReaderM s (BasePathStack s m) = ReaderT s m
   makeReadOnly = BasePathStack . readOnly
 
-type PathStack err s e = BasePathStack s e (Either err)
+type PathStack err s = BasePathStack s (Either err)
 
 class (MonadError FMCException m, Loggable m, MonadState s m) => PathStackable s m | m->s where
-  asPathStack :: (s ~ (PathState x y)) => PathStack FMCException x y a -> m a
+  asPathStack :: PathStack FMCException s a -> m a
 
-instance PathStackable (PathState s e) (PathStack FMCException s e) where
+instance PathStackable s (PathStack FMCException s) where
   asPathStack = id
 
-newtype PPathStack s e a =
-  PPathStack { unPPathStack :: BasePathStack s e (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadState (PathState s e))
+newtype PPathStack s a =
+  PPathStack { unPPathStack :: BasePathStack s (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadState s)
 
-instance MonadIO (PPathStack s e) where
+{-
+instance MonadIO (PPathStack s) where
   liftIO  = PPathStack . liftIO
 
-instance MonadThrow (PPathStack s e) where
+instance MonadThrow (PPathStack s) where
   throwM  = liftIO . throwM
+-}
 
-instance PathStackable (PathState s e) (PPathStack s e) where
+instance PathStackable s (PPathStack s) where
   asPathStack = PPathStack . hoist lift . hoist eitherToIO
 
-runProducer :: BasePathStack s e (Producer LogEntry IO) a -> BasePathStack s e IO a
-runProducer bpsp = BasePathStack $ StateT $ \ps -> runEffect . (>-> printLog [minBound..]) $ runStateT (unBasePathStack bpsp) ps
+runProducer :: BasePathStack s (Producer LogEntry IO) a -> BasePathStack s IO a
+runProducer bpsp = BasePathStack $ StateT $ \x -> runEffect . (>-> printLog [minBound..]) $ runStateT (unBasePathStack bpsp) x
 
-instance MonadError FMCException (PPathStack s e) where
+instance MonadError FMCException (PPathStack s) where
   throwError = throwM . toException -- because PPathStackR has a MonadThrow instance
   catchError action handler = PPathStack $ hoist lift $ MTC.control $ \run -> let f = run . runProducer in catch (f $ unPPathStack action) (f . unPPathStack . handler)
 
-type instance Zoomed (PPathStack s e) = Zoomed (StateT (PathState s e) (Producer LogEntry IO))
+type instance Zoomed (PPathStack s) = Zoomed (StateT s (Producer LogEntry IO))
 
-instance Zoom (PPathStack s1 e1) (PPathStack s2 e2) (PathState s1 e1) (PathState s2 e2) where
+instance Zoom (PPathStack s1) (PPathStack s2) s1 s2 where
   zoom l = PPathStack . zoom l . unPPathStack
 
-newtype PPathStackR s e a =
-  PPathStackR { unPPathStackR :: ReaderT (PathState s e) (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadReader (PathState s e))
+newtype PPathStackR s a =
+  PPathStackR { unPPathStackR :: ReaderT s (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadReader s)
 
-runProducerR :: ReaderT (PathState s e) (Producer LogEntry IO) a -> ReaderT (PathState s e) IO a
-runProducerR r = ReaderT $ \ps -> runEffect . (>-> printLog [minBound..]) $ runReaderT r ps
+runProducerR :: ReaderT e (Producer LogEntry IO) a -> ReaderT e IO a
+runProducerR r = ReaderT $ \x -> runEffect . (>-> printLog [minBound..]) $ runReaderT r x
 
-instance MonadError FMCException (PPathStackR s e) where
+instance MonadError FMCException (PPathStackR s) where
   throwError = throwM . toException -- because PPathStackR has a MonadThrow instance
   catchError action handler = PPathStackR $ hoist lift $ MTC.control $ \run -> let f = run . runProducerR in catch (f $ unPPathStackR action) (f . unPPathStackR . handler)
 
-instance ReadOnly (PathState s e) (PPathStack s e) where
-  type ReaderM (PathState s e) (PPathStack s e) = PPathStackR s e
+instance ReadOnly s (PPathStack s) where
+  type ReaderM s (PPathStack s) = PPathStackR s
   makeReadOnly = PPathStack . BasePathStack . readOnly . unPPathStackR
 
-execBasePathStack :: Monad m => BasePathStack s e m a -> PathState s e -> m (PathState s e)
+execBasePathStack :: Monad m => BasePathStack s m a -> s -> m s
 execBasePathStack bps s0 = execStateT (unBasePathStack bps) s0
 
-execPathStack :: PathStack err s e a -> PathState s e -> Either err (PathState s e)
+execPathStack :: PathStack err s a -> s -> Either err s
 execPathStack ps = execBasePathStack ps
 
-execPPathStack :: PPathStack s e a -> [LogLevel] -> PathState s e -> IO (PathState s e)
+execPPathStack :: PPathStack s a -> [LogLevel] -> s -> IO s
 execPPathStack pps logDetails ps = runEffect . ( >-> printLog logDetails) $ execBasePathStack (unPPathStack pps) ps
 
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
-instance Loggable (PathStack err s e) where
+instance Loggable (PathStack err s) where
   log _ _ = return ()
 
-instance Loggable (PPathStack s e) where
+instance Loggable (PPathStack s) where
   log ll = PPathStack . lift . faLog ll
 
 instance (Monad m, Loggable m) => Loggable (ResultT o m) where

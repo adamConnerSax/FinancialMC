@@ -54,7 +54,7 @@ import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
 import           FinancialMC.Core.TradingTypes    (Transaction (..))
 
 import           FinancialMC.Core.FinApp          (LogLevel (..),
-                                                   Loggable (log),
+                                                   Loggable (log), PathStack,
                                                    PathStackable (..),
                                                    PathState (..),
                                                    pattern PathState,
@@ -474,14 +474,16 @@ checkEndingCash' = zoom cashFlowExchangeRateFunction $ makeReadOnly $ do
 
 
 doChecks :: ( MonadError FMCException m
-            , CashFlowExchangeRateFunctionZoom s m0 m
+--            , CashFlowExchangeRateFunctionZoom s m0 m
             , MonadState s m
             , PathStackable s m
             , s ~ (PathState x y)
             , ReadsExchangeRateFunction s
             , ReadsFinState s) => m ()
 doChecks = asPathStack $ do
-  checkEndingCash'
+  checkEndingCash
+{-# SPECIALIZE doChecks :: PathStack FMCException s e () #-}
+
 
 {-
 morphInnerRuleStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
