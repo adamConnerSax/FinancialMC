@@ -77,7 +77,7 @@ instance Show BaseFlowDetails where
   show fl@SalaryPayment = "Salary [" ++ show (baseFlowDirection fl) ++ "]->"
   show fl@(RentalIncome md) = "Rental income [" ++ show (baseFlowDirection fl) ++ "; max annual deduction=" ++ show md ++ "]->"
 
-data BaseFlow = BaseFlow { _bfCore :: !FlowCore, _bfDetails :: !BaseFlowDetails} deriving (Generic,ToJSON,FromJSON)
+data BaseFlow = BaseFlow { _bfCore :: FlowCore, _bfDetails :: BaseFlowDetails} deriving (Generic,ToJSON,FromJSON)
 makeClassy ''BaseFlow
 
 instance Show BaseFlow where

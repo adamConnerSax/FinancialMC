@@ -41,6 +41,7 @@ import           FinancialMC.Core.MoneyValue (Currency(..))
 
 import           Data.Random.Source.PureMT (PureMT)
 import           Data.Maybe (fromJust)
+import Data.Foldable (foldl')
 import           Control.Lens (Lens', Getter, use)
 import           Control.Monad.State.Strict (runStateT,MonadState)
 import           Control.Monad.Reader (MonadReader(ask))
@@ -50,6 +51,7 @@ import           Text.Printf (printf,PrintfArg)
 
 import           Data.Aeson (ToJSON(..),FromJSON(..))
 import           GHC.Generics (Generic)
+
 import Control.Monad.Except (MonadError)
 --import Control.Monad.Error.Lens (throwing)
 import Data.Monoid ((<>))
@@ -116,7 +118,7 @@ fromMap :: M.Map RateTag a -> RateTable a
 fromMap m = RateTable (`M.lookup` m) (\t r->fromMap $ M.insert t r m) (M.toList m) (M.keys m)    
 
 setToDefaults :: RateTable Double -> RateTable Double
-setToDefaults t = foldl (\tbl key-> (rSet tbl) key (defaultRates key)) t allTags 
+setToDefaults t = foldl' (\tbl key-> (rSet tbl) key (defaultRates key)) t allTags 
 
 defaultRateTable :: RateTable Double
 defaultRateTable = setToDefaults $ fromMap M.empty

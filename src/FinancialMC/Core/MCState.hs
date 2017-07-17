@@ -195,10 +195,10 @@ data DatedSummary = DatedSummary { _dsYear :: !Year, _dsSummary :: !FSSummary } 
 
 data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
                                   , _mcsCashFlows:: !(CashFlows fl)
-                                  , _mcsLifeEvents:: ![le]
-                                  , _mcsRules:: ![ru]
-                                  , _mcsSweep:: !ru
-                                  , _mcsTaxTrade:: !ru
+                                  , _mcsLifeEvents:: [le]
+                                  , _mcsRules:: [ru]
+                                  , _mcsSweep:: ru
+                                  , _mcsTaxTrade:: ru
                                   , _mcsPathSummary:: !PathSummary
                                   , _mcsHistory:: ![DatedSummary]
                                   }
@@ -235,7 +235,7 @@ instance (Evolvable a, Evolvable fl)=>Evolvable (MCState a fl le ru) where
     newBS <- evolve bs
     newCFD <- evolve cfd
     let newMCS = MCState newBS newCFD les rs sr ttr ps hist
-    return $! newMCS
+    return $ newMCS
   {-# INLINE evolve #-}
       
 instance (Show le,Show fl, Show ru, Show a)=>Show (MCState a fl le ru) where
