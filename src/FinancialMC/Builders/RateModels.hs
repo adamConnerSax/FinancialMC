@@ -20,10 +20,11 @@ module FinancialMC.Builders.RateModels (
 
 import           FinancialMC.Core.Rates     (IsRateModel (..), RSource, Rate,
                                              RateModelC, RateTable (..),
+                                             RateTableUpdater (..),
                                              RateTag (..), RateType (..),
-                                             RateType (..), ReturnType (Stock),
-                                             applyModel, defaultRateTable,
-                                             isRateType, showRateAsPct)
+                                             ReturnType (Stock),
+                                             defaultRateTable, isRateType,
+                                             runModel, showRateAsPct)
 import           FinancialMC.Core.Utilities (eitherToIO)
 
 
@@ -41,13 +42,14 @@ import           Data.Aeson                 (FromJSON (parseJSON),
 import           Data.Aeson.Types           (Options (..), defaultOptions)
 import           Data.Maybe                 (fromMaybe)
 
+
 type RateModelFactorC m = (MonadState RSource m, Rand.MonadRandom m)
 
 type BaseRateModelT = BaseRateModel BaseRateModelFactor
 
 -- factors
 class IsRateModelFactor a where
-  rateModelFactorF::RateModelFactorC m=>a->m (Rate,a)
+  rateModelFactorF :: RateModelFactorC m => a -> m (Rate, a)
 
 
 data BaseRateModelFactor = Fixed !Rate |
@@ -63,6 +65,11 @@ instance IsRateModelFactor BaseRateModelFactor where
   rateModelFactorF f@(Fixed rate) = return (rate, f)
   rateModelFactorF n@(Normal mean var) = (,n) <$> Rand.sample (Rand.Normal mean var)
   rateModelFactorF (LogNormal mean var mMuS) = logNormalRateModelF mean var mMuS
+
+--data SimpleRateTableUpdater a = S.Set (RateTag, a)
+
+instance RateTableUpdater SimpleRateTableUpdater a where
+  updateRateTable newRates = 
 
 -- smart constructor
 makeLogNormalFactor :: Double -> Double -> BaseRateModelFactor

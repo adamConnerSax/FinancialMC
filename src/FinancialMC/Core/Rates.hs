@@ -31,7 +31,8 @@ module FinancialMC.Core.Rates
        , Rate
        , showRateAsPct
        , IsRateModel(..)
-       , applyModel
+       , runModel
+       , RateTableUpdater (..)
        , RateModelC
        ) where
 
@@ -45,7 +46,6 @@ import Data.Foldable (foldl')
 import           Control.Lens (Lens', Getter, use)
 import           Control.Monad.State.Strict (runStateT,MonadState)
 import           Control.Monad.Reader (MonadReader(ask))
---import           Control.Monad.Catch (MonadThrow)
 import qualified Data.Map.Lazy as M
 import           Text.Printf (printf,PrintfArg)
 
@@ -53,7 +53,6 @@ import           Data.Aeson (ToJSON(..),FromJSON(..))
 import           GHC.Generics (Generic)
 
 import Control.Monad.Except (MonadError)
---import Control.Monad.Error.Lens (throwing)
 import Data.Monoid ((<>))
 import qualified Data.Text as T
 
@@ -75,7 +74,6 @@ allTags = [Interest x | x<-[(minBound::InterestType)..]] ++
           
 data RateType = IsInterest | IsReturn | IsInflation | IsExchange  deriving (Enum,Eq,Ord,Show,Read,Generic,ToJSON,FromJSON)
 
-
 isRateType :: RateType->RateTag->Bool
 isRateType IsInterest (Interest _) = True
 isRateType IsReturn (Return _) = True
@@ -86,7 +84,7 @@ isRateType _ _ = False
 type Rate = Double
 type RSource = PureMT
 
-defaultRates :: RateTag->Rate
+defaultRates :: RateTag -> Rate
 defaultRates (Interest _) = 0.01
 defaultRates (Return _) = 0.05
 defaultRates (Inflation _) = 0.015
@@ -131,11 +129,14 @@ rateRequest rTag = use getRateTable >>= flip throwingLookup rTag
 
 type RateModelC m = (MonadState (RateTable Rate, RSource) m, MonadError FMCException m)
 
-applyModel :: (IsRateModel r, MonadError FMCException m) => (RateTable Rate, RSource) -> r -> m (r, (RateTable Rate, RSource))
-applyModel (rates,src) model = runStateT (rateModelF model) (rates,src)
+class Monoid (u a) => RateTableUpdater u a where
+  updateRateTable :: u a -> RateTable a -> RateTable a
+  
+runModel :: (IsRateModel r, RateTableUpdater u Rate, MonadError FMCException m) => (RateTable Rate, RSource) -> r -> m (r, (u Rate, RSource))
+runModel (rates,src) model = runStateT (rateModelF model rates) (mempty ,src)
 
-class IsRateModel a where
-  rateModelF :: (MonadState (RateTable Rate, RSource) m, MonadError FMCException m) => a -> m a
+class IsRateModel r where
+  rateModelF :: (RateTableUpdater u Rate, MonadState (u Rate, RSource) m, MonadError FMCException m) => r -> RateTable Rate -> m r
 
 {-
 data RateModel where

@@ -44,7 +44,8 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState, HasAccumula
                                                    zeroAccumulator)
 import           FinancialMC.Core.Flow            (IsFlow)
 import           FinancialMC.Core.Rates           (HasRateTable (rateTable),
-                                                   IsRateModel, Rate,
+                                                   IsRateModel, RSource, Rate,
+                                                   RateTableUpdater (updateRateTable),
                                                    ReadsRateTable)
 import           FinancialMC.Core.Result          (Result (Result), ResultT,
                                                    runResultT)
@@ -376,8 +377,10 @@ updateRates :: ( IsRateModel rm
 updateRates pMT = do
   fe <- use finEnv
 --  model <- use $ finEnv.feRateModel
-  (newModel,(newRates,newPMT)) <- applyModel (fe ^. feRates, pMT) (fe ^. feRateModel)
-  finEnv %= (feRates .~ newRates) . (feRateModel .~ newModel)
+  (newModel, (rateTableUpdater, newPMT)) <- runModel (fe ^. feRates, pMT) (fe ^. feRateModel)
+  finEnv.feRates %= updateRateTable rateTableUpdater
+  finEnv.feRateModel .= feRateModel
+--  finEnv %= (feRates .~ newRates) . (feRateModel .~ newModel)
 --  finEnv.feRates .= newRates
 --  finEnv.feRateModel .= newModel
   return $! newPMT
