@@ -26,8 +26,8 @@ import           FinancialMC.Core.MCState                    (CombinedState (..)
 import qualified FinancialMC.Core.MoneyValue                 as MV
 import           FinancialMC.Core.Rates                      (IsRateModel, Rate,
                                                               RateTable,
-                                                              applyModel,
-                                                              defaultRateTable)
+                                                              defaultRateTable,
+                                                              runModel)
 import           FinancialMC.Core.Rule                       (IsRule,
                                                               ruleAccounts)
 import           FinancialMC.Core.Tax                        (FilingStatus,
@@ -184,7 +184,7 @@ buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs
 
 makeStartingRates :: (IsRateModel rm, MonadError FMCException m)=>rm->m (RateTable Rate)
 makeStartingRates rateDefaultModel = do
-  (_,(startingRates,_)) <- applyModel (defaultRateTable,pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
+  (_,(startingRates,_)) <- runModel defaultRateTable (pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
   return startingRates
 
 buildInitialState::IsRateModel rm=>C.InitialFS a fl le ru->TaxRules->RateTable Rate->rm->

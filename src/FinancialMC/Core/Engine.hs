@@ -43,10 +43,6 @@ import           FinancialMC.Core.FinancialStates (FinEnv, FinState, HasAccumula
                                                    updateExchangeRateFunction,
                                                    zeroAccumulator)
 import           FinancialMC.Core.Flow            (IsFlow)
-import           FinancialMC.Core.Rates           (HasRateTable (rateTable),
-                                                   IsRateModel, RSource, Rate,
-                                                   RateTableUpdater (updateRateTable),
-                                                   ReadsRateTable)
 import           FinancialMC.Core.Result          (Result (Result), ResultT,
                                                    runResultT)
 import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
@@ -87,9 +83,12 @@ import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction, HasExch
                                                    MoneyValue (MoneyValue),
                                                    ReadsExchangeRateFunction (getExchangeRateFunction))
 import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Rates           (InflationType (TaxBracket),
+import           FinancialMC.Core.Rates           (HasRateTable (rateTable),
+                                                   InflationType (TaxBracket),
+                                                   IsRateModel, RSource, Rate,
                                                    RateTag (Inflation),
-                                                   applyModel, rateRequest)
+                                                   ReadsRateTable, rateRequest,
+                                                   runModel)
 import           FinancialMC.Core.Tax             (HasTaxData (taxData),
                                                    ReadsTaxData (getTaxData),
                                                    TaxData, TaxDataAppC,
@@ -226,7 +225,6 @@ instance ReadsMCState (FMCPathState a fl le ru rm) a fl le ru
 
 instance HasCombinedState (FMCPathState a fl le ru rm) a fl le ru where
   combinedState = stepState
-
 
 -- special ones for zooming
 --instance HasCashFlowExchangeRateFunction (FMCPathState a fl le ru rm) where
@@ -371,18 +369,15 @@ updateCurrentDate = (finEnv.feCurrentDate) += 1
 {-# INLINEABLE updateCurrentDate #-}
 
 updateRates :: ( IsRateModel rm
-                , MonadError FMCException m
-                , MonadState s m
-                , HasFinEnv s rm) => PureMT -> m PureMT
+               , MonadError FMCException m
+               , MonadState s m
+               , HasFinEnv s rm) => PureMT -> m PureMT
 updateRates pMT = do
   fe <- use finEnv
 --  model <- use $ finEnv.feRateModel
-  (newModel, (rateTableUpdater, newPMT)) <- runModel (fe ^. feRates, pMT) (fe ^. feRateModel)
-  finEnv.feRates %= updateRateTable rateTableUpdater
-  finEnv.feRateModel .= feRateModel
---  finEnv %= (feRates .~ newRates) . (feRateModel .~ newModel)
---  finEnv.feRates .= newRates
---  finEnv.feRateModel .= newModel
+  (newModel, (newRates, newPMT)) <- runModel (fe ^. feRates) pMT (fe ^. feRateModel)
+  finEnv.feRates .= newRates
+  finEnv.feRateModel .= newModel
   return $! newPMT
 {-# INLINEABLE updateRates #-}
 

@@ -20,9 +20,8 @@ module FinancialMC.Builders.RateModels (
 
 import           FinancialMC.Core.Rates     (IsRateModel (..), RSource, Rate,
                                              RateModelC, RateTable (..),
-                                             RateTableUpdater (..),
                                              RateTag (..), RateType (..),
-                                             ReturnType (Stock),
+                                             ReturnType (Stock), allRateTags,
                                              defaultRateTable, isRateType,
                                              runModel, showRateAsPct)
 import           FinancialMC.Core.Utilities (eitherToIO)
@@ -40,8 +39,10 @@ import           Data.Aeson                 (FromJSON (parseJSON),
                                              genericToJSON, object, (.:), (.=))
 
 import           Data.Aeson.Types           (Options (..), defaultOptions)
+import qualified Data.Foldable              as F
 import           Data.Maybe                 (fromMaybe)
-
+import qualified Data.Sequence              as Seq
+import qualified Data.Set                   as S
 
 type RateModelFactorC m = (MonadState RSource m, Rand.MonadRandom m)
 
@@ -66,10 +67,6 @@ instance IsRateModelFactor BaseRateModelFactor where
   rateModelFactorF n@(Normal mean var) = (,n) <$> Rand.sample (Rand.Normal mean var)
   rateModelFactorF (LogNormal mean var mMuS) = logNormalRateModelF mean var mMuS
 
---data SimpleRateTableUpdater a = S.Set (RateTag, a)
-
-instance RateTableUpdater SimpleRateTableUpdater a where
-  updateRateTable newRates = 
 
 -- smart constructor
 makeLogNormalFactor :: Double -> Double -> BaseRateModelFactor
@@ -88,50 +85,55 @@ logNormalRateModelF mean vol mMuS= do
   x <- Rand.sample (Rand.Normal mu s)
   return  (exp x, LogNormal mean vol (Just (mu,s)))
 
-
-applyFactor :: (IsRateModelFactor rmf, RateModelC m) => RateTag -> rmf -> m rmf
-applyFactor tag factor = do
-  (rates,src) <- get
-  let ((newRate,newF),newSrc) = runState (rateModelFactorF factor) src
-      newRates = rSet rates tag newRate
-  put (newRates,newSrc)
+-- In the case where your rate is just a single factor, no external dependence on previous rate, no dependence on other factors
+factorToRateUpdate :: (IsRateModelFactor rmf, RateModelC m) => RateTag -> rmf -> m rmf
+factorToRateUpdate tag factor = do
+  (updates, src) <- get
+  let ((newRate, newF), newSrc) = runState (rateModelFactorF factor) src
+      newUpdates = updates Seq.|> (tag, newRate)
+  put (newUpdates, newSrc)
   return newF
 
-
-
 -- models, all based on factors
-
+-- ListModel treats the models as independent and feeds each the same current rates, not the current plus updates from
+-- models earlier in the list.  But each should be independent of the others. Which should be enforced :(
 data BaseRateModel rmf = SingleFactorModel RateTag rmf |
                          ListModel [BaseRateModel rmf] |
                          SameModel RateType rmf |
-                         GroupedModel RateType rmf deriving (Generic,ToJSON,FromJSON)
+                         GroupedModel RateType rmf deriving (Generic, ToJSON, FromJSON)
 
 
-instance Show rmf=>Show (BaseRateModel rmf) where
+instance Show rmf => Show (BaseRateModel rmf) where
   show (SingleFactorModel tag factor) = "Single Factor for " ++ show tag ++ "=>" ++ show factor
   show (ListModel models) = "List: " ++ show models
   show (SameModel rType factor) = "Same single-factor model for type=" ++ show rType ++"=>" ++ show factor
   show (GroupedModel rType factor) = "Same single-factor for type=" ++ show rType ++ "=>" ++ show factor
 
-instance IsRateModelFactor rmf=>IsRateModel (BaseRateModel rmf) where
+instance IsRateModelFactor rmf => IsRateModel (BaseRateModel rmf) where
+  updatedRates = baseRateModelUpdatedRates
   rateModelF = baseRateModelF
 
-
-baseRateModelF :: (IsRateModelFactor rmf, RateModelC m) => BaseRateModel rmf -> m (BaseRateModel rmf)
-baseRateModelF s@(SingleFactorModel tag factor) = applyFactor tag factor >> return s
-baseRateModelF (ListModel models) = ListModel <$> mapM rateModelF models
-baseRateModelF (SameModel rType rmf) = do
-  (rates,_) <- get
-  let keys = filter (isRateType rType) (rKeys rates)
-  newRMF <- foldM (flip applyFactor) rmf keys
+baseRateModelF :: (IsRateModelFactor rmf, RateModelC m) => RateTable Rate -> BaseRateModel rmf -> m (BaseRateModel rmf)
+baseRateModelF _ s@(SingleFactorModel tag factor) = factorToRateUpdate tag factor >> return s
+baseRateModelF curRates (ListModel models) = ListModel <$> mapM (rateModelF curRates) models
+baseRateModelF curRates (SameModel rType rmf) = do
+  let keys = filter (isRateType rType) (rKeys curRates)
+  newRMF <- foldM (flip factorToRateUpdate) rmf keys
   return $! SameModel rType newRMF
-baseRateModelF (GroupedModel rType rmf) = do
-  (rates,src) <- get
-  let ((newRate,newF),newSrc) = runState (rateModelFactorF rmf) src
-      keys = filter (isRateType rType) (rKeys rates)
-  let newRates = foldl (\table key->(rSet table) key newRate) rates keys
-  put (newRates,newSrc)
-  return $! GroupedModel rType rmf -- why isn't this newF ??
+baseRateModelF curRates (GroupedModel rType rmf) = do
+  (updates, src) <- get
+  let ((newRate, newF), newSrc) = runState (rateModelFactorF rmf) src
+      keys = filter (isRateType rType) (rKeys curRates)
+  let newUpdates = F.foldl' (\seq key-> seq Seq.|> (key, newRate)) updates keys
+  put (newUpdates, newSrc)
+  return $! GroupedModel rType newF
+
+
+baseRateModelUpdatedRates :: IsRateModelFactor rmf => BaseRateModel rmf -> S.Set RateTag
+baseRateModelUpdatedRates (SingleFactorModel tag _) = S.singleton tag
+baseRateModelUpdatedRates (ListModel models) = F.foldl' (\s m -> S.union s $ updatedRates m) S.empty models
+baseRateModelUpdatedRates (SameModel rType _) = S.fromList $ filter (isRateType rType) allRateTags
+baseRateModelUpdatedRates (GroupedModel rType _) = S.fromList $ filter (isRateType rType) allRateTags
 
 
 {-
@@ -221,7 +223,7 @@ instance EnvFromJSON e RateModelFactor=>EnvFromJSON e GroupedFactorModel where
 instance IsRateModel GroupedFactorModel where
   rateModelF (GroupedFactorModel rType factor) = groupedFactorModelF rType factor
 
--}
+
 
 testF::IO ()
 testF = do
@@ -237,7 +239,7 @@ testF = do
   print $ fst $ snd rt'
   print $ fst(snd rt'' )
   print $ (fst.snd) rt'''
-
+-}
 
 {-
 instance IsRateFactor LogNormalRateModelFactor where
