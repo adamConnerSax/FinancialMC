@@ -43,19 +43,20 @@ import qualified Data.Foldable              as F
 import           Data.Maybe                 (fromMaybe)
 import qualified Data.Sequence              as Seq
 import qualified Data.Set                   as S
+import Control.Arrow ((***))
 
-type RateModelFactorC m = (MonadState RSource m, Rand.MonadRandom m)
+--type RateModelFactorC m = ({-MonadState RSource m,-} Rand.MonadRandom m)
 
 type BaseRateModelT = BaseRateModel BaseRateModelFactor
 
 -- factors
 class IsRateModelFactor a where
-  rateModelFactorF :: RateModelFactorC m => a -> m (Rate, a)
+  rateModelFactorF :: a -> Rand.RVar (a, Rate)
 
 
 data BaseRateModelFactor = Fixed !Rate |
                            Normal !Rate !Rate |
-                           LogNormal !Rate !Rate !(Maybe (Double,Double)) deriving (Generic,ToJSON,FromJSON)
+                           LogNormal !Rate !Rate !(Maybe (Double, Double)) deriving (Generic, ToJSON, FromJSON)
 
 instance Show BaseRateModelFactor where
   show (Fixed rate) = "Fixed: " ++ showRateAsPct rate
@@ -63,8 +64,8 @@ instance Show BaseRateModelFactor where
   show (LogNormal mean var _) = "LogNormal: mean=" ++ showRateAsPct mean ++ "; var=" ++ showRateAsPct var
 
 instance IsRateModelFactor BaseRateModelFactor where
-  rateModelFactorF f@(Fixed rate) = return (rate, f)
-  rateModelFactorF n@(Normal mean var) = (,n) <$> Rand.sample (Rand.Normal mean var)
+  rateModelFactorF f@(Fixed rate) = return (f, rate)
+  rateModelFactorF n@(Normal mean var) = (n,) <$> (Rand.rvar $ Rand.Normal mean var))
   rateModelFactorF (LogNormal mean var mMuS) = logNormalRateModelF mean var mMuS
 
 
@@ -73,26 +74,33 @@ makeLogNormalFactor :: Double -> Double -> BaseRateModelFactor
 makeLogNormalFactor mean var = LogNormal mean var Nothing
 
 logNormalParams :: Double -> Double -> (Double, Double)
-logNormalParams mean vol = (mu,s) where
-  m2 = mean*mean
-  v = vol*vol
-  mu = log (m2/sqrt (v+m2))
-  s = sqrt (log (1.0 + (v/m2)))
+logNormalParams mean vol = (mu, s) where
+  m2 = mean * mean
+  v = vol * vol
+  mu = log (m2 / sqrt (v + m2))
+  s = sqrt (log (1.0 + (v / m2)))
 
-logNormalRateModelF :: RateModelFactorC m => Double -> Double -> Maybe (Double,Double) -> m (Rate,BaseRateModelFactor)
-logNormalRateModelF mean vol mMuS= do
+logNormalRateModelF :: Double -> Double -> Maybe (Double, Double) -> Rand.RVar (BaseRateModelFactor, Rate)
+logNormalRateModelF mean vol mMuS = do
   let (mu,s) = fromMaybe (logNormalParams mean vol) mMuS
-  x <- Rand.sample (Rand.Normal mu s)
-  return  (exp x, LogNormal mean vol (Just (mu,s)))
+  x <- Rand.rvar (Rand.Normal mu s)
+  return  (LogNormal mean vol (Just (mu,s)), exp x)
 
 -- In the case where your rate is just a single factor, no external dependence on previous rate, no dependence on other factors
 factorToRateUpdate :: (IsRateModelFactor rmf, RateModelC m) => RateTag -> rmf -> m rmf
 factorToRateUpdate tag factor = do
   (updates, src) <- get
-  let ((newRate, newF), newSrc) = runState (rateModelFactorF factor) src
+  let((newF, newRate), newSrc) = Rand.sampleState (rateModelFactorF factor) src 
+--  let ((newRate, newF), newSrc) = runState (rateModelFactorF factor) src
       newUpdates = updates Seq.|> (tag, newRate)
   put (newUpdates, newSrc)
   return newF
+
+factorToRateUpdate :: IsRateModelFactor rmf => RateTag -> rmf -> Rand.RVar (newF, RateUpdates Rate)
+factorToRateUpdate = do
+  (newF, newRate) <- rateModelFactorF rmf
+  return (newF, Seq.singleton (tag, newRate))
+
 
 -- models, all based on factors
 -- ListModel treats the models as independent and feeds each the same current rates, not the current plus updates from
@@ -113,9 +121,9 @@ instance IsRateModelFactor rmf => IsRateModel (BaseRateModel rmf) where
   updatedRates = baseRateModelUpdatedRates
   rateModelF = baseRateModelF
 
-baseRateModelF :: (IsRateModelFactor rmf, RateModelC m) => RateTable Rate -> BaseRateModel rmf -> m (BaseRateModel rmf)
-baseRateModelF _ s@(SingleFactorModel tag factor) = factorToRateUpdate tag factor >> return s
-baseRateModelF curRates (ListModel models) = ListModel <$> mapM (rateModelF curRates) models
+baseRateModelF :: IsRateModelFactor rmf => RateTable Rate -> BaseRateModel rmf -> Rand.RVarT (BaseRateModel rmf, RateUpdates Rate)
+baseRateModelF _ s@(SingleFactorModel tag factor) = factorToRateUpdate tag factor 
+baseRateModelF curRates (ListModel models) = fmap (ListModel *** (join . Seq.fromList)) $ traverse (rateModelF curRates) models
 baseRateModelF curRates (SameModel rType rmf) = do
   let keys = filter (isRateType rType) (rKeys curRates)
   newRMF <- foldM (flip factorToRateUpdate) rmf keys

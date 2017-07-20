@@ -47,6 +47,7 @@ import           Control.Monad.State.Strict  (MonadState, runStateT)
 import           Data.Foldable               (foldl')
 import qualified Data.Map.Lazy               as M
 import           Data.Maybe                  (fromJust)
+import qualified Data.Random as R
 import           Data.Random.Source.PureMT   (PureMT)
 import           Text.Printf                 (PrintfArg, printf)
 
@@ -138,23 +139,27 @@ throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not foun
 rateRequest :: (MonadError FMCException m, MonadState s m, ReadsRateTable s a) => RateTag -> m a
 rateRequest rTag = use getRateTable >>= flip throwingLookup rTag
 
-runModel :: (IsRateModel r, MonadError FMCException m) => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
+runModel :: (IsRateModel r, MonadRandom m, RandomSource m RSource, MonadError FMCException m)
+  => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
 runModel curRates randomSrc model = do
   (newModel, (updates, newSrc)) <- runStateT (rateModelF curRates model) (Seq.empty, randomSrc)
   return $ (newModel, (rBulkUpdate curRates updates, newSrc))
 
---runModel2 :: (IsRateModel r, MonadError FMCException m) => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
---runModel2 curRates randomSrc model = runStateT (rateModelF curRates model) (mempty, randomSrc)
+runModel' :: (IsRateModel r, MonadRandom m, RandomSource m RSource, MonadError FMCException m)
+  => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
+runModel' curRates rSource model = do
+  ((newModel, updates), newSrc) <- R.sampleStateT (rateModelF curRates model) rSource
+  return $ (newModel, (rBulkUpdate curRates updates, newSrc))
 
 -- models will absorb sub-models.  So if you model stock returns as a function of bond returns, you will make a model for both.  And if a third thing depends on either you will include it as well.  So that the final set of models will be non-overlapping in affected rates.
 -- models which include other models can verify this at runtime, using the updatedRates typeclass function.
 -- can I force verification? Where?
 
-type RateModelC m = (MonadState (RateUpdates Rate, RSource) m)
+--type RateModelC m = (RandomSource m RSource, MonadState (RateUpdates Rate, RSource) m)
 
 class IsRateModel r where
   updatedRates :: r -> S.Set RateTag
-  rateModelF :: RateModelC m => RateTable Rate -> r -> m r
+  rateModelF :: RateTable Rate -> r -> R.RVar (r, RateUpdates Rate)
 
 {-
 data RateModel where

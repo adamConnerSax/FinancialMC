@@ -1,69 +1,74 @@
 {-# LANGUAGE GADTs #-}
-module Probability
+module FinancialMC.Core.Probability
   (
   ) where
 
 import Data.Random as R
 import Data.Random.RVar as R
-import Data.Random.Distribution.Normal (Normal (..), normal)
-import Data.Random.Distribution.Uniform (Uniform (..), uniform)
-import Data.Random.Distribution.Gamma (Gamma (..), normal)
+import Data.Random.Distribution.Normal (Normal (Normal), normal)
+import Data.Random.Distribution.Uniform (Uniform (Uniform), uniform)
+import Data.Random.Distribution.Gamma (Gamma (Gamma), gamma)
+import Data.Random.Distribution.Bernoulli (Bernoulli (Bernoulli), bernoulli)
+import Data.Random.Distribution.Categorical (Categorical, categorical, fromList, fromWeightedList)
+import Data.Random.Sample (Sampleable (sampleFrom), sample, sampleState, sampleStateT)
 import Data.Random.Source.PureMT as MT
+import Data.Random.Source (RandomSource)
 
 import Control.Monad.State (evalState)
 import Control.Arrow (first)
 
-newtype Prob = Prob { toDouble :: Double } deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Floating, Random)
+newtype Prob = Prob { toDouble :: Double } deriving (Show, Eq, Ord, Num, Fractional, Real, RealFrac, Floating {-, Random -})
 
-newtype Explicit a = Explicit { toList :: [(a, Prob)] }
-
-instance Functor Explicit where
-  fmap h = Explicit . fmap (first h) . toList 
-
-instance Applicative Explicit where
-  pure x = Explicit [(x, 1)]
-  (Explicit fs) <*> (Explicit as) = Explicit $ [(f a, pf * pa) | (f, pf) <- fs, (a, pa) <- as]
-
-instance Monad Explicit where
-  return = pure
-  (Explicit as) >>= f = Explicit [ (a, pa * pb) | (a, pa) <- as, (b, pb) <- toList (f a)] 
-
-
+{-  
 class Sampleable d where
-  sample :: RandomGen g => g -> d a -> a
-
-data Dist a where
-  Return :: a -> Dist a
-  Bind :: Dist b -> (b -> Dist a) -> Dist a
-  Primitive :: Sampleable d => d a -> Dist a
-  Conditional :: (a -> Prob) -> Dist a -> Dist a
+  sample :: RandomGen g => g -> d a -> m a
+-}
   
-condition :: (a -> prob) -> Dist a -> Dist a
+data Dist m a where
+  Return :: a -> Dist m a
+  Bind :: Dist m b -> (b -> Dist m a) -> Dist m a
+  Primitive :: Sampleable d m a => d a -> Dist m a
+  Conditional :: (a -> Prob) -> Dist m a -> Dist m a
+  
+condition :: (a -> Prob) -> Dist m a -> Dist m a
 condition = Conditional
 
-instance Functor Dist where
+instance Functor (Dist m) where
   fmap h da = Bind da (Return . h) -- liftM
 
-instance Functor Dist => Applicative Dist where
+instance Functor (Dist m) => Applicative (Dist m) where
   pure = Return
   (<*>) dfab da = Bind (fmap (\h -> fmap h da) dfab) id -- ap ?
   
-instance Applicative Dist => Monad Dist where
+instance Applicative (Dist m) => Monad (Dist m) where
   return = Return
   (>>=) = Bind
 
+-- Sampleable from random-fu
+-- sampleFrom :: RandomSource m s => s -> d a -> m a
+instance RandomSource m s => Sampleable (Dist m) m a where
+  sampleFrom s (Return x) = return x
+  sampleFrom s (Bind da f) = do
+    a <- sampleFrom s da
+    sampleFrom s (f a)
+  sampleFrom s (Primitive da) = sampleFrom s da
+
+{-
+-- Sampleable from monad-bayes
 instance Sampleable Dist where
   sample g (Return x) = x
-  sample g (Bind da f) = sample g1 y where
-    y = f (sample g2 d)
+  sample g (Bind da f) = sampleFrom g1 y where
+    y = f (sample g2 da)
     (g1, g2) = split g
   sample g (Primitive da) = sample g da
   sample g (Conditional f da) = undefined
-  
-sampleState = runState . R.sampleRVar
+-}
+
+
+--sampleState = runState . R.sampleRVar
 
 -- NB these Sampleable instances all throw away the new generator.  What's up with that?
-
+{-
 instance Sampleable [a] where
   sample g as = fst $ sampleState (R.randomElement as) g 
 
@@ -76,6 +81,10 @@ instance R.Distribution Normal a => Sampleable (Normal a) where
 instance R.Distribution Gamma a => Sampleable (Gamma a) where
   sample g (Gamma x y) = fst $ sampleState (gamma x y) g
 
+instance R.Distribution Bernoulli a => Sampleable (Bernoulli a) where
+  sample g (Bernoulli b) = fst $ sampleState (bernoulli b)
+-}
+
 uniformList :: [a] -> Dist a
 uniformList = Primitive
 
@@ -87,5 +96,14 @@ normal mean sd = Primitive (Normal mean sd)
 
 gamma :: (Floating a, Ord a, Distribution Normal a, Distribution StdUniform a) => a -> a -> Dist a
 gamma x y = Primitive (Gamma x y)
+
+bernoulli :: R.Distribution Bernoulli a => a -> Dist a
+bernoulli x = Primitive (Bernoulli x)
+
+categorical :: R.Distribution (Categorical Prob a) => [(Prob, a)] -> Dist a
+categorical probAs = Primitive (fromList probAs)
+
+categorical' :: R.Distribution (Categorical Prob a) => [(Prob, a)] -> Dist a
+categorical' weightedAs = Primitive (fromWeightedList weightedAs)
 
 
