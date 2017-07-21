@@ -23,6 +23,7 @@ module FinancialMC.Core.Rates
        , RateTable(..)
        , HasRateTable (..)
        , ReadsRateTable (..)
+       , RateUpdates
        , fromMap
        , setToDefaults
        , defaultRateTable -- defaultRateTable is map based
@@ -30,7 +31,7 @@ module FinancialMC.Core.Rates
        , RSource
        , Rate
        , showRateAsPct
-       , RateModelC
+--       , RateModelC
        , IsRateModel(..)
        , runModel
        , allRateTags
@@ -139,15 +140,17 @@ throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not foun
 rateRequest :: (MonadError FMCException m, MonadState s m, ReadsRateTable s a) => RateTag -> m a
 rateRequest rTag = use getRateTable >>= flip throwingLookup rTag
 
-runModel :: (IsRateModel r, MonadRandom m, RandomSource m RSource, MonadError FMCException m)
+{-
+runModel :: (IsRateModel r, R.MonadRandom m, RandomSource m RSource, MonadError FMCException m)
   => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
 runModel curRates randomSrc model = do
   (newModel, (updates, newSrc)) <- runStateT (rateModelF curRates model) (Seq.empty, randomSrc)
   return $ (newModel, (rBulkUpdate curRates updates, newSrc))
+-}
 
-runModel' :: (IsRateModel r, MonadRandom m, RandomSource m RSource, MonadError FMCException m)
+runModel :: (IsRateModel r, MonadError FMCException m)
   => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
-runModel' curRates rSource model = do
+runModel curRates rSource model = do
   ((newModel, updates), newSrc) <- R.sampleStateT (rateModelF curRates model) rSource
   return $ (newModel, (rBulkUpdate curRates updates, newSrc))
 
