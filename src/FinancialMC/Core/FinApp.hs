@@ -1,10 +1,12 @@
 {-# LANGUAGE ConstraintKinds            #-}
+{-# LANGUAGE DefaultSignatures          #-}
 {-# LANGUAGE DeriveFunctor              #-}
 {-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE FunctionalDependencies     #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE PatternSynonyms            #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
 {-# LANGUAGE StandaloneDeriving         #-}
@@ -15,37 +17,41 @@
 module FinancialMC.Core.FinApp
        (
          LogLevel(..)
---       , faLog
-       , toStepApp
-       , toPathApp
-       , zoomStepApp
-       , zoomStep
-       , magnifyStepApp
-       , zoomPathAppS
-       , zoomPathAppE
+       , PathState (..)
+       , pattern PathState
+       , stepState
+       , stepEnv
+       , zoomPathState
+       , ReadOnly (..)
        , Loggable (log)
-       , LoggableStepApp (..)
-       , LoggablePathApp (..)
-       , StepApp
-       , execPathApp
-       , execPPathApp
-       , taxDataApp2StepAppFSER
+       , execPathStack
+       , execPPathStack
+-- optimization
+       , PathStackable (..)
+-- only for Bench/Profiling
+       , BasePathStack (..)
+       , PathStack (..)
+       , PPathStack (..)
        ) where
+
+import           Prelude                          hiding (log)
 
 import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
                                                    HasFinEnv (..),
                                                    HasFinState (..))
 import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction)
-import           FinancialMC.Core.Tax             (TaxData, TaxDataApp)
+import           FinancialMC.Core.Result          (ResultT (..))
 import           FinancialMC.Core.Utilities       (AsFMCException, FMCException,
                                                    HasFMCException, eitherToIO,
                                                    multS, readOnly)
 
-import           Control.Lens                     (Identity, Lens', magnify,
-                                                   makeClassy, set, zoom, (^.))
-import           Control.Lens.Internal.Zoom       (Effect (..), Focusing (..))
-import           Control.Lens.Zoom                (Magnified (..), Magnify (..),
-                                                   Zoom (..), Zoomed (..))
+import           Control.Lens                     (Getter, Identity, Lens',
+                                                   lens, magnify, makeClassy,
+                                                   set, view, zoom, (^.), _1,
+                                                   _2)
+
+import           Control.Lens.Zoom                (Zoom (..), Zoomed)
+
 import           Control.Monad                    (unless, when)
 import qualified Control.Monad.Base               as MB
 import           Control.Monad.Catch              (MonadThrow (..),
@@ -53,11 +59,12 @@ import           Control.Monad.Catch              (MonadThrow (..),
                                                    toException)
 import           Control.Monad.Except             (MonadError (..))
 import           Control.Monad.Morph              (MFunctor, generalize, hoist)
-import           Control.Monad.Reader             (MonadReader, ReaderT, ask,
+import           Control.Monad.Reader             (MonadReader,
+                                                   ReaderT (ReaderT), ask,
                                                    runReaderT)
-import           Control.Monad.State.Strict       (MonadState, StateT,
-                                                   evalStateT, execStateT, get,
-                                                   put, runStateT)
+import           Control.Monad.State.Strict       (MonadState, StateT (StateT),
+                                                   execStateT, get, put,
+                                                   runStateT)
 import           Control.Monad.Trans              (MonadIO, MonadTrans, lift,
                                                    liftIO)
 import qualified Control.Monad.Trans.Control      as MTC
@@ -70,258 +77,123 @@ data LogLevel = Debug | Info   deriving (Enum, Show, Eq, Bounded)
 data LogEntry = LogEntry { _leLevel :: LogLevel, _leMsg :: Text }
 makeClassy ''LogEntry
 
-newtype BaseStepApp s e m a =
-  BaseStepApp { unBaseStepApp :: StateT s (ReaderT e m) a }
-  deriving (Functor, Applicative, Monad, MonadReader e, MonadState s)
 
-instance MFunctor (BaseStepApp s e) where
-  hoist f (BaseStepApp bsa) = BaseStepApp $ hoist (hoist f) bsa
+data PathState s e = MkPathState { _stepState :: !s, _stepEnv :: !e } deriving (Show)
+makeClassy ''PathState
 
-instance MonadTrans (BaseStepApp s e) where
-  lift  = BaseStepApp . lift . lift
-
-instance MonadIO m => MonadIO (BaseStepApp s e m) where
-  liftIO = lift . liftIO
-
-deriving instance MB.MonadBase b m => MB.MonadBase b (BaseStepApp s e m)
-
-instance MTC.MonadTransControl (BaseStepApp s e) where
-  type StT (BaseStepApp s e) a = MTC.StT (ReaderT e) (MTC.StT (StateT s) a)
-  liftWith = MTC.defaultLiftWith2 BaseStepApp unBaseStepApp
-  restoreT = MTC.defaultRestoreT2 BaseStepApp
-
-instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BaseStepApp s e m) where
-  type StM (BaseStepApp s e m) a = MTC.ComposeSt (BaseStepApp s e) m a
-  liftBaseWith = MTC.defaultLiftBaseWith
-  restoreM = MTC.defaultRestoreM
-
-instance (MTC.MonadBaseControl m (BaseStepApp s e m), MonadError err m) => MonadError err (BaseStepApp s e m) where
-  throwError = lift . throwError
-  catchError action handler = MTC.control $ \run -> catchError (run action) (run . handler)
-
-instance MonadThrow m => MonadThrow (BaseStepApp s e m) where
-  throwM = lift . throwM
-
-type instance Zoomed (BaseStepApp s e m) = Focusing (ReaderT e m)
-
-instance Monad m => Zoom (BaseStepApp s e m) (BaseStepApp t e m) s t where
-  zoom l (BaseStepApp n) = BaseStepApp (zoom l n)
-
-type instance Magnified (BaseStepApp s e m) = Effect m
-
--- really ??
-instance Monad m => Magnify (BaseStepApp s e1 m) (BaseStepApp s e2 m) e1 e2 where
-  magnify l (BaseStepApp n) = BaseStepApp $ do
-    s <- get
-    let original = evalStateT n s
-        magnified = magnify l original
-    a <- lift magnified
-    put s
-    return a
-
-zoomBaseStepApp :: Monad m => Lens' s2 s1 -> BaseStepApp s1 e m a -> BaseStepApp s2 e m a
-zoomBaseStepApp l = BaseStepApp . (zoom l) . unBaseStepApp
-
-magnifyBaseStepApp :: Monad m => Lens' e2 e1 -> BaseStepApp s e1 m a -> BaseStepApp s e2 m a
-magnifyBaseStepApp l = BaseStepApp . (hoist $ magnify l) . unBaseStepApp
-
-newtype StepApp err s e a =
-  StepApp { unStepApp :: BaseStepApp s e (Either err) a } deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
-
-instance MonadError err (StepApp err s e) where
-  throwError = StepApp . throwError
-  catchError action handler = StepApp $ catchError (unStepApp action) (unStepApp . handler)
-
---instance MonadThrow (StepApp SomeException s e) where
---  throwM  = StepApp . throwM
-
-type instance Zoomed (StepApp err s e) = Focusing (ReaderT e (Either err))
-
-instance Zoom (StepApp err s e) (StepApp err t e) s t where
-  zoom l (StepApp n) = StepApp (zoom l n)
-
-type instance Magnified (StepApp err s e) = Effect (Either err)
-
-instance Magnify (StepApp err s e1) (StepApp err s e2) e1 e2 where
-  magnify l (StepApp n) = StepApp (magnify l n)
-
-newtype PStepApp s e a =
-  PStepApp { unPStepApp :: Producer LogEntry (BaseStepApp s e IO) a } deriving (Functor, Applicative, Monad, MonadState s, MonadReader e)
-
-instance MonadIO (PStepApp s e) where
-  liftIO  = PStepApp . lift . liftIO
-
-instance MonadThrow (PStepApp s e) where
-  throwM  = liftIO . throwM
-
-instance MonadError FMCException (PStepApp s e) where
-  throwError = throwM . toException -- because PStepApp has a MonadThrow instance
-  catchError action handler = PStepApp $ do
-    let psaTobsa = runEffect . (>-> printLog [minBound..]) . unPStepApp -- log it all.  It's an error, after all.
-        ce a h = MTC.control $ \run -> catch (run a) (run . h) -- and use MonadBaseControl for the BaseStepApp lifting
-    lift $ ce (psaTobsa action) (psaTobsa . handler)
-
-type instance Zoomed (PStepApp s e) = Focusing (ReaderT e IO)
-
-instance Zoom (PStepApp s e) (PStepApp t e) s t where
-  zoom l (PStepApp n) = PStepApp (zoom l n)
 
 {-
-type instance Magnified (StepApp err s e) = Effect (Either err)
+type PathState s e = (s, e)
 
-instance Magnify (StepApp err s e1) (StepApp err s e2) e1 e2 where
-  magnify l (StepApp n) = StepApp (magnify l n)
+stepState :: Lens' (PathState s e) s
+stepState = _1
+>>>>>>> Try_HasClasses
+
+stepEnv :: Lens' (PathState s e) e
+stepEnv = _2
 -}
 
-zoomStepApp :: Lens' s2 s1 -> StepApp err s1 e a -> StepApp err s2 e a
-zoomStepApp l = StepApp . (zoomBaseStepApp l) . unStepApp
+pattern PathState s e = MkPathState s e
 
-magnifyStepApp :: Lens' e2 e1 -> StepApp err s e1 a -> StepApp err s e2 a
-magnifyStepApp l = StepApp . (magnifyBaseStepApp l) . unStepApp
+zoomPathState :: Lens' s1 s2 -> Lens' e1 e2 -> Lens' (PathState s1 e1) (PathState s2 e2)
+zoomPathState ls le = lens (\(PathState s e) -> PathState (view ls s) (view le e)) (\(PathState s1 e1) (PathState s2 e2) -> PathState (set ls s2 s1) (set le e2 e1))
 
-toStepApp :: StateT s (ReaderT e (Either err)) a -> StepApp err s e a
-toStepApp  = StepApp . BaseStepApp
+newtype BasePathStack s m a =
+  BasePathStack { unBasePathStack :: StateT s m a }
+  deriving (Functor, Applicative, Monad, MonadTrans, MFunctor, MonadIO, MonadState s)
 
-newtype BasePathApp s e m a =
-  BasePathApp { unBasePathApp :: StateT (s,e) m a }
-  deriving (Functor, Applicative, Monad, MonadState (s,e), MFunctor, MonadTrans)
+deriving instance MB.MonadBase b m => MB.MonadBase b (BasePathStack s m)
 
-instance MonadIO m => MonadIO (BasePathApp s e m) where
-  liftIO = lift . liftIO
+instance MTC.MonadTransControl (BasePathStack s) where
+  type StT (BasePathStack s) a = MTC.StT (StateT s) a
+  liftWith = MTC.defaultLiftWith BasePathStack unBasePathStack
+  restoreT = MTC.defaultRestoreT BasePathStack
 
-deriving instance MB.MonadBase b m => MB.MonadBase b (BasePathApp s e m)
-
-instance MTC.MonadTransControl (BasePathApp s e) where
-  type StT (BasePathApp s e) a = MTC.StT (StateT (s,e)) a
-  liftWith = MTC.defaultLiftWith BasePathApp unBasePathApp
-  restoreT = MTC.defaultRestoreT BasePathApp
-
-instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BasePathApp s e m) where
-  type StM (BasePathApp s e m) a = MTC.ComposeSt (BasePathApp s e) m a
+instance MTC.MonadBaseControl b m => MTC.MonadBaseControl b (BasePathStack s m) where
+  type StM (BasePathStack s m) a = MTC.ComposeSt (BasePathStack s) m a
   liftBaseWith = MTC.defaultLiftBaseWith
   restoreM = MTC.defaultRestoreM
 
-instance (MTC.MonadBaseControl m (BasePathApp s e m), MonadError err m) => MonadError err (BasePathApp s e m) where
+instance (MTC.MonadBaseControl m (BasePathStack s m), MonadError err m) => MonadError err (BasePathStack s m) where
   throwError = lift . throwError
   catchError action handler = MTC.control $ \run -> catchError (run action) (run . handler)
 
-lensFirst :: Lens' a b -> Lens' (a,x) (b,x)
-lensFirst l q (a,x) = (\(b,y) -> (set l b a,y)) <$> q (a ^. l,x)
+instance MonadThrow m => MonadThrow (BasePathStack s m) where
+  throwM = lift . throwM
 
-zoomBasePathAppS :: Monad m => Lens' s2 s1 -> BasePathApp s1 e m a -> BasePathApp s2 e m a
-zoomBasePathAppS l = BasePathApp . zoom (lensFirst l) . unBasePathApp  -- fmap (zoom (lensFirst l))
+type instance Zoomed (BasePathStack s m)  = Zoomed (StateT s m)
 
-lensSecond :: Lens' a b->Lens' (x,a) (x,b)
-lensSecond l q (x,a) = (\(y,b)->(y,set l b a)) <$> q (x, a ^. l)
+instance Monad m => Zoom (BasePathStack s1 m) (BasePathStack s2 m) s1 s2 where
+  zoom l = BasePathStack . zoom l . unBasePathStack
 
-zoomBasePathAppE :: Monad m => Lens' e2 e1 -> BasePathApp s e1 m a -> BasePathApp s e2 m a
-zoomBasePathAppE l = BasePathApp . zoom (lensSecond l) . unBasePathApp -- fmap (zoom (lensSecond l))
+class (MonadReader s (ReaderM s m), MonadState s m) => ReadOnly s m where
+  type ReaderM s m :: * -> *
+  makeReadOnly :: ReaderM s m a -> m a
 
-newtype PathApp err s e a =
-  PathApp { unPathApp :: BasePathApp s e (Either err) a} deriving (Functor, Applicative, Monad, MonadState (s,e))
+instance Monad m => ReadOnly s (BasePathStack s m) where
+  type ReaderM s (BasePathStack s m) = ReaderT s m
+  makeReadOnly = BasePathStack . readOnly
 
-instance MonadError err (PathApp err s e) where
-  throwError = PathApp . throwError
-  catchError action handler = PathApp $ catchError (unPathApp action) (unPathApp . handler)
+type PathStack err s = BasePathStack s (Either err)
 
-instance MonadIO (PPathApp s e) where
-  liftIO = PPathApp . lift . liftIO
+class (MonadError FMCException m, Loggable m, MonadState s m) => PathStackable s m | m->s where
+  asPathStack :: PathStack FMCException s a -> m a
 
---instance MonadThrow (PathApp SomeException s e) where
---  throwM = PathApp . lift . throwM
+instance PathStackable s (PathStack FMCException s) where
+  asPathStack = id
 
-newtype PPathApp s e a =
-  PPathApp { unPPathApp :: Producer LogEntry (BasePathApp s e IO) a} deriving (Functor, Applicative, Monad, MonadState (s,e))
+newtype PPathStack s a =
+  PPathStack { unPPathStack :: BasePathStack s (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadState s)
 
-instance MonadThrow (PPathApp s e) where
-  throwM = liftIO . throwM
+instance PathStackable s (PPathStack s) where
+  asPathStack = PPathStack . hoist lift . hoist eitherToIO
 
-instance MonadError FMCException (PPathApp s e) where
-  throwError = throwM . toException -- because PPathApp has a MonadThrow instance
-  catchError action handler = PPathApp $ do
-    let ppaTobpa = runEffect . (>-> printLog [minBound..]) . unPPathApp -- log it all.  It's an error, right?
-        ce a h = MTC.control $ \run -> catch (run a) (run . h) -- use MonadBaseControl to deal with lifiting in PPathApp
-    lift $ ce (ppaTobpa action) (ppaTobpa . handler)
+runProducer :: BasePathStack s (Producer LogEntry IO) a -> BasePathStack s IO a
+runProducer bpsp = BasePathStack $ StateT $ \x -> runEffect . (>-> printLog [minBound..]) $ runStateT (unBasePathStack bpsp) x
 
-zoomPathAppS :: Lens' s2 s1 -> PathApp err s1 e a -> PathApp err s2 e a
-zoomPathAppS l = PathApp . (zoomBasePathAppS l) . unPathApp
+instance MonadError FMCException (PPathStack s) where
+  throwError = throwM . toException -- because PPathStackR has a MonadThrow instance
+  catchError action handler = PPathStack $ hoist lift $ MTC.control $ \run -> let f = run . runProducer in catch (f $ unPPathStack action) (f . unPPathStack . handler)
 
-zoomPathAppE :: Lens' e2 e1 -> PathApp err s e1 a -> PathApp err s e2 a
-zoomPathAppE l = PathApp . (zoomBasePathAppE l) . unPathApp
+type instance Zoomed (PPathStack s) = Zoomed (StateT s (Producer LogEntry IO))
 
-toPathApp :: StateT (s,e) (Either err) a -> PathApp err s e a
-toPathApp = PathApp . BasePathApp
+instance Zoom (PPathStack s1) (PPathStack s2) s1 s2 where
+  zoom l = PPathStack . zoom l . unPPathStack
 
-execBasePathApp :: Monad m => BasePathApp s e m a -> s -> e -> m (s,e)
-execBasePathApp bpa st env = execStateT (unBasePathApp bpa) (st,env)
+newtype PPathStackR s a =
+  PPathStackR { unPPathStackR :: ReaderT s (Producer LogEntry IO) a } deriving (Functor, Applicative, Monad, MonadIO, MonadThrow, MonadReader s)
 
-execPathApp :: PathApp err s e a -> s -> e -> Either err (s,e)
-execPathApp app = execBasePathApp (unPathApp app)
+runProducerR :: ReaderT e (Producer LogEntry IO) a -> ReaderT e IO a
+runProducerR r = ReaderT $ \x -> runEffect . (>-> printLog [minBound..]) $ runReaderT r x
 
-execPPathApp :: PPathApp s e a -> [LogLevel] -> s -> e -> IO (s,e)
-execPPathApp app logDetails = execBasePathApp (runEffect (unPPathApp app >-> printLog logDetails))
+instance MonadError FMCException (PPathStackR s) where
+  throwError = throwM . toException -- because PPathStackR has a MonadThrow instance
+  catchError action handler = PPathStackR $ hoist lift $ MTC.control $ \run -> let f = run . runProducerR in catch (f $ unPPathStackR action) (f . unPPathStackR . handler)
 
-liftStepApp :: StepApp FMCException s e a -> PStepApp s e a
-liftStepApp = PStepApp . lift . hoist eitherToIO . unStepApp -- adds IO at bottom of stack and wraps in Producer
+instance ReadOnly s (PPathStack s) where
+  type ReaderM s (PPathStack s) = PPathStackR s
+  makeReadOnly = PPathStack . BasePathStack . readOnly . unPPathStackR
 
-liftPathApp :: PathApp FMCException s e a -> PPathApp s e a
-liftPathApp = PPathApp . lift . hoist eitherToIO . unPathApp
+execBasePathStack :: Monad m => BasePathStack s m a -> s -> m s
+execBasePathStack bps s0 = execStateT (unBasePathStack bps) s0
 
-baseStep2basePath :: Monad m => BaseStepApp s e m a -> BasePathApp s e m a
-baseStep2basePath = BasePathApp . multS . hoist readOnly . unBaseStepApp
+execPathStack :: PathStack err s a -> s -> Either err s
+execPathStack ps = execBasePathStack ps
+
+execPPathStack :: PPathStack s a -> [LogLevel] -> s -> IO s
+execPPathStack pps logDetails ps = runEffect . ( >-> printLog logDetails) $ execBasePathStack (unPPathStack pps) ps
 
 class Loggable m where
   log :: LogLevel -> Text -> m ()
 
-class (MonadError FMCException m, Loggable m, MonadState s m, MonadReader e m) => LoggableStepApp s e m where
-  type BaseStep s e m :: * -> *
-  stepLift :: BaseStep s e m a -> m a
-
-{-
-zoomStep :: LoggableStepApp s e m => Lens' s sInner -> BaseStep sInner e m -> m x
-zoomStep l = stepLift . zoomStepApp l
-
-zoomStep :: (LoggableStepApp s1 e m, LoggableStepApp s2 e n) => Lens' s1 s2 -> n a -> m a
-zoomStep l = zoomBaseStepApp
--}
-
-instance Loggable (StepApp err s e) where
+instance Loggable (PathStack err s) where
   log _ _ = return ()
 
-instance LoggableStepApp s e (StepApp FMCException s e) where
-  type BaseStep s e (StepApp FMCException s e) = BaseStepApp s e (Either FMCException)
-  stepLift = StepApp
+instance Loggable (PPathStack s) where
+  log ll = PPathStack . lift . faLog ll
 
-instance Loggable (PStepApp s e) where
-  log ll msg = liftIO (putStrLn $ unpack msg) >> (PStepApp $ faLog ll msg)
-
-instance LoggableStepApp s e (PStepApp s e) where
-  type BaseStep s e (PStepApp s e) = Producer LogEntry (BaseStepApp s e IO)
-  stepLift = PStepApp
-
-class (MonadError FMCException m, MonadState (s,e) m) => LoggablePathApp s e m where
-  type Step s e m :: * -> *
-  type BasePath s e m :: * -> *
-  pathLift :: BasePath s e m a -> m a
-  stepToPath :: Step s e m a -> m a
-
-instance Loggable (PathApp FMCException s e) where
-  log _ _ = return ()
-
-instance LoggablePathApp s e (PathApp FMCException s e) where
-  type Step s e (PathApp FMCException s e)  = StepApp FMCException s e
-  type BasePath s e (PathApp FMCException s e) = BasePathApp s e (Either FMCException)
-  pathLift = PathApp
-  stepToPath = PathApp . baseStep2basePath . unStepApp
-
-instance Loggable (PPathApp s e) where
-  log ll msg = liftIO (putStrLn $ unpack msg) >> (PPathApp $ faLog ll msg)
-
-instance LoggablePathApp s e (PPathApp s e) where
-  type Step s e (PPathApp s e) = PStepApp s e
-  type BasePath s e (PPathApp s e) = Producer LogEntry (BasePathApp s e IO)
-  pathLift = PPathApp
-  stepToPath = PPathApp . hoist baseStep2basePath . unPStepApp
+instance (Monad m, Loggable m) => Loggable (ResultT o m) where
+  log ll msg = lift $ log ll msg
 
 faLog :: Monad m => LogLevel -> Text -> Producer LogEntry m ()
 faLog l msg  = yield $ LogEntry l msg
@@ -337,19 +209,3 @@ printLog lvls = do
   unless (null lvls) (printL le)
   printLog lvls
 
-taxDataApp2StepAppFSER :: forall m a. LoggableStepApp FinState ExchangeRateFunction m
-  => TaxDataApp (Either FMCException) a -> m a
-taxDataApp2StepAppFSER x =
-  let sa :: StepApp FMCException FinState ExchangeRateFunction a
-      sa = zoomStepApp fsTaxData $ toStepApp $ x
-  in stepLift sa
-
-{-
-taxDataApp2StepAppFS :: TaxDataApp (Either FMCException) a -> StepApp FMCException FinState (FinEnv rm) a
-taxDataApp2StepAppFS tda = zoomStepApp fsTaxData . magnifyStepApp feExchange . toStepApp $ tda
-
-
-taxDataApp2StepApp :: LoggableStepApp TaxData ExchangeRateFunction m => TaxDataApp (Either FMCException) a -> m a
-taxDataApp2StepApp = stepLift . toStepApp
-
--}

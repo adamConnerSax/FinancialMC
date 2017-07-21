@@ -1,6 +1,6 @@
+{-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
 module FinancialMC.Core.CValued
        (
          CVD
@@ -40,50 +40,63 @@ module FinancialMC.Core.CValued
        ) where
 
 
-import Control.Monad.Reader (MonadReader,ask,lift)
 
-import FinancialMC.Core.MoneyValue (Currency(..),MoneyValue(..))
-import FinancialMC.Core.MoneyValueOps (ERK,CR)
-import FinancialMC.Core.CValued_Internal
+import           FinancialMC.Core.MoneyValue       (Currency (..),
+                                                    MoneyValue (..),
+                                                    ReadsCurrency (getCurrency),
+                                                    ReadsExchangeRateFunction (getExchangeRateFunction))
+--import FinancialMC.Core.MoneyValueOps (ERK,CR)
+import           FinancialMC.Core.CValued_Internal hiding (asERFReader)
+
+import           Control.Lens                      (use)
+import           Control.Monad.Reader              (MonadReader, ask, lift)
+import           Control.Monad.State               (MonadState)
+
 
 type CVD = CValued Currency Double
 type SVD = SValued Currency Double
 
-
-toSV::a->SValued Currency a
+toSV :: a -> SValued Currency a
 toSV = toCS
 
-toSVD::Double->SVD
+toSVD :: Double -> SVD
 toSVD = toSV
 
-toCVD::(Currency->ERF Currency->Double)->CVD
+toCVD :: (Currency -> ERF Currency -> Double) -> CVD
 toCVD = CVCV
 
-fromMoneyValue::MoneyValue->CVD
+fromMoneyValue :: MoneyValue -> CVD
 fromMoneyValue (MoneyValue x c) = toCV x c
 {-# INLINE fromMoneyValue #-}
 
-toMoneyValue::Currency->ERF Currency->CVD->MoneyValue
+toMoneyValue :: Currency -> ERF Currency -> CVD -> MoneyValue
 toMoneyValue _ _ (CVMV x c _) = MoneyValue x c
-toMoneyValue c e (CVCV g) = MoneyValue (g c e) c
+toMoneyValue c e (CVCV g)     = MoneyValue (g c e) c
 {-# INLINE toMoneyValue #-}
 
-asERMV::MonadReader (ERF Currency) m=>Currency->CVD->m MoneyValue 
+asERMV :: (MonadState s m, ReadsExchangeRateFunction s) => Currency -> CVD -> m MoneyValue
 asERMV c (CVCV g) = do
-  e<-ask
+  e <- use getExchangeRateFunction
   return $! MoneyValue (g c e) c
 asERMV c (CVMV x c' f)
   | c == c'   = return $! MoneyValue x c
   | otherwise = do
-      e <- ask
+      e <- use getExchangeRateFunction
       return $! MoneyValue (f e c c' x) c
+{-# INLINE asERMV #-}
 
-
-asCERMV::ERK m=>CVD->CR m MoneyValue
-asCERMV a = ask >>= lift . flip asERMV a
-
+asCERMV :: (MonadState s m, ReadsExchangeRateFunction s, ReadsCurrency s) => CVD -> m MoneyValue
+asCERMV a = use getCurrency >>= flip asERMV a
+{-# INLINE asCERMV #-}
 
 -- This is here so that calculations using 0 and all in same ccy can stay in simple form.
 mvZero::Currency->CVD
 mvZero ccy = fromMoneyValue (MoneyValue 0 ccy)
 --mvZero = const cvZero
+
+asERFReader :: (MonadState s m, ReadsExchangeRateFunction s) => SValued Currency a -> m a
+asERFReader (CVS x) = return x
+asERFReader (CVEV f) = do
+  e <- use getExchangeRateFunction
+  return $! f e
+{-# INLINE asERFReader #-}

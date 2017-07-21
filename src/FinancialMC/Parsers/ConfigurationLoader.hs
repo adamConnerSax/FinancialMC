@@ -26,8 +26,8 @@ import           FinancialMC.Core.MCState                    (CombinedState (..)
 import qualified FinancialMC.Core.MoneyValue                 as MV
 import           FinancialMC.Core.Rates                      (IsRateModel, Rate,
                                                               RateTable,
-                                                              applyModel,
-                                                              defaultRateTable)
+                                                              defaultRateTable,
+                                                              runModel)
 import           FinancialMC.Core.Rule                       (IsRule,
                                                               ruleAccounts)
 import           FinancialMC.Core.Tax                        (FilingStatus,
@@ -182,10 +182,10 @@ loadConfigurations fcc mSchemaP up =
 buildMCState::C.InitialFS a fl le ru->FinEnv rm->MCState a fl le ru
 buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs cfs fe les rules sweepR taxTradeR
 
-makeStartingRates :: (IsRateModel rm, MonadError FMCException m)=>rm->m (RateTable Rate)
-makeStartingRates rateDefaultModel = do
-  (_,(startingRates,_)) <- applyModel (defaultRateTable,pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
-  return startingRates
+makeStartingRates :: IsRateModel rm => rm -> RateTable Rate
+makeStartingRates rateDefaultModel =
+  let (_,(startingRates,_)) = runModel defaultRateTable (pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
+  in startingRates
 
 buildInitialState::IsRateModel rm=>C.InitialFS a fl le ru->TaxRules->RateTable Rate->rm->
                    Year->MV.Currency->(FinEnv rm,CombinedState a fl le ru)
@@ -209,7 +209,7 @@ getInitialStates (C.LoadedModels ifsM rmM ts) fstat (fsName,rdName,rmName,tfName
   taxRules <- C.makeTaxRules ts fstat tfName tsName mtcName
   rateDefaultModel <- noteM (Other "Failed in getRateModel (defaults)") $ C.getRateModel rmM rdName
   rateModel <- noteM (Other "Failed in getRateModel (model)") $ C.getRateModel rmM rmName
-  startingRates  <- makeStartingRates rateDefaultModel
+  let startingRates  = makeStartingRates rateDefaultModel
   return $ buildInitialState initialFS taxRules startingRates rateModel date ccy
 
 

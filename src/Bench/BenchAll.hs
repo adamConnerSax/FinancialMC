@@ -1,12 +1,12 @@
-import Criterion.Main
+import           Criterion.Main
 
-import BenchMoneyOps
-import BenchPath
-import BenchMapLike
---import BenchEngine
+import           BenchEngine
+import           BenchMapLike
+import           BenchMoneyOps
+import           BenchPath
 
 benchesIO::IO [Benchmark]
-benchesIO = sequence [benchMoneyOpsIO,benchMapLikeIO,benchPathsIO]
+benchesIO = sequence [benchMoneyOpsIO, benchMapLikeIO, benchEngineIO, benchPathsIO]
 
 main = do
   benches <- benchesIO

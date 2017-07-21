@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE KindSignatures        #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
@@ -37,8 +38,9 @@ import           FinancialMC.Core.Engine          (EngineC,
                                                    PathSummaryAndSeed (..),
                                                    execOnePathPure)
 
---import FinancialMC.Core.Flow (FlowDirection(..))
 import           FinancialMC.Core.FinancialStates (FinEnv, HasFinEnv (..))
+import           FinancialMC.Core.FinApp          (PathState, pattern PathState,
+                                                   stepState)
 import           FinancialMC.Core.MCState         (CombinedState,
                                                    HasCombinedState (..),
                                                    HasMCState (..),
@@ -47,7 +49,6 @@ import           FinancialMC.Core.MCState         (CombinedState,
 import           FinancialMC.Core.Utilities       (FMCException, Year)
 
 import           Control.Arrow                    ((***))
---import           Control.Exception                (SomeException)
 import           Control.Lens                     (makeClassy, view, (&), (.~),
                                                    (^.), _1)
 import           Control.Parallel.Strategies      (parList, rseq, using)
@@ -55,9 +56,6 @@ import           Data.List                        (foldl', sort, sortBy)
 import qualified Data.Map                         as M
 import           Data.Ord                         (comparing)
 import qualified Data.Vector                      as V
---import qualified Data.Vector.Generic.Base         as VGB
---import           Data.Word                        (Word64)
---import qualified Safe                             as Safe
 import           Statistics.Sample.Histogram      (histogram, histogram_, range)
 
 psasToNumber :: PathSummaryAndSeed -> Double
@@ -106,7 +104,7 @@ historiesFromSummaries convertLE summaries (fe0,cs0) singleThreaded quantiles ye
       sorted = sortSummaries summaries
       PathSummaryAndSeed  _ medianSeed = sorted !! (length sorted `div` 2)
       csHist = cs0 & (csNeedHistory .~ True)
-      getH seed = V.fromList . view (_1 . csMC . mcsHistory) <$> execOnePathPure convertLE csHist fe0 seed years
+      getH seed = V.fromList . view (stepState . csMC . mcsHistory) <$> execOnePathPure convertLE (PathState csHist fe0) seed years
       getNW :: V.Vector DatedSummary -> V.Vector DatedMoneyValue
       getNW = V.cons (DatedMoneyValue year0 nw0) . fmap (\(DatedSummary d (FSSummary nw _ _ _ _ _))->DatedMoneyValue d nw)
       inds = qIndices (length sorted) quantiles

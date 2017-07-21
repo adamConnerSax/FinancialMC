@@ -1,14 +1,19 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE FlexibleInstances     #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE PatternSynonyms       #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE UndecidableInstances  #-}
 module FinancialMC.Core.Engine
        (
          RandomSeed
        , PathSummaryAndSeed (..)
        , HasPathSummaryAndSeed (..)
+       , FMCPathState
        , doOneYear
        , doPath
        , execOnePathIO
@@ -17,58 +22,76 @@ module FinancialMC.Core.Engine
        , doPaths
        , EngineC
          -- Only for Benchmarking
+       , doChecks
+       , computeTax
+       , doTax
        ) where
 
 import           FinancialMC.Core.Asset           (IsAsset)
 import           FinancialMC.Core.AssetTrading    (tradeAccount)
-import           FinancialMC.Core.Evolve          (applyAccums, applyFlows)
-import           FinancialMC.Core.FinancialStates (FinEnv, FinState,
+import           FinancialMC.Core.Evolve          (Evolvable, applyAccums,
+                                                   applyFlows)
+import           FinancialMC.Core.FinancialStates (FinEnv, FinState, HasAccumulators (accumulators),
+                                                   HasCashFlow (cashFlow),
                                                    HasFinEnv (..),
                                                    HasFinState (..),
+                                                   ReadsAccumulators,
+                                                   ReadsFinEnv (getFinEnv),
+                                                   ReadsFinState (getFinState),
                                                    addCashFlow,
                                                    addToAccumulator,
                                                    updateExchangeRateFunction,
                                                    zeroAccumulator)
 import           FinancialMC.Core.Flow            (IsFlow)
-import           FinancialMC.Core.Rates           (IsRateModel)
 import           FinancialMC.Core.Result          (Result (Result), ResultT,
                                                    runResultT)
-import           FinancialMC.Core.Rule            (IsRule (..), RuleOutput (..),
+import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
+                                                   RuleOutput (..),
                                                    RuleWhen (..))
 import           FinancialMC.Core.TradingTypes    (Transaction (..))
 
 import           FinancialMC.Core.FinApp          (LogLevel (..),
-                                                   Loggable (log),
-                                                   LoggablePathApp (..),
-                                                   LoggableStepApp (..),
-                                                   StepApp, execPPathApp,
-                                                   execPathApp, magnifyStepApp,
-                                                   taxDataApp2StepAppFSER,
-                                                   toPathApp, toStepApp,
-                                                   zoomPathAppS, zoomStep,
-                                                   zoomStepApp)
+                                                   Loggable (log), PathStack,
+                                                   PathStackable (..),
+                                                   PathState (..),
+                                                   pattern PathState,
+                                                   ReadOnly (..),
+                                                   execPPathStack,
+                                                   execPathStack, stepEnv,
+                                                   stepState, zoomPathState)
 
 import           FinancialMC.Core.MCState         (CombinedState,
+                                                   HasBalanceSheet (..),
+                                                   HasCashFlows (..),
                                                    HasCombinedState (..),
                                                    HasMCState (..),
-                                                   PathSummary (..), addFlow,
-                                                   computeFlows, evolveMCS,
-                                                   getAccount, insertAccount,
-                                                   summarize)
+                                                   PathSummary (..),
+                                                   ReadsCombinedState (getCombinedState),
+                                                   ReadsMCState (getMCState),
+                                                   addFlow, computeFlows,
+                                                   evolveMCS, getAccount,
+                                                   insertAccount, summarize)
 
 
 import           FinancialMC.Core.LifeEvent       (IsLifeEvent (..),
+                                                   LifeEventAppC,
                                                    LifeEventConverters,
                                                    LifeEventOutput (..),
                                                    lifeEventName, lifeEventYear)
-import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction,
+import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction, HasExchangeRateFunction (exchangeRateFunction),
                                                    HasMoneyValue (..),
-                                                   MoneyValue (MoneyValue))
+                                                   MoneyValue (MoneyValue),
+                                                   ReadsExchangeRateFunction (getExchangeRateFunction))
 import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Rates           (InflationType (TaxBracket),
+import           FinancialMC.Core.Rates           (HasRateTable (rateTable),
+                                                   InflationType (TaxBracket),
+                                                   IsRateModel, RSource, Rate,
                                                    RateTag (Inflation),
-                                                   applyModel, rateRequest)
-import           FinancialMC.Core.Tax             (TaxData, TaxDataApp,
+                                                   ReadsRateTable, rateRequest,
+                                                   runModel)
+import           FinancialMC.Core.Tax             (HasTaxData (taxData),
+                                                   ReadsTaxData (getTaxData),
+                                                   TaxData, TaxDataAppC,
                                                    carryForwardTaxData,
                                                    fullTaxCV, updateTaxRules)
 import           FinancialMC.Core.Utilities       (AsFMCException (..),
@@ -79,14 +102,15 @@ import           Prelude                          hiding (log)
 import qualified Data.Text                        as T
 
 import           Control.DeepSeq                  (deepseq)
-import           Control.Lens                     (Lens', magnify, makeClassy,
-                                                   use, view, zoom, (%=), (+=),
-                                                   (.=), (^.), _2)
+import           Control.Lens                     (Lens', Zoom, Zoomed, magnify,
+                                                   makeClassy, use, view, zoom,
+                                                   (%=), (&), (+=), (.=), (.~),
+                                                   (^.), _2)
 import           Control.Monad                    (foldM, unless, when)
 import           Control.Monad.Morph              (hoist, lift)
 import qualified Control.Monad.Parallel           as CMP
 import           Control.Monad.Reader             (ReaderT, ask)
-import           Control.Monad.State.Strict       (MonadState, execState, get)
+import           Control.Monad.State.Strict       (MonadState, get)
 import           Control.Parallel.Strategies      (parList, rpar, rseq, using)
 import           Data.Monoid                      ((<>))
 import           Data.Word                        (Word64)
@@ -113,11 +137,99 @@ getNSeedsStrict pMT n = (head l)  `deepseq` l where
  l = getNSeeds pMT n
 -}
 
-type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
-                             IsAsset a, Show a,
-                             IsFlow fl, Show fl,
-                             IsRule ru, Show ru,
-                             IsRateModel rm)
+type EngineC a fl le ru rm= ( IsLifeEvent le
+                            , Show le
+                            , IsAsset a
+                            , Show a
+                            , IsFlow fl
+                            , Show fl
+                            , IsRule ru
+                            , Show ru
+                            , IsRateModel rm)
+
+type FullPathC s a fl le ru rm m = ( EngineC a fl le ru rm
+                                   , Evolvable a
+                                   , Evolvable fl
+                                   , Loggable m
+                                   , MonadError FMCException m
+                                   , MonadState s m
+                                   , ReadsFinState s
+                                   , ReadsTaxData s
+                                   , ReadsAccumulators s
+                                   , HasFinEnv s rm
+                                   , ReadsFinEnv s rm
+                                   , ReadsExchangeRateFunction s
+                                   , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+                                   , IsRateModel rm
+                                   , HasAccumulators s
+                                   , HasCashFlow s
+                                   , HasBalanceSheet s a
+                                   , HasCashFlows s fl
+                                   , HasTaxData s
+                                   , HasCombinedState s a fl le ru
+                                   , HasMCState s a fl le ru
+                                   , ReadsMCState s a fl le ru)
+
+type FMCPathState a fl le ru rm = PathState (CombinedState a fl le ru) (FinEnv rm)
+
+-- Make all the instances for PathState
+instance HasTaxData (FMCPathState a fl le ru rm) where
+  taxData = stepState . csFinancial . fsTaxData
+
+instance ReadsTaxData (FMCPathState a fl le ru rm)
+
+instance HasCashFlow (CombinedState a fl le ru) where
+  cashFlow = csFinancial . fsCashFlow
+
+instance HasCashFlow (FMCPathState a fl le ru rm) where
+  cashFlow = stepState . csFinancial . fsCashFlow
+
+instance  HasAccumulators (FMCPathState a fl le ru rm) where
+  accumulators = stepState . csFinancial . fsAccumulators
+
+instance ReadsAccumulators (FMCPathState a fl le ru rm)
+
+instance HasFinState (FMCPathState a fl le ru rm) where
+  finState = stepState . csFinancial
+
+instance ReadsFinState (FMCPathState a fl le ru rm)
+
+instance HasExchangeRateFunction (FinEnv rm) where
+  exchangeRateFunction = feExchange
+
+instance HasExchangeRateFunction (FMCPathState a fl le ru rm) where
+  exchangeRateFunction = stepEnv . feExchange
+
+instance ReadsExchangeRateFunction (FMCPathState a fl le ru rm)
+
+instance HasRateTable (FMCPathState a fl le ru rm) Rate where
+  rateTable = stepEnv . feRates
+
+instance ReadsRateTable (FMCPathState a fl le ru rm) Rate
+
+instance HasFinEnv (FMCPathState a fl le ru rm) rm where
+  finEnv = stepEnv
+
+instance ReadsFinEnv (FMCPathState a fl le ru rm) rm
+
+instance HasBalanceSheet (FMCPathState a fl le ru rm) a where
+  balanceSheet = stepState . csMC . mcsBalanceSheet
+
+instance HasCashFlows (FMCPathState a fl le ru rm) fl where
+  cashFlows = stepState . csMC . mcsCashFlows
+
+instance HasMCState (FMCPathState a fl le ru rm) a fl le ru where
+  mCState = stepState . csMC
+
+instance ReadsMCState (FMCPathState a fl le ru rm) a fl le ru
+
+instance HasCombinedState (FMCPathState a fl le ru rm) a fl le ru where
+  combinedState = stepState
+
+-- special ones for zooming
+--instance HasCashFlowExchangeRateFunction (FMCPathState a fl le ru rm) where
+--  cashFlowExchangeRateFunction = zoomPathState cashFlow exchangeRateFunction
+
 
 -- The IO versions are required for logging.
 -- If we only use IO for entropy, config loading and result reporting, we can use the pure stack.
@@ -126,30 +238,28 @@ type EngineC a fl le ru rm= (IsLifeEvent le, Show le,
 execOnePathIO :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
   -> [LogLevel]
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> RandomSeed
   -> Int
-  -> IO (CombinedState a fl le ru,FinEnv rm)
-execOnePathIO convertLE logDetails cs fe seed years = do
+  -> IO (FMCPathState a fl le ru rm)
+execOnePathIO convertLE logDetails ps0 seed years = do
   let newSource = pureMT seed
-  execPPathApp (doPath convertLE newSource years) logDetails cs fe
+  execPPathStack (doPath convertLE newSource years) logDetails ps0
 
 doPathsIO :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
   -> [LogLevel]
   -> Bool
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> Bool
   -> PureMT
   -> Int
   -> Int
   -> IO [PathSummaryAndSeed] --[(PathSummary,RandomSeed)]
-doPathsIO convertLE logDetails showFinalStates cs0 fe0 singleThreaded pMT yearsPerPath paths = do
+doPathsIO convertLE logDetails showFinalStates ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds = getNSeeds pMT paths
   let g seed = do
-        (cs',_) <- execOnePathIO convertLE logDetails cs0 fe0 seed yearsPerPath
+        PathState cs' _  <- execOnePathIO convertLE logDetails ps0 seed yearsPerPath
         when showFinalStates $ print cs'
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` (return $ PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
@@ -157,108 +267,158 @@ doPathsIO convertLE logDetails showFinalStates cs0 fe0 singleThreaded pMT yearsP
     then mapM g seeds
     else CMP.mapM g seeds
 
-
 execOnePathPure :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> RandomSeed
   -> Int
-  -> Either FMCException (CombinedState a fl le ru, FinEnv rm)
-execOnePathPure convertLE cs fe seed years = do
+  -> Either FMCException (FMCPathState a fl le ru rm)
+execOnePathPure convertLE ps0 seed years = do
   let newSource = pureMT seed
-  execPathApp (doPath convertLE newSource years) cs fe
+  execPathStack (doPath convertLE newSource years) ps0
+{-# INLINEABLE execOnePathPure #-}
 
 doPaths :: EngineC a fl le ru rm
   => LifeEventConverters a fl le
-  -> CombinedState a fl le ru
-  -> FinEnv rm
+  -> FMCPathState a fl le ru rm
   -> Bool
   -> PureMT
   -> Int
   -> Int
   -> Either FMCException [PathSummaryAndSeed]
-doPaths convertLE cs0 fe0 singleThreaded pMT yearsPerPath paths = do
+doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds =  getNSeeds pMT paths
       g seed = do
-        (cs',_) <-  execOnePathPure convertLE cs0 fe0 seed yearsPerPath
+        PathState cs' _ <-  execOnePathPure convertLE ps0 seed yearsPerPath
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds
                              else g <$> seeds `using` parList rseq
   sequence eMap
+{-# INLINEABLE doPaths #-}
 
 doPath :: ( EngineC a fl le ru rm
-          , LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) m)
+          , Loggable m
+          , MonadError FMCException m
+          , MonadState s m
+          , ReadsFinState s
+          , ReadsTaxData s
+          , ReadsAccumulators s
+          , HasFinEnv s rm
+          , ReadsFinEnv s rm
+          , ReadsExchangeRateFunction s
+          , Evolvable a
+          , Evolvable fl
+          , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+          , IsRateModel rm
+          , HasAccumulators s
+          , HasCashFlow s
+          , HasBalanceSheet s a
+          , HasCashFlows s fl
+          , HasTaxData s
+          , HasCombinedState s a fl le ru
+          , HasMCState s a fl le ru
+          , ReadsMCState s a fl le ru)
   => LifeEventConverters a fl le
   -> PureMT
   -> Int
   -> m PureMT
 doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1..years]
-
-lensFinEnv :: Lens' (s,FinEnv rm) (FinEnv rm)
-lensFinEnv = _2
-
-lensToEmpty :: Lens' a ()
-lensToEmpty q x = const x <$> q ()
+{-# INLINEABLE doPath #-}
 
 doOneStepOnPath :: ( EngineC a fl le ru rm
-                   , LoggablePathApp (CombinedState a fl le ru) (FinEnv rm) m)
+                   , Loggable m
+                   , MonadError FMCException m
+                   , MonadState s m
+                   , ReadsFinState s
+                   , ReadsTaxData s
+                   , ReadsAccumulators s
+                   , HasFinEnv s rm
+                   , ReadsFinEnv s rm
+                   , ReadsExchangeRateFunction s
+                   , Evolvable a
+                   , Evolvable fl
+                   , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+                   , IsRateModel rm
+                   , HasAccumulators s
+                   , HasCashFlow s
+                   , HasBalanceSheet s a
+                   , HasCashFlows s fl
+                   , HasTaxData s
+                   , HasCombinedState s a fl le ru
+                   , HasMCState s a fl le ru
+                   , ReadsMCState s a fl le ru)
   => LifeEventConverters a fl le
   -> PureMT
   -> m PureMT
-doOneStepOnPath convertLE pMT = {- pathLift $ -} do
-  let feUpdater = toPathApp . zoom lensFinEnv
-  newPMT <- feUpdater $ do
-    x <- updateRates' pMT
+doOneStepOnPath convertLE pMT = do
+  newPMT <- do
+    x <- updateRates pMT -- order matters here.  We need to update rates to get the updated exchange rate.
     updateExchangeRateFunction
     return x
-  stepToPath $ do
-    (inFlow,outFlow) <- zoomStepApp (csMC.mcsCashFlows) $ computeFlows
-    (tax,effRate)<- doOneYear convertLE
-    summarize inFlow outFlow tax effRate
-  feUpdater updateCurrentDate
-  zoomPathAppS lensToEmpty updateTaxBrackets --fix??
+  (inFlow, outFlow) <- computeFlows
+  (tax, effRate) <- doOneYear convertLE
+  summarize inFlow outFlow tax effRate
+  updateCurrentDate
+  updateTaxBrackets --fix??
   return $! newPMT
+{-# INLINEABLE doOneStepOnPath #-}
 
-updateCurrentDate :: MonadState (FinEnv rm) m => m ()
-updateCurrentDate = feCurrentDate += 1
+updateCurrentDate :: (MonadState s m, HasFinEnv s rm) => m ()
+updateCurrentDate = (finEnv.feCurrentDate) += 1
+{-# INLINEABLE updateCurrentDate #-}
 
-updateRates' :: ( IsRateModel rm
-                , MonadState (FinEnv rm) m
-                , MonadError FMCException m) => PureMT -> m PureMT
-updateRates' pMT = do
-  rates <- use feRates
-  model <- use feRateModel
-  (newModel,(newRates,newPMT)) <- applyModel (rates,pMT) model
-  feRates .= newRates
-  feRateModel .= newModel
+updateRates :: ( IsRateModel rm
+               , MonadError FMCException m
+               , MonadState s m
+               , HasFinEnv s rm) => PureMT -> m PureMT
+updateRates pMT = do
+  fe <- use finEnv
+--  model <- use $ finEnv.feRateModel
+  let (newModel, (newRates, newPMT)) = runModel (fe ^. feRates) pMT (fe ^. feRateModel)
+  finEnv.feRates .= newRates
+  finEnv.feRateModel .= newModel
   return $! newPMT
+{-# INLINEABLE updateRates #-}
 
-
-updateTaxBrackets :: LoggablePathApp () (FinEnv rm) m => m ()
-updateTaxBrackets = pathLift $ do
-  taxBracketInflationRate <- toPathApp . readOnly . magnify (lensFinEnv.feRates) $ rateRequest (Inflation TaxBracket)
-  (lensFinEnv.feTaxRules) %= flip updateTaxRules taxBracketInflationRate
-
-{-
-updateTaxBrackets' :: (MonadState FinEnv m, MonadThrow m)=>m ()
-updateTaxBrackets' = do
-  taxBracketInflationRate <- readOnly . zoom feRates $ rateRequest (Inflation TaxBracket)
-  feTaxRules %= flip updateTaxRules taxBracketInflationRate
--}
+updateTaxBrackets :: ( MonadError FMCException m
+                     , MonadState s m
+                     , ReadsRateTable s Double
+                     , HasFinEnv s rm) => m ()
+updateTaxBrackets = do
+  taxBracketInflationRate <- rateRequest (Inflation TaxBracket)
+  (finEnv.feTaxRules) %= flip updateTaxRules taxBracketInflationRate
+{-# INLINEABLE updateTaxBrackets #-}
 
 doOneYear :: ( EngineC a fl le ru rm
-             , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+             , Loggable m
+             , MonadError FMCException m
+             , MonadState s m
+             , ReadsFinState s
+             , ReadsTaxData s
+             , ReadsAccumulators s
+             , ReadsFinEnv s rm
+             , ReadsExchangeRateFunction s
+             , Evolvable a
+             , Evolvable fl
+             , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+             , IsRateModel rm
+             , HasAccumulators s
+             , HasCashFlow s
+             , HasBalanceSheet s a
+             , HasCashFlows s fl
+             , HasTaxData s
+             , HasMCState s a fl le ru
+             , ReadsMCState s a fl le ru)
   => LifeEventConverters a fl le
   -> m (MoneyValue,Double)
 doOneYear convertLE = do
-  year <- view feCurrentDate
+  year <- use $ getFinEnv.feCurrentDate
   log Debug ("Beginning " <> (T.pack $ show year) <> ". Doing life events...")
   doLifeEvents convertLE
   log Debug "Evolving assets and cashflows..."
   evolveMCS
-  fs <- use csFinancial
+  fs <- use getFinState
   log Debug ("Accumulators=" <> (T.pack $ show (fs ^. fsAccumulators)))
   doRules BeforeTax
   (tax, effRate) <- doTax
@@ -267,156 +427,267 @@ doOneYear convertLE = do
   doChecks
   log Debug ("Completed " <> (T.pack $ show year) <> ".")
   return (tax, effRate)
+{-# INLINEABLE doOneYear #-}
 
 checkTrue :: MonadError FMCException m => Bool -> String -> m ()
 checkTrue cond errMsg = unless cond $ throwing _Other (T.pack errMsg)
+{-# INLINEABLE checkTrue #-}
 
 checkFalse :: MonadError FMCException m => Bool -> String -> m ()
 checkFalse cond errMsg = when cond $ throwing _Other (T.pack errMsg)
+{-# INLINEABLE checkFalse #-}
 
 checkEndingCash :: ( MonadError FMCException m
-                   , LoggableStepApp MoneyValue ExchangeRateFunction m) => m ()
+                   , MonadState s m
+                   , ReadsExchangeRateFunction s
+                   , ReadsFinState s) => m ()
 checkEndingCash = do
-  e <- ask
-  cash <- get
-  checkFalse (MV.gt e cash (MoneyValue 1 (cash^.mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
+  e <- use getExchangeRateFunction
+  cash <- use $ getFinState.fsCashFlow
+  checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
+{-# INLINEABLE checkEndingCash #-}
 
-doChecks :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m => m ()
+{-
+class HasCashFlowExchangeRateFunction s where
+  cashFlowExchangeRateFunction :: Lens' s (PathState MoneyValue ExchangeRateFunction)
+
+type CashFlowExchangeRateFunctionZoom s m0 m = ( MonadError FMCException m0
+                                               , Functor (Zoomed m0 ())
+                                               , Zoom m0 m (PathState MoneyValue ExchangeRateFunction) s
+                                               , ReadOnly (PathState MoneyValue ExchangeRateFunction) m0
+                                               , MonadError FMCException (ReaderM (PathState MoneyValue ExchangeRateFunction) m0)
+                                               , HasCashFlowExchangeRateFunction s)
+
+checkEndingCash' :: CashFlowExchangeRateFunctionZoom s m0 m => m ()
+checkEndingCash' = zoom cashFlowExchangeRateFunction $ do
+  PathState cash e <- get
+  checkFalse (MV.gt e cash (MoneyValue 1 (cash ^. mCurrency))) ("Ending cash position " ++ show cash ++ " > 0")
+{-# INLINEABLE checkEndingCash' #-}
+-}
+
+doChecks :: ( MonadError FMCException m
+            , MonadState s m
+            , ReadsExchangeRateFunction s
+            , ReadsFinState s) => m ()
 doChecks = do
-  zoomStep (csFinancial.fsCashFlow) . magnifyStepApp feExchange $ checkEndingCash
+  checkEndingCash
+{-# INLINEABLE doChecks #-}
 
-morphInnerRuleStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
-  => ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)) b -> m b
-morphInnerRuleStack = zoomStep csFinancial . toStepApp . readOnly
-
-morphResultStack :: LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m
-  => ResultT o (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException))) b -> ResultT o m b
-morphResultStack =  hoist morphInnerRuleStack
-
-doRules :: forall a fl le ru rm m. ( EngineC a fl le ru rm
-                                   , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+doRules :: ( Loggable m
+           , EngineC a fl le ru rm
+           , MonadError FMCException m
+           , MonadState s m
+           , ReadsFinState s
+           , ReadsAccumulators s
+           , ReadsFinEnv s rm
+           , ReadsExchangeRateFunction s
+           , HasAccumulators s
+           , HasTaxData s
+           , HasCashFlow s
+           , HasBalanceSheet s a
+           , ReadsMCState s a fl le ru)
   => RuleWhen -> m ()
 doRules w = do
-  mcs <- use csMC
+  mcs <- use getMCState
+--  rs <- use $ getMCState.mcsRules
+--  bs <- use $ getMCState.mcsBalanceSheet
   let isRuleNow r = ruleWhen r == w
       liveRules = filter isRuleNow (mcs ^. mcsRules)
       getA name = getAccount name (mcs ^. mcsBalanceSheet)
-      f :: ( IsRule ru
-           , IsRateModel rm
-           , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => ru -> ResultT RuleOutput m ()
       f r = do
-        lift $ log Debug ("Doing " <> (T.pack $ show (ruleName r)))
-        morphResultStack (doRule r getA)
+        log Debug ("Doing " <> (T.pack $ show (ruleName r)))
+        doRule r getA
   log Debug ("Doing " <> (T.pack $ show w) <> " rules.")
   Result _ ruleOutput <- runResultT $ mapM_ f liveRules -- can/should move zoom/hoist to here?  Does it matter?
   doRuleResult ruleOutput
+{-# INLINEABLE doRules #-}
 
-doRuleResult :: (IsAsset a, Show a
-                , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)=> RuleOutput -> m ()
+doRuleResult :: ( IsAsset a
+                , Show a
+                , Loggable m
+                , MonadError FMCException m
+                , MonadState s m
+                , HasTaxData s
+                , ReadsExchangeRateFunction s
+                , HasCashFlow s
+                , HasBalanceSheet s a
+                , HasAccumulators s)=> RuleOutput -> m ()
 doRuleResult (RuleOutput trades accs) = do
   log Debug ("Resulting in trades:" <> (T.pack $ show trades) <> " and accums=" <> (T.pack $ show accs))
-  stepLift . magnifyStepApp feExchange $ do
-    zoomStepApp csFinancial $ applyAccums accs
-    doTransactions trades
+  applyAccums accs
+  doTransactions trades
+{-# INLINEABLE doRuleResult #-}
 
-doLifeEvents :: forall a fl le ru rm m. ( EngineC a fl le ru rm
-                                        , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
+doLifeEvents :: ( EngineC a fl le ru rm
+                , Loggable m
+                , MonadError FMCException m
+                , MonadState s m
+                , HasBalanceSheet s a
+                , HasCashFlows s fl
+                , ReadsFinState s
+                , ReadsFinEnv s rm
+                , ReadsExchangeRateFunction s
+                , ReadsMCState s a fl le ru)
   => LifeEventConverters a fl le -> m ()
 doLifeEvents convertLE = do
-  fe <- ask
-  mcs <- use csMC
-  let curDate = fe ^. feCurrentDate
-      happeningThisYear le = (lifeEventYear le == curDate)
+  curDate <- use $ getFinEnv.feCurrentDate
+  mcs <- use getMCState
+--  les <- use $ getMCState.mcsLifeEvents
+--  bs <- use $ getMCState.mcsBalanceSheet
+  let happeningThisYear le = (lifeEventYear le == curDate)
       liveEvents = filter happeningThisYear (mcs ^. mcsLifeEvents)
       getA name = getAccount name (mcs ^. mcsBalanceSheet)
-      f :: le -> ResultT (LifeEventOutput a fl) m ()
       f x = do
-        lift $ log Debug ("Doing " <> (T.pack $ show (lifeEventName x)))
-        morphResultStack (doLifeEvent x convertLE getA)
+        log Debug ("Doing " <> (T.pack $ show (lifeEventName x)))
+        doLifeEvent x convertLE getA
   log Debug ("Doing " <> (T.pack $ show curDate) <> " life events.")
   Result _ results <- runResultT $ mapM_ f liveEvents
   doLifeEventResult results
+{-# INLINEABLE doLifeEvents #-}
 
-doLifeEventResult :: (IsFlow fl, LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => LifeEventOutput a fl -> m ()
+doLifeEventResult :: ( IsFlow fl
+                     , MonadState s m
+                     , HasBalanceSheet s a
+                     , HasCashFlows s fl) => LifeEventOutput a fl -> m ()
 doLifeEventResult (LifeEventOutput newAccounts newFlows) = do
-  csMC.mcsBalanceSheet %= execState (mapM_ insertAccount newAccounts)
-  csMC.mcsCashFlows %= execState (mapM_ addFlow newFlows)
+  mapM_ insertAccount newAccounts
+  mapM_ addFlow newFlows
+{-# INLINEABLE doLifeEventResult #-}
 
 doTax :: ( EngineC a fl le ru rm
-         , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m)
-  => m (MoneyValue,Double)
-doTax = stepLift $ do
-  zoomStepApp csFinancial $ do
-    (taxPre,_) <- zoomStepApp fsTaxData $ computeTax -- get amount
-    toStepApp $ addToAccumulator (T.pack "TaxOwed") taxPre  -- store amount for tax sweep rule.  Ick.
+         , Loggable m
+         , MonadError FMCException m
+         , TaxDataAppC s m
+         , ReadsFinEnv s rm
+         , ReadsFinState s
+         , ReadsTaxData s
+         , ReadsAccumulators s
+         , HasAccumulators s
+         , HasBalanceSheet s a
+         , ReadsMCState s a fl le ru
+         , HasCashFlow s) => m (MoneyValue,Double)
+doTax = do
+  (taxPre, _) <- computeTax -- get amount
+  addToAccumulator ("TaxOwed") taxPre  -- store amount for tax sweep rule.  Ick.
   doTaxTrade
-  zoomStepApp csFinancial $ do
-    (tax',rate') <- zoomStepApp fsTaxData $ computeTax -- recompute tax since trade may have incurred cap gains
-    magnifyStepApp feExchange $ payTax tax'  -- pay tax, zero tax counters and carry forward losses
-    toStepApp $ zeroAccumulator (T.pack "TaxOwed")
-    return (tax',rate')
+  (tax', rate') <- computeTax -- recompute tax since trade may have incurred cap gains
+  payTax tax'  -- pay tax, zero tax counters and carry forward losses
+  zeroAccumulator ("TaxOwed")
+  return (tax',rate')
+{-# INLINEABLE doTax #-}
 
-doTaxTrade :: ( IsAsset a,Show a,IsRule ru, IsRateModel rm
-              , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
+doTaxTrade :: ( IsAsset a
+              , Show a
+              , IsRule ru
+              , Loggable m
+              , MonadError FMCException m
+              , MonadState s m
+              , ReadsFinState s
+              , ReadsExchangeRateFunction s
+              , ReadsFinEnv s rm
+              , ReadsAccumulators s
+              , HasTaxData s
+              , HasCashFlow s
+              , HasBalanceSheet s a
+              , HasAccumulators s
+              , ReadsMCState s a fl le ru) => m ()
 doTaxTrade = do
-  mcs <- use csMC
-  let getA name = getAccount name ( mcs ^. mcsBalanceSheet)
-  curPos <- use (csFinancial.fsCashFlow)
+  curPos <- use cashFlow
+--  taxTrade <- use $ getMCState.mcsTaxTrade
+--  bs <- use balanceSheet
+  mcs <- use getMCState
+  let getA name = getAccount name (mcs ^. mcsBalanceSheet)
   log Debug ("Current cash on hand is " <> (T.pack $ show curPos))
   log Debug "Generating tax trade, if necessary"
-  Result _ result <- morphInnerRuleStack $ runResultT (doRule (mcs ^. mcsTaxTrade) getA)
+  Result _ result <- runResultT (doRule (mcs ^. mcsTaxTrade) getA)
   doRuleResult result
+{-# INLINEABLE doTaxTrade #-}
 
-payTax::LoggableStepApp FinState ExchangeRateFunction app=>MoneyValue->app ()
+payTax :: ( MonadError FMCException m
+          , Loggable m
+          , TaxDataAppC s m
+          , HasCashFlow s) => MoneyValue -> m ()
 payTax tax = do
   let taxPmt = MV.negate tax
-  stepLift $ toStepApp (addCashFlow taxPmt) >> taxDataApp2StepAppFSER carryForwardTaxData
+  addCashFlow taxPmt
+  carryForwardTaxData
   log Debug ("Paid Tax of " <> (T.pack $ show tax))
+{-# INLINEABLE payTax #-}
 
-doSweepTrades::( EngineC a fl le ru rm
-               , LoggableStepApp (CombinedState a fl le ru) (FinEnv rm) m) => m ()
+doSweepTrades :: ( IsAsset a
+                 , Show a
+                 , IsRule ru
+                 , Loggable m
+                 , MonadError FMCException m
+                 , MonadState s m
+                 , HasTaxData s
+                 , HasCashFlow s
+                 , HasBalanceSheet s a
+                 , HasAccumulators s
+                 , ReadsAccumulators s
+                 , ReadsFinState s
+                 , ReadsFinEnv s rm
+                 , ReadsExchangeRateFunction s
+                 , ReadsMCState s a fl le ru) => m ()
 doSweepTrades = do
-  mcs <- use csMC
-  let getA name = getAccount name ( mcs ^. mcsBalanceSheet)
-  Result _ result <- morphInnerRuleStack $ runResultT (doRule (mcs ^. mcsSweep) getA)
+--  bs <- use balanceSheet
+--  sweepRule <- use $ getMCState.mcsSweep
+  mcs <- use getMCState
+  let getA name = getAccount name (mcs ^. mcsBalanceSheet)
+  Result _ result <- runResultT (doRule (mcs ^. mcsSweep) getA)
   doRuleResult result
+{-# INLINEABLE doSweepTrades #-}
 
-doAccountTransaction::( IsAsset a
-                      , Show a
-                      , LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction m)
-  => Transaction
-  -> m ()
-doAccountTransaction tr@(Transaction target typ amt)= stepLift $ do
-  mcs <- use csMC
-  let balanceSheet = mcs ^. mcsBalanceSheet
-  Result after flows <- toStepApp . lift $ do
-    acct <- lift $ getAccount target balanceSheet
-    runResultT $ tradeAccount acct typ amt
+doAccountTransaction :: ( IsAsset a
+                        , Show a
+                        , Loggable m
+                        , MonadError FMCException m
+                        , MonadState s m
+                        , HasTaxData s
+                        , HasCashFlow s
+                        , ReadsExchangeRateFunction s
+                        , HasBalanceSheet s a) => Transaction -> m ()
+doAccountTransaction tr@(Transaction target typ amt)= do
+  bs <- use balanceSheet
+  acct <- getAccount target bs
+  Result after flows <- runResultT $ tradeAccount acct typ amt
+  applyFlows flows
+  insertAccount after
 
-  zoomStepApp csFinancial $ applyFlows flows
-  zoomStepApp (csMC.mcsBalanceSheet) $ insertAccount after
-
-  fs <- use csFinancial
-  log Debug ("Current net cash flow is " <> (T.pack $ show (fs ^. fsCashFlow)))
+  cf <- use cashFlow
+  log Debug ("Current net cash flow is " <> (T.pack $ show cf))
   log Debug ("Did Transaction (" <> (T.pack $ show tr) <> ")")
   log Debug ("With resulting account " <> (T.pack $ show after) <> " and flows " <> (T.pack $ show flows))
+{-# INLINEABLE doAccountTransaction #-}
 
-
-isNonZeroTransaction::Transaction->Bool
+isNonZeroTransaction :: Transaction -> Bool
 isNonZeroTransaction (Transaction _ _ (MoneyValue x _)) = x/=0
 
 doTransactions :: ( IsAsset a
                   , Show a
-                  , LoggableStepApp (CombinedState a fl le ru) ExchangeRateFunction m)
+                  , Loggable m
+                  , MonadError FMCException m
+                  , MonadState s m
+                  , HasTaxData s
+                  , ReadsExchangeRateFunction s
+                  , HasCashFlow s
+                  , HasBalanceSheet s a)
   => [Transaction]
   -> m ()
 doTransactions ts = mapM_ doAccountTransaction (filter isNonZeroTransaction ts)
+{-# INLINEABLE doTransactions #-}
 
-computeTax :: LoggableStepApp TaxData (FinEnv rm) m => m (MoneyValue,Double)  -- main body now in Tax.hs
-computeTax = stepLift $ do
-  tr <- view feTaxRules
-  td <- get
-  (total,rate) <- toStepApp . lift . (magnify feExchange) $ fullTaxCV tr td
+computeTax :: ( MonadError FMCException m
+              , Loggable m
+              , MonadState s m
+              , ReadsFinEnv s rm
+              , ReadsExchangeRateFunction s
+              , ReadsTaxData s)
+               => m (MoneyValue,Double)  -- main body now in Tax.hs
+computeTax = do
+  tr <- use $ getFinEnv.feTaxRules
+  td <- use getTaxData
+  (total, rate) <- fullTaxCV tr td
   log Debug ("Computed tax of "
              <> (T.pack $ show total)
              <> " (eff rate of "
@@ -424,4 +695,4 @@ computeTax = stepLift $ do
              <> "%) given tax data: "
              <> (T.pack $ show td))
   return  (total,rate)
-
+{-# INLINEABLE computeTax #-}

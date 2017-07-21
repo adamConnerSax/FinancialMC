@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE Rank2Types             #-}
 {-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE TypeSynonymInstances   #-}
 {-# LANGUAGE UndecidableInstances   #-}
 module FinancialMC.Core.Asset
@@ -14,7 +15,7 @@ module FinancialMC.Core.Asset
          TradeType
        , TradeFunction
        , TradeResult
-       , TradeApp
+--       , TradeApp
        , AssetRevaluation(..)
        , AssetName
        , AssetCore(..)
@@ -41,7 +42,7 @@ import           FinancialMC.Core.MoneyValue    (Currency (..),
                                                  MoneyValue (..), mCurrency)
 import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Result        ()
-import           FinancialMC.Core.TradingTypes  (AccountType, TradeApp,
+import           FinancialMC.Core.TradingTypes  (AccountType, TradeAppC,
                                                  TradeFunction, TradeResult,
                                                  TradeType)
 import           FinancialMC.Core.Utilities     (FMCException)
@@ -55,7 +56,7 @@ import           Data.Aeson.Types               (Options (fieldLabelModifier),
 
 import qualified Data.Text                      as T
 
---import           Control.Exception              (SomeException)
+import           Control.Monad.Except           (MonadError)
 
 import           GHC.Generics                   (Generic)
 
@@ -77,21 +78,21 @@ revalueAssetCore (AssetCore n _ cb) (NewValue v') = AssetCore n v' cb
 revalueAssetCore (AssetCore n v _) (NewBasis cb') = AssetCore n v cb'
 revalueAssetCore (AssetCore n _ _) (NewValueAndBasis v' cb') = AssetCore n v' cb'
 
-class Evolvable a=>IsAsset a where
-  assetCore::a->AssetCore
-  revalueAsset::a->AssetRevaluation->a
-  tradeAsset::TradeFunction a
+class Evolvable a => IsAsset a where
+  assetCore :: a -> AssetCore
+  revalueAsset :: a -> AssetRevaluation -> a
+  tradeAsset :: TradeFunction s m a
 
-assetName::IsAsset a=>a->AssetName
+assetName :: IsAsset a => a -> AssetName
 assetName a = aName $ assetCore a
 
-assetValue::IsAsset a=>a->MoneyValue
+assetValue :: IsAsset a => a -> MoneyValue
 assetValue a = aValue $ assetCore a
 
-assetCostBasis::IsAsset a=>a->MoneyValue
+assetCostBasis :: IsAsset a => a -> MoneyValue
 assetCostBasis a = aCostBasis $ assetCore a
 
-assetCurrency::IsAsset a=>a->Currency
+assetCurrency::IsAsset a => a -> Currency
 assetCurrency a = assetValue a ^. mCurrency
 
 type AccountName = T.Text
@@ -102,21 +103,21 @@ makeClassy ''Account
 instance Functor Account where
   fmap f (Account n t c as) = Account n t c (f <$> as)
 
-instance ToJSON a=>ToJSON (Account a) where
+instance ToJSON a => ToJSON (Account a) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance FromJSON a=>FromJSON (Account a) where
+instance FromJSON a => FromJSON (Account a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-instance Show a=>Show (Account a) where
+instance Show a => Show (Account a) where
   show (Account n aType ccy as) = show n ++ "(" ++ show aType ++ " in " ++ show ccy ++ ")"
                                ++ foldr (\a s->s ++ "\n\t" ++ show a) " " as
 
-instance Evolvable a=>Evolvable (Account a) where
+instance Evolvable a => Evolvable (Account a) where
   evolve act = evolveWithin act acAssets
 
 
-accountValue::IsAsset a=>Account a->ExchangeRateFunction->MoneyValue
+accountValue :: IsAsset a => Account a -> ExchangeRateFunction -> MoneyValue
 accountValue acct e = foldr f (MV.zero ccy) assets where
   f a s = MV.inFirst e (+) s (assetValue a)
   ccy = acct ^. acCurrency
@@ -127,8 +128,8 @@ accountValue acct e = foldr f (MV.zero ccy) assets where
 --accountValueCEMV acct = foldr f MV.cer0 (acct ^. acAssets) where
 --  f a s = s |+| (MV.mv2cer $ assetValue a)
 
-accountValueCV::IsAsset a=>Account a->CV.CVD
+accountValueCV :: IsAsset a => Account a -> CV.CVD
 accountValueCV acct = foldr f (CV.mvZero (acct ^. acCurrency))  (acct ^. acAssets) where
   f a s = s |+| (CV.fromMoneyValue $ assetValue a)
 
-type AccountGetter a = AccountName -> Either FMCException (Account a)
+type AccountGetter m a = MonadError FMCException m => AccountName -> m (Account a)

@@ -21,7 +21,11 @@ import           FinancialMC.Core.Utilities              (FMCException (..),
 
 import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseLifeEvent,
-                                                          BaseRule,BaseRateModelT)
+                                                          BaseRateModelT,
+                                                          BaseRule,
+                                                          FMCPathState,
+                                                          HasPathState (stepEnv, stepState),
+                                                          PathState (PathState))
 import qualified FinancialMC.Parsers.Configuration       as C
 import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
                                                           loadConfigurations)
@@ -47,56 +51,57 @@ leConverter = LEC id id
 ccs::C.FMCComponentConverters BaseAsset TestAsset BaseFlow TestFlow BaseLifeEvent TestLifeEvent BaseRule TestRule BaseRateModelT TestRateModel
 ccs = C.FMCComponentConverters id id id id id
 
-type FMCTestF = Int->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv TestRateModel)->Bool
+type UnitTestPathState = FMCPathState TestAsset TestFlow TestLifeEvent TestRule TestRateModel
+
+type FMCTestF = Int -> UnitTestPathState -> Bool
 data FMCTest = FMCTest String FMCTestF
-data FMCTestSet = ConfigTests String [(String,Int,[FMCTest])] |
-                  StateTests  (CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv TestRateModel) [(Int,[FMCTest])]
+data FMCTestSet = ConfigTests String [(String, Int, [FMCTest])] |
+                  StateTests  UnitTestPathState [(Int, [FMCTest])]
 
 
-notTest::FMCTestF->FMCTestF
+notTest :: FMCTestF -> FMCTestF
 notTest f x y = not $ f x y
 
-andTest::FMCTestF->FMCTestF->Int->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv TestRateModel)->Bool
+andTest :: FMCTestF -> FMCTestF -> Int -> UnitTestPathState ->Bool
 andTest f g x y = f x y && g x y
 
-andTests::[FMCTestF]->Int->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv TestRateModel)->Bool
+andTests :: [FMCTestF] -> Int -> UnitTestPathState -> Bool
 andTests fs x y = not (any not (map (\f -> f x y) fs))
 
-almostEqual::Double->Double->Double->Bool
+almostEqual :: Double -> Double -> Double -> Bool
 almostEqual eps x y = abs (x - y) < eps
 
-almostEqualMV::ExchangeRateFunction->MoneyValue->MoneyValue->Bool
+almostEqualMV :: ExchangeRateFunction -> MoneyValue -> MoneyValue -> Bool
 almostEqualMV e (MoneyValue x ccy) mv2 = almostEqual 1.0 x y where
   (MoneyValue y _) = MV.convert mv2 ccy e
 
 
-isFinalNW::MoneyValue->FMCTestF
-isFinalNW nw _ (cs,fe) =
+isFinalNW :: MoneyValue -> FMCTestF
+isFinalNW nw _ (PathState cs fe) =
   let e = fe ^. feExchange
       ps = cs ^. csMC.mcsPathSummary
   in case ps of
     FinalNW x -> almostEqualMV e nw x
-    ZeroNW _ -> False
+    ZeroNW _  -> False
 
 
-isFinalAcctValue::AccountName->MoneyValue->FMCTestF
-isFinalAcctValue acctName amt _ (cs,fe) = f where
+isFinalAcctValue :: AccountName -> MoneyValue -> FMCTestF
+isFinalAcctValue acctName amt _ (PathState cs fe) = f where
   e = fe ^. feExchange
   acctE = getAccount acctName (cs ^. csMC.mcsBalanceSheet)
   f = case acctE of
     Right acct -> almostEqualMV e amt (accountValue acct e)
-    Left _ -> False
+    Left _     -> False
 
-isBankruptBy::Year->FMCTestF
-isBankruptBy d _ (cs,_) =
+isBankruptBy :: Year -> FMCTestF
+isBankruptBy d _ (PathState cs _) =
   let ps = cs ^. csMC.mcsPathSummary
   in case ps of
     ZeroNW day -> day <= d
-    FinalNW _ -> False
+    FinalNW _  -> False
 
-isBankruptBetween::Year->Year->FMCTestF
+isBankruptBetween :: Year -> Year -> FMCTestF
 isBankruptBetween before after = notTest (isBankruptBy before) `andTest` isBankruptBy after
-
 
 assetTests = ConfigTests "Configs/Tests/AssetTestConfigurations.xml"
              [
@@ -228,7 +233,12 @@ lifeEventTests = ConfigTests "Configs/Tests/LifeEventTestConfigurations.xml"
 
             ]
 
-allTests = [assetTests,flowTests,taxTests,ruleTests,lifeEventTests]
+allTests = [ assetTests
+           , flowTests
+           , taxTests
+           , ruleTests
+           , lifeEventTests
+           ]
 
 succeeds n = TestInstance
            { run = return $ Finished Pass,
@@ -245,9 +255,9 @@ fails n failMsg = TestInstance
              setOption = \_ _ -> Right $ fails n failMsg}
 
 
-doTest::String->(CombinedState TestAsset TestFlow TestLifeEvent TestRule,FinEnv TestRateModel)->Int->FMCTestF->IO Test
-doTest testName (cs0,fe0) years f = do
-  let result = execOnePathPure leConverter cs0 fe0 1 years
+doTest :: String -> UnitTestPathState -> Int -> FMCTestF -> IO Test
+doTest testName ps0 years f = do
+  let result = execOnePathPure leConverter ps0 1 years
   case result of
     Left e -> do
       putStrLn ("Execution failed.  Error=" ++ show e)
@@ -256,39 +266,39 @@ doTest testName (cs0,fe0) years f = do
       putStrLn $ if f years x then "Pass" else "Fail (" ++ show x ++ ")"
       return $ if f years x then Test $ succeeds testName else Test $ fails testName "test failed"
 
-evalTest::FMCTestSet->IO [Test]
+evalTest :: FMCTestSet -> IO [Test]
 evalTest (ConfigTests cFile testSets) = do
   putStrLn ("\nRunning tests from config file=" ++ cFile)
   (configInfo, configMap) <- loadConfigurations ccs Nothing (C.UnparsedFile cFile)
   let f (cfgName,years,testl) = do
-        (_,fe0,cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
+        (_, fe0, cs0) <- eitherToIO $ buildInitialStateFromConfig configInfo configMap cfgName
         let csHist = cs0 & (csNeedHistory .~ True)
             g (FMCTest testName testF) = do
-              putStr ("Test=" ++ testName ++ " (" ++ show years ++ " yrs)->")
-              doTest testName (csHist,fe0) years testF
+              putStr ("Testing \"" ++ testName ++ "\" (" ++ show years ++ " yrs): ")
+              doTest testName (PathState csHist fe0) years testF
         mapM g testl
   x <- mapM f testSets
   return $ concat x
 
-evalTest (StateTests (cs0,fe0) testSets) = do
+evalTest (StateTests (PathState cs0 fe0) testSets) = do
   putStrLn "\n Running tests from given config."
   let csHist = cs0 & (csNeedHistory .~ True)
       f (years,testl) = do
         let g (FMCTest testName testF) = do
-              putStr ("Test=" ++ testName ++ " (" ++ show years ++ " yrs)->")
-              doTest testName (csHist,fe0) years testF
+              putStr ("Testing \"" ++ testName ++ "\" (" ++ show years ++ " yrs): ")
+              doTest testName (PathState csHist fe0) years testF
         mapM g testl
   x <- mapM f testSets
   return $ concat x
 
-runTests::[FMCTestSet]->IO [[Test]]
+runTests :: [FMCTestSet] -> IO [[Test]]
 runTests = mapM evalTest
 
 
-tests::IO [[Test]]
+tests :: IO [[Test]]
 tests = runTests allTests
 
-mainTest:: IO ()
+mainTest :: IO ()
 mainTest = do
   _ <- runTests allTests
   return ()

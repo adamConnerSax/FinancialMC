@@ -43,6 +43,7 @@ library
     FinancialMC.Parsers.XML.All            
     FinancialMC.Parsers.JSON.Utilities
     FinancialMC.PersistentTypes
+--    FinancialMC.Core.Probability              
   other-modules:
     FinancialMC.Core.CValued_Internal
     FinancialMC.Core.FinancialStates
@@ -143,8 +144,9 @@ benchmark bench-all
   other-modules:       BenchUtils
                      , BenchMoneyOps
                      , BenchPath
+                     , BenchTypes
                      , BenchMapLike
---                     , BenchEngine
+                     , BenchEngine
   ghc-options:         -O2 -threaded "-with-rtsopts=-N" -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches
   main-is:             BenchAll.hs
   build-depends:       FinancialMC, base, criterion, deepseq, lens, mersenne-random-pure64, unordered-containers, containers, text 

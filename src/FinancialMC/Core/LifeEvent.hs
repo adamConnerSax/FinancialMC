@@ -1,3 +1,4 @@
+{-# LANGUAGE ConstraintKinds        #-}
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleContexts       #-}
 {-# LANGUAGE FlexibleInstances      #-}
@@ -14,18 +15,20 @@ module FinancialMC.Core.LifeEvent
        , lifeEventName
        , lifeEventYear
        , LifeEventOutput(..)
-       , LifeEventApp
+       , LifeEventAppC
        ) where
 
 import           FinancialMC.Core.Asset           (Account, AccountGetter,
                                                    IsAsset)
-import           FinancialMC.Core.FinancialStates (FinEnv, FinState)
+import           FinancialMC.Core.FinancialStates (ReadsFinEnv, ReadsFinState)
 import           FinancialMC.Core.Flow            (IsFlow)
+import           FinancialMC.Core.MoneyValue      (ReadsExchangeRateFunction)
 import           FinancialMC.Core.Rates           (IsRateModel)
-import           FinancialMC.Core.Result          (ResultT)
+import           FinancialMC.Core.Result          (MonadResult)
 import           FinancialMC.Core.Utilities       (FMCException, Year)
 
-import           Control.Monad.Reader             (ReaderT)
+import           Control.Monad.Except             (MonadError)
+import           Control.Monad.State              (MonadState)
 import           Data.Aeson                       (FromJSON (..), ToJSON (..),
                                                    genericParseJSON,
                                                    genericToJSON)
@@ -45,7 +48,13 @@ instance Bifunctor LifeEventOutput where
   first f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
   second f (LifeEventOutput accts flows) = LifeEventOutput accts (f <$> flows)
 
-type LifeEventApp a fl rm = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
+--type LifeEventApp a fl rm = ResultT (LifeEventOutput a fl) (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
+type LifeEventAppC s a fl rm m = ( MonadError FMCException m
+                                 , MonadResult (LifeEventOutput a fl) m
+                                 , MonadState s m
+                                 , ReadsFinState s
+                                 , ReadsFinEnv s rm
+                                 , ReadsExchangeRateFunction s)
 
 type LifeEventName = T.Text
 
@@ -68,7 +77,7 @@ class IsLifeEvent e where
   type FlowType e :: *
   lifeEventCore::e->LifeEventCore
   -- do we need/want the constraints here
-  doLifeEvent::(IsAsset a,IsFlow fl,IsRateModel rm)=>e->LifeEventConverters a fl e->AccountGetter a->LifeEventApp a fl rm ()
+  doLifeEvent::(IsAsset a, IsFlow fl, IsRateModel rm, LifeEventAppC s a fl rm m) => e -> LifeEventConverters a fl e -> AccountGetter m a -> m ()
 
 lifeEventName::IsLifeEvent e=>e->LifeEventName
 lifeEventName = leName . lifeEventCore

@@ -10,48 +10,49 @@
 module FinancialMC.Core.Evolve
        (
          Evolver
-       , EvolveApp
+       , EvolveC
        , Evolvable(..)
        , EvolveOutput(..)
        , EvolveResult
        , TaxAmount(..)
        , FlowResult(..)
        , AccumResult(..)
-       , liftER -- to match ReaderT ExchangeRateFunction Identity to Evolver
        , applyAccums --for Rules
        , applyFlows
        , evolveWithin
        , evolveAndApply
        ) where
 
-import           FinancialMC.Core.FinApp          (LoggableStepApp (..),
-                                                   magnifyStepApp,
-                                                   taxDataApp2StepAppFSER,
-                                                   toStepApp)
+--import           FinancialMC.Core.FinApp          (PathStack)
 
 import           Data.Monoid                      ((<>))
-import           FinancialMC.Core.FinancialStates (AccumName, FinEnv, FinState,
-                                                   HasFinEnv (..), addCashFlow,
+import           FinancialMC.Core.FinancialStates (AccumName, FinEnv, FinState, HasAccumulators (accumulators),
+                                                   HasCashFlow (cashFlow),
+                                                   HasFinState (..),
+                                                   HasTaxData (..),
+                                                   ReadsFinEnv (..),
+                                                   addCashFlow,
                                                    addToAccumulator',
                                                    zeroAccumulator)
 import           FinancialMC.Core.MoneyValue      (ExchangeRateFunction,
-                                                   MoneyValue)
+                                                   MoneyValue,
+                                                   ReadsExchangeRateFunction)
 import qualified FinancialMC.Core.MoneyValueOps   as MV
-import           FinancialMC.Core.Rates           (IsRateModel)
-import           FinancialMC.Core.Result          (Result (Result), ResultT,
+import           FinancialMC.Core.Rates           (IsRateModel, Rate,
+                                                   ReadsRateTable)
+import           FinancialMC.Core.Result          (MonadResult, Result (Result),
                                                    runResultT)
-import           FinancialMC.Core.Tax             (TaxDataApp, TaxType,
+import           FinancialMC.Core.Tax             (TaxDataAppC, TaxType,
                                                    addDeductibleFlow,
                                                    addTaxableFlow)
 import           FinancialMC.Core.Utilities       (AsFMCException (..),
                                                    FMCException (..))
 
---import           Control.Monad.Catch              (MonadThrow, SomeException,
---                                                   throwM)
 import           Control.Monad.Except             (MonadError)
-import           Control.Monad.Reader             (ReaderT, lift)
+--import           Control.Monad.Reader             (ReaderT, lift)
+import           Control.Monad.State              (MonadState)
 
-import           Control.Lens                     (Lens', magnify, mapMOf)
+import           Control.Lens                     (Lens', mapMOf)
 import           Control.Monad.Error.Lens         (throwing)
 import qualified Data.Traversable                 as TR
 --import qualified Data.Text as T
@@ -84,19 +85,38 @@ instance Monoid EvolveOutput where
 
 type EvolveResult a = Result EvolveOutput a
 
-type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
+type EvolveC s rm m = ( MonadError FMCException m
+                      , MonadState s m
+                      , ReadsExchangeRateFunction s
+                      , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+                      , IsRateModel rm
+                      , ReadsFinEnv s rm)
 
-type Evolver rm a = a -> EvolveApp rm a
+--type EvolveApp rm = ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException))
 
-liftER :: MV.ER (Either FMCException) a -> EvolveApp rm a
-liftER = lift . magnify feExchange
+type Evolver s rm m a = (EvolveC s rm m, MonadResult EvolveOutput m) => a -> m a
 
-class Evolvable e where
-  evolve :: IsRateModel rm => Evolver rm e
+--liftER :: (MonadState s m, ReadsExchangeRateFunction s) => MV.ER (Either FMCException) a -> m a
+--liftER = readOnly
 
-evolveWithin :: IsRateModel rm => (Evolvable a, TR.Traversable t)=> b -> Lens' b (t a) -> EvolveApp rm b
+class Evolvable a where
+  evolve :: (EvolveC s rm m, MonadResult EvolveOutput m) => a -> m a
+
+evolveWithin :: (EvolveC s rm m, MonadResult EvolveOutput m, Evolvable a, TR.Traversable t) => b -> Lens' b (t a) -> m b
 evolveWithin oldB l = mapMOf (l.traverse) evolve oldB
+{-# INLINE evolveWithin #-}
 
+applyTax :: ( MonadError FMCException m
+            , MonadState s m
+            , HasTaxData s
+            , ReadsExchangeRateFunction s) => TaxAmount -> m ()
+applyTax (TaxAmount tt y) =
+  let taxFlow = addTaxableFlow tt y
+      onError = throwing _Other "Can't call applyTax with a -ve number."
+  in if MV.isNonNegative y then taxFlow else onError
+{-# INLINE applyTax #-}
+
+{-
 applyTax ::( MonadError FMCException m
            , LoggableStepApp FinState ExchangeRateFunction m)
   => TaxAmount -> m ()
@@ -106,32 +126,40 @@ applyTax (TaxAmount tt y) =
       applyAction = taxDataApp2StepAppFSER taxFlow
       errorAction = throwing _Other "Can't call applyTax with a -ve number."
   in if MV.isNonNegative y then applyAction else errorAction
+-}
 
 applyDeduction :: ( MonadError FMCException m
-                  , LoggableStepApp FinState ExchangeRateFunction m)
-  => TaxAmount -> m ()
+                  , MonadState s m
+                  , HasTaxData s
+                  , ReadsExchangeRateFunction s) => TaxAmount -> m ()
 applyDeduction (TaxAmount tt y) =
-  let taxFlow :: TaxDataApp (Either FMCException) ()
-      taxFlow = addDeductibleFlow tt y
-      applyAction = taxDataApp2StepAppFSER taxFlow
+  let taxFlow = addDeductibleFlow tt y
       errorAction = throwing _Other "Can't call applyTax with a -ve number."
-  in if MV.isNonNegative y then applyAction else errorAction
+  in if MV.isNonNegative y then taxFlow else errorAction
+{-# INLINE applyDeduction #-}
+--
 
 applyFlowAndTax :: ( MonadError FMCException m
-                   , LoggableStepApp FinState ExchangeRateFunction m)
-  => MoneyValue -> TaxAmount -> m ()
+                   , MonadState s m
+                   , HasTaxData s
+                   , HasCashFlow s
+                   , ReadsExchangeRateFunction s) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndTax x ta =   addCashFlow x >> applyTax ta
+{-# INLINE applyFlowAndTax #-}
 
 applyFlowAndDeduction :: ( MonadError FMCException m
-                         , LoggableStepApp FinState ExchangeRateFunction m) => MoneyValue -> TaxAmount -> m ()
+                         , MonadState s m
+                         , HasTaxData s
+                         , HasCashFlow s
+                         , ReadsExchangeRateFunction s) => MoneyValue -> TaxAmount -> m ()
 applyFlowAndDeduction x ta = addCashFlow x >> applyDeduction ta
-
-
+{-# INLINE applyFlowAndDeduction #-}
 
 applyFlow :: ( MonadError FMCException m
-             , LoggableStepApp FinState ExchangeRateFunction m)
-  => FlowResult
-  -> m ()
+             , MonadState s m
+             , HasTaxData s
+             , HasCashFlow s
+             , ReadsExchangeRateFunction s) => FlowResult -> m ()
 applyFlow (UnTaxed x) = addCashFlow x
 applyFlow (AllTaxed ta@(TaxAmount _ x)) = applyFlowAndTax x ta
 applyFlow (AllDeductible ta@(TaxAmount _ x)) = applyFlowAndDeduction (MV.negate x) ta
@@ -139,37 +167,51 @@ applyFlow (OnlyTaxed ta) = applyTax ta
 applyFlow (OnlyDeductible ta) = applyDeduction ta
 applyFlow (PartiallyTaxed x ta) = applyFlowAndTax x ta
 applyFlow (PartiallyDeductible x ta) = applyFlowAndDeduction x ta
+{-# INLINE applyFlow #-}
 
 applyFlows :: ( MonadError FMCException m
-              , LoggableStepApp FinState ExchangeRateFunction m)
-  => [FlowResult] -> m ()
+              , MonadState s m
+              , HasTaxData s
+              , HasCashFlow s
+              , ReadsExchangeRateFunction s) => [FlowResult] -> m ()
 applyFlows = mapM_ applyFlow
+{-# INLINE applyFlows #-}
 
 applyAccum :: ( MonadError FMCException m
-              , LoggableStepApp FinState ExchangeRateFunction m) => AccumResult -> m ()
+              , MonadState s m
+              , HasAccumulators s
+              , ReadsExchangeRateFunction s) => AccumResult -> m ()
 applyAccum (AddTo name amt) = addToAccumulator' name amt
 applyAccum (Zero name)      = zeroAccumulator name
-
+{-# INLINE applyAccum #-}
 
 applyAccums :: ( MonadError FMCException m
-               , LoggableStepApp FinState ExchangeRateFunction m) => [AccumResult] -> m ()
+               , MonadState s m
+               , HasAccumulators s
+               , ReadsExchangeRateFunction s) => [AccumResult] -> m ()
 applyAccums  = mapM_ applyAccum
+{-# INLINE applyAccums #-}
 
-
+-- ought to be able to replace HasTaxData, HasCashFlow and HasAccumulators with HasFinState.  THey are isomorphic.  But how?
 applyEvolveResult :: ( MonadError FMCException m
-                     , LoggableStepApp FinState ExchangeRateFunction m) => EvolveResult a -> m a
+                     , MonadState s m
+                     , HasTaxData s
+                     , HasCashFlow s
+                     , HasAccumulators s
+                     , ReadsExchangeRateFunction s) => EvolveResult a -> m a
 applyEvolveResult (Result a (EvolveOutput flows accums)) = do
   applyFlows flows
   applyAccums accums
   return $! a
+{-# INLINE applyEvolveResult #-}
 
-evolveAndApply :: forall rm m a. ( IsRateModel rm
-                                 , MonadError FMCException m
-                                 , Evolvable a
-                                 , LoggableStepApp FinState (FinEnv rm) m)
-  => a -> m a
-evolveAndApply x = stepLift $  do
-  let result :: ResultT EvolveOutput (ReaderT (FinEnv rm) (Either FMCException)) a
-      result = evolve x
-  x <- toStepApp $ lift $ runResultT result
-  magnifyStepApp feExchange $ applyEvolveResult x
+-- ought to be able to replace HasTaxData, HasCashFlow and HasAccumulators with HasFinState.  THey are isomorphic.  But how?
+evolveAndApply :: ( Evolvable a
+                  , EvolveC s rm m
+                  , HasTaxData s
+                  , HasCashFlow s
+                  , HasAccumulators s) => a -> m a
+evolveAndApply x = do
+  x <- runResultT $ evolve x
+  applyEvolveResult x
+{-# INLINE evolveAndApply #-}

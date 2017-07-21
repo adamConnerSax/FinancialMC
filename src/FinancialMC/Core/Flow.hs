@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TypeFamilies #-}
 module FinancialMC.Core.Flow
        (
          flowingAt
@@ -35,10 +36,10 @@ import qualified Data.Text as T
 
 type FlowName = T.Text
 
-data FlowCore = FlowCore {fcName:: !FlowName,
-                          fcAmount:: !MoneyValue,
-                          fcFrequency:: !Frequency,
-                          fcDateRange:: !DateRange } deriving (Generic)
+data FlowCore = FlowCore { fcName:: FlowName
+                         , fcAmount:: MoneyValue
+                         , fcFrequency:: Frequency
+                         , fcDateRange:: DateRange } deriving (Generic)
                 
 instance Show FlowCore where
    show (FlowCore n a ff dr) = show n ++ " (" ++ show a ++ ", " ++ show ff ++ " " ++ show dr ++ ")"
@@ -50,35 +51,35 @@ instance FromJSON FlowCore where
   
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''FlowCore) -}
 
-revalueFlowCore::FlowCore->MoneyValue->FlowCore
+revalueFlowCore :: FlowCore -> MoneyValue -> FlowCore
 revalueFlowCore (FlowCore n _ f dr) v' = FlowCore n v' f dr
 
 data FlowDirection = InFlow | OutFlow deriving(Eq,Show)
 
-class Evolvable f=>IsFlow f where
-  flowCore::f->FlowCore
-  revalueFlow::f->MoneyValue->f
-  flowDirection::f->FlowDirection  
-  
-flowName::IsFlow f=>f->FlowName
+class Evolvable f => IsFlow f where
+  flowCore :: f -> FlowCore
+  revalueFlow :: f -> MoneyValue->f
+  flowDirection :: f -> FlowDirection  
+
+flowName :: IsFlow f => f -> FlowName
 flowName f = fcName $ flowCore f
 
-flowAmount::IsFlow f=>f->MoneyValue
+flowAmount :: IsFlow f => f -> MoneyValue
 flowAmount f = fcAmount $ flowCore f
 
-flowCurrency::IsFlow f=>f->Currency
+flowCurrency :: IsFlow f => f -> Currency
 flowCurrency f = (flowAmount f) ^. mCurrency
 
-flowFrequency::IsFlow f=>f->Frequency
+flowFrequency :: IsFlow f => f -> Frequency
 flowFrequency f = fcFrequency $ flowCore f
 
-flowDateRange::IsFlow f=>f->DateRange
+flowDateRange :: IsFlow f => f -> DateRange
 flowDateRange f = fcDateRange $ flowCore f
 
-flowingAt::IsFlow f=>Int->f->Bool
+flowingAt :: IsFlow f => Int -> f -> Bool
 flowingAt day f = between day (flowDateRange f) 
 
-annualFlowAmount::IsFlow f=>f->MoneyValue
+annualFlowAmount :: IsFlow f => f -> MoneyValue
 annualFlowAmount f = MV.multiply (flowAmount f) (fromIntegral $ frequencyMultiplier (flowFrequency f))
 
 {-

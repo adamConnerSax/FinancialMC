@@ -22,7 +22,8 @@ import           FinancialMC.Core.Evolve          (AccumResult (..),
                                                    FlowResult (..),
                                                    TaxAmount (..))
 import           FinancialMC.Core.FinancialStates (AccumName, FinEnv,
-                                                   HasFinEnv (..))
+                                                   HasFinEnv (..),
+                                                   ReadsFinEnv (getFinEnv))
 import           FinancialMC.Core.Flow            (FlowCore, FlowDirection (..),
                                                    IsFlow (..),
                                                    annualFlowAmount, flowAmount,
@@ -37,22 +38,14 @@ import           FinancialMC.Core.Tax             (TaxType (..))
 import           FinancialMC.Core.Utilities       (Year)
 
 import           Control.Exception                (SomeException)
-import           Control.Lens                     (magnify, makeClassy, view)
-import           Control.Monad.Reader             (ReaderT, lift)
+import           Control.Lens                     (makeClassy, use)
 
 import           Data.Aeson                       (FromJSON, ToJSON)
 import           Data.Aeson.Types                 (Options (fieldLabelModifier),
                                                    defaultOptions)
---import           Data.Aeson.Existential (TypeNamed)
 import qualified Data.Text                        as T
 import           GHC.Generics                     (Generic)
 
--- lifts to one below since we do all work underneath Result and then lift
-laERMV :: Monad m => Currency->CV.CVD->ReaderT (FinEnv rm) m MoneyValue
-laERMV c = magnify feExchange . CV.asERMV c
-
-liftFE :: ReaderT (FinEnv rm) (Either err) a -> ResultT EvolveOutput (ReaderT (FinEnv rm) (Either err)) a
-liftFE = lift
 
 flowF :: IsFlow f => Year -> f -> MoneyValue
 flowF date flow = if flowingAt date flow then annualFlowAmount flow else MV.zero (flowCurrency flow)
@@ -66,7 +59,7 @@ data BaseFlowDetails =
   SalaryPayment |
   RentalIncome !MoneyValue {- max annual deduction -} deriving (Generic,ToJSON,FromJSON)
 
-baseFlowDirection :: BaseFlowDetails->FlowDirection
+baseFlowDirection :: BaseFlowDetails -> FlowDirection
 baseFlowDirection Expense               = OutFlow
 baseFlowDirection DeductibleExpense     = OutFlow
 baseFlowDirection (EducationExpense _)  = OutFlow
@@ -84,7 +77,7 @@ instance Show BaseFlowDetails where
   show fl@SalaryPayment = "Salary [" ++ show (baseFlowDirection fl) ++ "]->"
   show fl@(RentalIncome md) = "Rental income [" ++ show (baseFlowDirection fl) ++ "; max annual deduction=" ++ show md ++ "]->"
 
-data BaseFlow = BaseFlow { _bfCore :: !FlowCore, _bfDetails :: !BaseFlowDetails} deriving (Generic,ToJSON,FromJSON)
+data BaseFlow = BaseFlow { _bfCore :: FlowCore, _bfDetails :: BaseFlowDetails} deriving (Generic,ToJSON,FromJSON)
 makeClassy ''BaseFlow
 
 instance Show BaseFlow where
@@ -103,11 +96,12 @@ instance Evolvable BaseFlow where
   evolve fl@(BaseFlow _ (Payment _)) = paymentEvolve fl
   evolve fl@(BaseFlow _ SalaryPayment) = wageEvolve fl
   evolve fl@(BaseFlow _ (RentalIncome _)) = rentalIncomeEvolve fl
+  {-# INLINE evolve #-}
 
-expenseWithInflation::IsFlow f=>Bool->AccumName->InflationType->Evolver rm f
+expenseWithInflation :: IsFlow f => Bool -> AccumName -> InflationType -> Evolver s rm m f
 expenseWithInflation deductible accumName iType f = do
-  infRate <- lift . magnify feRates $ rateRequest (Inflation iType)
-  curDate <- view feCurrentDate
+  infRate <- rateRequest (Inflation iType)
+  curDate <- use $ getFinEnv.feCurrentDate
   let newA = MV.multiply (flowAmount f) (1.0 + infRate)
       expense = flowF curDate f
       cashFlow = MV.negate expense
@@ -115,39 +109,42 @@ expenseWithInflation deductible accumName iType f = do
       flowResult = if deductible then AllDeductible (TaxAmount OrdinaryIncome expense) else UnTaxed cashFlow
       accums = if T.null accumName then [] else [AddTo accumName cashFlow]
   appendAndReturn (EvolveOutput [flowResult] accums) newExpense
+{-# INLINE expenseWithInflation #-}
 
-paymentEvolve::Evolver rm BaseFlow
+paymentEvolve :: Evolver s rm m BaseFlow
 paymentEvolve p@(BaseFlow _ (Payment growth_rate)) = do
-  curDate <- liftFE $ view feCurrentDate
+  curDate <- use $ getFinEnv.feCurrentDate
   -- only grows once live.  So a future starting payment starts at amount given
   let newA = if flowingAt curDate p then MV.multiply (flowAmount p) (1.0 + growth_rate) else flowAmount p
       cashFlow = flowF curDate p
   appendAndReturn (EvolveOutput [AllTaxed (TaxAmount OrdinaryIncome cashFlow)] []) (revalueFlow p newA)
+{-# INLINE paymentEvolve #-}
 
-wageEvolve::Evolver rm BaseFlow
+wageEvolve :: Evolver s rm m BaseFlow
 wageEvolve p = do
-  (cashFlow',newA') <- liftFE $ do
-    infRate <- (magnify feRates) $ rateRequest (Inflation Wage)
-    curDate <- view feCurrentDate
+  (cashFlow',newA') <- do
+    infRate <- rateRequest (Inflation Wage)
+    curDate <- use $ getFinEnv.feCurrentDate
     let newA = MV.multiply (flowAmount p) (1.0 + infRate)
         cashFlow = flowF curDate p
     return (cashFlow,newA)
   appendAndReturn (EvolveOutput [AllTaxed (TaxAmount OrdinaryIncome cashFlow')] []) (revalueFlow p newA')
+{-# INLINE wageEvolve #-}
 
 --Need test for this.
-rentalIncomeEvolve::Evolver rm BaseFlow
+rentalIncomeEvolve :: Evolver s rm m BaseFlow
 rentalIncomeEvolve ri@(BaseFlow _ (RentalIncome maxAnnualDed)) = do
   let ccy = flowCurrency ri
-  (cashFlow',newPayment',taxable') <- liftFE $ do
-    infRate <- magnify feRates $ rateRequest (Inflation Price)
-    curDate <- view feCurrentDate
+  (cashFlow',newPayment',taxable') <- do
+    infRate <- rateRequest (Inflation Price)
+    curDate <- use $ getFinEnv.feCurrentDate
     let newA = MV.multiply (flowAmount ri) (1.0 + infRate)
         newPayment = revalueFlow ri newA
         cashFlow = flowF curDate ri
-    taxable <- laERMV ccy $ cvMax (CV.mvZero ccy) (CV.fromMoneyValue cashFlow |-| CV.fromMoneyValue maxAnnualDed)
+    taxable <- CV.asERMV ccy $ cvMax (CV.mvZero ccy) (CV.fromMoneyValue cashFlow |-| CV.fromMoneyValue maxAnnualDed)
     return (cashFlow,newPayment,taxable)
   appendAndReturn (EvolveOutput [PartiallyTaxed cashFlow' (TaxAmount NonPayrollIncome taxable')] []) newPayment'
-
+{-# INLINE rentalIncomeEvolve #-}
 
 {-
 data Expense = Expense { eFlowCore:: !FlowCore } deriving (Generic)
