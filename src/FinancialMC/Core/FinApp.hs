@@ -81,7 +81,6 @@ makeClassy ''LogEntry
 data PathState s e = MkPathState { _stepState :: !s, _stepEnv :: !e } deriving (Show)
 makeClassy ''PathState
 
-
 {-
 type PathState s e = (s, e)
 
@@ -93,6 +92,8 @@ stepEnv :: Lens' (PathState s e) e
 stepEnv = _2
 -}
 
+-- This here so the rest of the code will be the same for either underlying type of PathState
+-- Otherwise "pattern" imports will require commenting in/out
 pattern PathState s e = MkPathState s e
 
 zoomPathState :: Lens' s1 s2 -> Lens' e1 e2 -> Lens' (PathState s1 e1) (PathState s2 e2)
@@ -167,7 +168,7 @@ runProducerR :: ReaderT e (Producer LogEntry IO) a -> ReaderT e IO a
 runProducerR r = ReaderT $ \x -> runEffect . (>-> printLog [minBound..]) $ runReaderT r x
 
 instance MonadError FMCException (PPathStackR s) where
-  throwError = throwM . toException -- because PPathStackR has a MonadThrow instance
+  throwError = throwM . toException -- works because PPathStackR has a MonadThrow instance
   catchError action handler = PPathStackR $ hoist lift $ MTC.control $ \run -> let f = run . runProducerR in catch (f $ unPPathStackR action) (f . unPPathStackR . handler)
 
 instance ReadOnly s (PPathStack s) where

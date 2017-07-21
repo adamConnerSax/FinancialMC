@@ -375,7 +375,7 @@ updateRates :: ( IsRateModel rm
 updateRates pMT = do
   fe <- use finEnv
 --  model <- use $ finEnv.feRateModel
-  let (newModel, (newRates, newPMT)) = runModel (fe ^. feRates) pMT (fe ^. feRateModel)
+  let ((newModel, newRates), newPMT) = runModel (fe ^. feRates) (fe ^. feRateModel) pMT
   finEnv.feRates .= newRates
   finEnv.feRateModel .= newModel
   return $! newPMT

@@ -184,7 +184,7 @@ buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs
 
 makeStartingRates :: IsRateModel rm => rm -> RateTable Rate
 makeStartingRates rateDefaultModel =
-  let (_,(startingRates,_)) = runModel defaultRateTable (pureMT 1) rateDefaultModel --ICK.  Hard wired pureMT.  Ick.
+  let ((_, startingRates), _) = runModel defaultRateTable rateDefaultModel (pureMT 1) --ICK.  Hard wired pureMT.  Ick.
   in startingRates
 
 buildInitialState::IsRateModel rm=>C.InitialFS a fl le ru->TaxRules->RateTable Rate->rm->

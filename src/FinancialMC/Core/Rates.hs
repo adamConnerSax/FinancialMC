@@ -140,45 +140,19 @@ throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not foun
 rateRequest :: (MonadError FMCException m, MonadState s m, ReadsRateTable s a) => RateTag -> m a
 rateRequest rTag = use getRateTable >>= flip throwingLookup rTag
 
-{-
-runModel :: (IsRateModel r, R.MonadRandom m, RandomSource m RSource, MonadError FMCException m)
-  => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
-runModel curRates randomSrc model = do
-  (newModel, (updates, newSrc)) <- runStateT (rateModelF curRates model) (Seq.empty, randomSrc)
-  return $ (newModel, (rBulkUpdate curRates updates, newSrc))
--}
+applyRateUpdates :: IsRateModel r  => RateTable Rate -> r -> R.RVar (r, RateTable Rate)
+applyRateUpdates curRates model = do
+  (newModel, updates) <- rateModelF curRates model
+  return $ (newModel, rBulkUpdate curRates updates)
 
-runModel :: IsRateModel r  => RateTable Rate -> RSource -> r -> (r, (RateTable Rate, RSource))
-runModel curRates rSource model = 
-  let ((newModel, updates), newSrc) = R.sampleState (rateModelF curRates model) rSource
-  in (newModel, (rBulkUpdate curRates updates, newSrc))
+runModel :: IsRateModel r  => RateTable Rate -> r -> RSource -> ((r, RateTable Rate), RSource)
+runModel curRates model = R.sampleState (applyRateUpdates curRates model)
 
 -- models will absorb sub-models.  So if you model stock returns as a function of bond returns, you will make a model for both.  And if a third thing depends on either you will include it as well.  So that the final set of models will be non-overlapping in affected rates.
 -- models which include other models can verify this at runtime, using the updatedRates typeclass function.
--- can I force verification? Where?
-
---type RateModelC m = (RandomSource m RSource, MonadState (RateUpdates Rate, RSource) m)
+-- can I force verification? Even better do it with types? How? Where?
 
 class IsRateModel r where
   updatedRates :: r -> S.Set RateTag
   rateModelF :: RateTable Rate -> r -> R.RVar (r, RateUpdates Rate)
-
-{-
-data RateModel where
-  MkRateModel::(TypeNamed a, IsRateModel a, ToJSON a) => a->RateModel
-
-instance JSON_Existential RateModel where
-  containedName (MkRateModel a) = typeName a
-  containedJSON (MkRateModel a) = toJSON a
-
-instance IsRateModel RateModel where
-  rateModelF (MkRateModel x) = rateModelF x
-
-instance ToJSON RateModel where
-  toJSON = existentialToJSON
-
-instance HasParsers e RateModel=>EnvFromJSON e RateModel where
-  envParseJSON = parseJSON_Existential
--}
-
 
