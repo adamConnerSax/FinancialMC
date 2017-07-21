@@ -148,11 +148,10 @@ runModel curRates randomSrc model = do
   return $ (newModel, (rBulkUpdate curRates updates, newSrc))
 -}
 
-runModel :: (IsRateModel r, MonadError FMCException m)
-  => RateTable Rate -> RSource -> r -> m (r, (RateTable Rate, RSource))
-runModel curRates rSource model = do
-  ((newModel, updates), newSrc) <- R.sampleStateT (rateModelF curRates model) rSource
-  return $ (newModel, (rBulkUpdate curRates updates, newSrc))
+runModel :: IsRateModel r  => RateTable Rate -> RSource -> r -> (r, (RateTable Rate, RSource))
+runModel curRates rSource model = 
+  let ((newModel, updates), newSrc) = R.sampleState (rateModelF curRates model) rSource
+  in (newModel, (rBulkUpdate curRates updates, newSrc))
 
 -- models will absorb sub-models.  So if you model stock returns as a function of bond returns, you will make a model for both.  And if a third thing depends on either you will include it as well.  So that the final set of models will be non-overlapping in affected rates.
 -- models which include other models can verify this at runtime, using the updatedRates typeclass function.

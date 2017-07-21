@@ -15,7 +15,7 @@ module FinancialMC.Builders.RateModels (
   , makeLogNormalFactor
   , BaseRateModel(..)
   , BaseRateModelT -- for ease of use
-  , RateModelFactorC
+--  , RateModelFactorC
   ) where
 
 import           FinancialMC.Core.Rates     (IsRateModel (..), RSource, Rate,
@@ -27,7 +27,7 @@ import           FinancialMC.Core.Rates     (IsRateModel (..), RSource, Rate,
 import           FinancialMC.Core.Utilities (eitherToIO)
 
 
-import           Control.Monad              (foldM)
+import           Control.Monad              (foldM, join)
 import           Control.Monad.State.Strict (MonadState, State, get, put,
                                              runState)
 import qualified Data.Random                as Rand
@@ -38,7 +38,7 @@ import           Data.Aeson                 (FromJSON (parseJSON),
                                              ToJSON (toJSON), Value (Object),
                                              genericToJSON, object, (.:), (.=))
 
-import           Control.Arrow              ((***))
+import           Control.Arrow              (second, (***))
 import           Data.Aeson.Types           (Options (..), defaultOptions)
 import qualified Data.Foldable              as F
 import           Data.Maybe                 (fromMaybe)
@@ -97,9 +97,9 @@ factorToRateUpdate tag factor = do
   return newF
 -}
 
-factorToRateUpdate :: IsRateModelFactor rmf => RateTag -> rmf -> Rand.RVar (newF, RateUpdates Rate)
-factorToRateUpdate = do
-  (newF, newRate) <- rateModelFactorF rmf
+factorToRateUpdate :: IsRateModelFactor rmf => RateTag -> rmf -> Rand.RVar (rmf, RateUpdates Rate)
+factorToRateUpdate tag factor = do
+  (newF, newRate) <- rateModelFactorF factor
   return (newF, Seq.singleton (tag, newRate))
 
 
@@ -122,22 +122,24 @@ instance IsRateModelFactor rmf => IsRateModel (BaseRateModel rmf) where
   updatedRates = baseRateModelUpdatedRates
   rateModelF = baseRateModelF
 
-baseRateModelF :: IsRateModelFactor rmf => RateTable Rate -> BaseRateModel rmf -> Rand.RVarT (BaseRateModel rmf, RateUpdates Rate)
+baseRateModelF :: IsRateModelFactor rmf => RateTable Rate -> BaseRateModel rmf -> Rand.RVar (BaseRateModel rmf, RateUpdates Rate)
 
-baseRateModelF _ (SingleFactorModel tag factor) = factorToRateUpdate tag factor
+baseRateModelF _ (SingleFactorModel tag factor) = do
+  (newRMF, updates) <- factorToRateUpdate tag factor
+  return (SingleFactorModel tag newRMF, updates)
 
-baseRateModelF curRates (ListModel models) = fmap (ListModel *** (join . Seq.fromList) . unzip) $ traverse (rateModelF curRates) models
+baseRateModelF curRates (ListModel models) = (ListModel *** (join . Seq.fromList)) . unzip <$> traverse (rateModelF curRates) models
 
 baseRateModelF curRates (SameModel rType rmf) = do
   let keys = filter (isRateType rType) (rKeys curRates)
-      g (curF, updates) tag = (second (updates ><)) factorToRateUpdate tag curF
-  (newRMF, updates) <- foldM g (rmf, Seq.empty) keys
-  return $! (SameModel rType newRMF, updates)
+      g (curF, updates') tag = (second (updates' Seq.><)) <$> factorToRateUpdate tag curF
+  (newRMF, allUpdates) <- foldM g (rmf, Seq.empty) keys
+  return $! (SameModel rType newRMF, allUpdates)
 
 baseRateModelF curRates (GroupedModel rType rmf) = do
   (newF, newRate) <- rateModelFactorF rmf
   let keys = filter (isRateType rType) (rKeys curRates)
-      updates = F.foldl' (\seq key-> seq Seq.|> (key, newRate)) updates keys
+      updates = F.foldl' (\seq key-> seq Seq.|> (key, newRate)) Seq.empty keys
   return $! (GroupedModel rType newF, updates)
 
 
