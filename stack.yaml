@@ -1,4 +1,5 @@
-resolver: lts-8.21
+#resolver: lts-8.21
+resolver: nightly-2017-12-01
 #compiler: ghc-8.0.2 --until Intero has fixed upper bound
 packages:
 #- location:

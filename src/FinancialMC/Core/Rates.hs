@@ -43,8 +43,7 @@ import           FinancialMC.Core.Utilities  (FMCException (FailedLookup),
                                               noteM)
 
 import           Control.Lens                (Getter, Lens', use)
-import           Control.Monad.Reader        (MonadReader (ask))
-import           Control.Monad.State.Strict  (MonadState, runStateT)
+import           Control.Monad.State.Strict  (MonadState)
 import           Data.Foldable               (foldl')
 import qualified Data.Map.Lazy               as M
 import           Data.Maybe                  (fromJust)
@@ -120,7 +119,7 @@ class ReadsRateTable s a | s -> a where
   default getRateTable :: HasRateTable s a => Getter s (RateTable a)
   getRateTable = rateTable
 
-instance (PrintfArg a, Num a)=>Show (RateTable a) where
+instance (PrintfArg a, Num a) => Show (RateTable a) where
   show rt = "[" ++ show (fmap f (rKeys rt)) ++ "]" where
     fmtRate x = printf "%.2f" (x*100)
     f k = "(" ++ show k ++ "," ++ fmtRate (fromJust $ rLookup rt k) ++ "%)"
