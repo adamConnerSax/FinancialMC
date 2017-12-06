@@ -59,7 +59,7 @@ import           Data.Random.Source.PureMT                   (pureMT)
 import           Control.Lens                                (zoom, (%=), _1,
                                                               _2)
 import           Control.Monad.Error.Lens                    (throwing)
-import           Control.Monad.Except                        (MonadError)
+--import           Control.Monad.Except                        (MonadError)
 import           Control.Monad.Morph                         (generalize, hoist,
                                                               lift)
 import           Data.Aeson                                  (FromJSON,

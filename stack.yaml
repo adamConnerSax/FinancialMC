@@ -1,11 +1,7 @@
-#resolver: lts-8.21
 resolver: nightly-2017-12-01
-#compiler: ghc-8.0.2 --until Intero has fixed upper bound
+
 packages:
-#- location:
-#    git: https://github.com/adamConnerSax/aeson-existential
-#    commit: b3e4378bf29dc05a116adf43453c764898382ab7
-#  extra-dep: true
 - '.'
+
 extra-deps:
 - hxt-relaxng-9.1.5.5
