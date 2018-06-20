@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms   #-}
 module UnitTests (tests,mainTest) where
 
 import           FinancialMC.Base                        (CombinedState, FinEnv,
@@ -24,8 +25,8 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseRateModelT,
                                                           BaseRule,
                                                           FMCPathState,
-                                                          HasPathState (stepEnv, stepState),
-                                                          PathState (PathState))
+                                                          pattern PathState)
+
 import qualified FinancialMC.Parsers.Configuration       as C
 import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
                                                           loadConfigurations)
