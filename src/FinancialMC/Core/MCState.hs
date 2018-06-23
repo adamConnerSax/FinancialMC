@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -192,6 +193,16 @@ instance Show FSSummary where
 
 data DatedSummary = DatedSummary { _dsYear :: !Year, _dsSummary :: !FSSummary } deriving (Show)
 
+
+class (IsAsset (AssetType a)
+      ,IsFlow (FlowType a)
+      ,IsLifeEvent (LifeEventType a)
+      ,IsRule (RuleType a)) => ComponentTypes a where 
+  type AssetType a :: *
+  type FlowType a :: *
+  type LifeEventType a :: *
+  type RuleType a :: *
+    
 
 data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
                                   , _mcsCashFlows:: !(CashFlows fl)
