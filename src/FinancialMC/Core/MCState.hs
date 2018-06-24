@@ -11,6 +11,7 @@
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE ConstraintKinds #-}
 module FinancialMC.Core.MCState 
        (
          BalanceSheet(BalanceSheet)
@@ -51,6 +52,9 @@ module FinancialMC.Core.MCState
 
 
 import           FinancialMC.Core.Asset (IsAsset, AccountName,Account(Account),HasAccount(..),accountValueCV)
+import           FinancialMC.Core.Flow (IsFlow)
+import           FinancialMC.Core.LifeEvent (IsLifeEvent)
+import           FinancialMC.Core.Rule (IsRule)
 import           FinancialMC.Core.Rates (IsRateModel)
 import           FinancialMC.Core.Tax (HasTaxData)
 import           FinancialMC.Core.Evolve (Evolvable(evolve),EvolveC, evolveWithin,evolveAndApply)
@@ -204,6 +208,21 @@ class (IsAsset (AssetType a)
   type RuleType a :: *
     
 
+type ShowableComponents a = (ComponentTypes a, Show (AssetType a), Show (FlowType a), Show (RuleType a), Show (LifeEventType a))
+    
+-- GADT here so that the various XXXType are in scope and constrained in the constructor
+data MCState a where
+  MCState :: ComponentTypes a => { _mcsBalanceSheet :: !(BalanceSheet (AssetType a))
+                                 , _mcsCashFlows :: !(CashFlows (FlowType a))
+                                 , _mcsLifeEvents :: [LifeEventType a]
+                                 , _mcsRules :: [RuleType a]
+                                 , _mcsSWeep :: RuleType a
+                                 , _mcsTaxTrade :: RuleType a
+                                 , _mcsPathSummary :: !PathSummary
+                                 , _mcsHistory :: ![DatedSummary]
+                                 } -> MCState a
+  
+{-    
 data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
                                   , _mcsCashFlows:: !(CashFlows fl)
                                   , _mcsLifeEvents:: [le]
@@ -213,6 +232,7 @@ data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
                                   , _mcsPathSummary:: !PathSummary
                                   , _mcsHistory:: ![DatedSummary]
                                   }
+-}
 
 makeClassy ''FSSummary
 makeClassy ''DatedSummary
