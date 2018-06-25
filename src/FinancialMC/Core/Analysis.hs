@@ -24,7 +24,8 @@ module FinancialMC.Core.Analysis
 import           FinancialMC.Core.Asset           (IsAsset)
 import           FinancialMC.Core.Flow            (IsFlow)
 import           FinancialMC.Core.LifeEvent       (LifeEventConverters)
-import           FinancialMC.Core.MCState         (DatedSummary (..),
+import           FinancialMC.Core.MCState         (ComponentTypes (..),
+                                                   DatedSummary (..),
                                                    FSSummary (..),
                                                    HasDatedSummary (..),
                                                    HasFSSummary (..),
@@ -90,10 +91,10 @@ makeClassy ''DatedSummaryWithReturns
 makeClassy ''DatedMoneyValue
 makeClassy ''SimHistories
 
-historiesFromSummaries::EngineC a fl le ru rm
-  => LifeEventConverters a fl le
+historiesFromSummaries :: EngineC tag rm
+  => LifeEventConverters (AssetType tag) (FlowType tag) (LifeEventType tag)
   -> [PathSummaryAndSeed]
-  -> (FinEnv rm,CombinedState a fl le ru)
+  -> (FinEnv rm, CombinedState tag)
   -> Bool -- single threaded ?
   -> Int -- number of quantiles
   -> Int -- years per path
@@ -140,7 +141,7 @@ multiSummariesToHistograms taggedSummaries nBins =
       bins = V.generate nBins (\i -> lo + d * fromIntegral i)
   in (bins, taggedCounts)
 
-initialSummary::(IsAsset a,IsFlow fl)=>CombinedState a fl le ru->FinEnv rm->DatedSummary
+initialSummary :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> DatedSummary
 initialSummary cs0 fe0 =
   let nw =  netWorth cs0 fe0
       nwbo = netWorthBreakout cs0 fe0
