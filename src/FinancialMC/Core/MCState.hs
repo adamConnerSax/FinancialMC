@@ -217,10 +217,10 @@ data MCState tag where
                                    , _mcsLifeEvents :: [LifeEventType tag]
                                    , _mcsRules :: [RuleType tag]
                                    , _mcsSWeep :: RuleType tag
-                                 , _mcsTaxTrade :: RuleType tag
-                                 , _mcsPathSummary :: !PathSummary
-                                 , _mcsHistory :: ![DatedSummary]
-                                 } -> MCState tag
+                                   , _mcsTaxTrade :: RuleType tag
+                                   , _mcsPathSummary :: !PathSummary
+                                   , _mcsHistory :: ![DatedSummary]
+                                   } -> MCState tag
   
 {-    
 data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
@@ -288,13 +288,19 @@ addLifeEvent :: (MonadState s m, HasLifeEvents s le) => le -> m ()
 addLifeEvent le = lifeEvents %= flip (++) [le]
 {-# INLINE addLifeEvent #-}
 
-
+{-
+-- Could be GADT here so that the constructor witnesses the constraint.  Is this necessary here? 
 data CombinedState tag where
   CombinedState :: ComponentTypes tag => { _csFinancial:: !FinState,
                                            _csMC:: !(MCState tag),
                                            _csNeedHistory:: !Bool } -> CombinedState tag
-  
-{-                                
+-}
+
+data CombinedState tag = CombinedState { _csFinancial:: !FinState,
+                                         _csMC:: !(MCState tag),
+                                         _csNeedHistory:: !Bool }
+
+{-                  
 data CombinedState a fl le ru = CombinedState { _csFinancial:: !FinState,
                                                 _csMC:: !(MCState a fl le ru),
                                                 _csNeedHistory:: !Bool }
