@@ -198,29 +198,29 @@ instance Show FSSummary where
 data DatedSummary = DatedSummary { _dsYear :: !Year, _dsSummary :: !FSSummary } deriving (Show)
 
 
-class (IsAsset (AssetType a)
-      ,IsFlow (FlowType a)
-      ,IsLifeEvent (LifeEventType a)
-      ,IsRule (RuleType a)) => ComponentTypes a where 
-  type AssetType a :: *
-  type FlowType a :: *
-  type LifeEventType a :: *
-  type RuleType a :: *
+class (IsAsset (AssetType tag)
+      ,IsFlow (FlowType tag)
+      ,IsLifeEvent (LifeEventType tag)
+      ,IsRule (RuleType tag)) => ComponentTypes tag where 
+  type AssetType tag :: *
+  type FlowType tag :: *
+  type LifeEventType tag :: *
+  type RuleType tag :: *
     
 
-type ShowableComponents a = (ComponentTypes a, Show (AssetType a), Show (FlowType a), Show (RuleType a), Show (LifeEventType a))
+type ShowableComponents tag = (ComponentTypes tag, Show (AssetType tag), Show (FlowType tag), Show (RuleType tag), Show (LifeEventType tag))
     
 -- GADT here so that the various XXXType are in scope and constrained in the constructor
-data MCState a where
-  MCState :: ComponentTypes a => { _mcsBalanceSheet :: !(BalanceSheet (AssetType a))
-                                 , _mcsCashFlows :: !(CashFlows (FlowType a))
-                                 , _mcsLifeEvents :: [LifeEventType a]
-                                 , _mcsRules :: [RuleType a]
-                                 , _mcsSWeep :: RuleType a
-                                 , _mcsTaxTrade :: RuleType a
+data MCState tag where
+  MCState :: ComponentTypes tag => { _mcsBalanceSheet :: !(BalanceSheet (AssetType tag))
+                                   , _mcsCashFlows :: !(CashFlows (FlowType tag))
+                                   , _mcsLifeEvents :: [LifeEventType tag]
+                                   , _mcsRules :: [RuleType tag]
+                                   , _mcsSWeep :: RuleType tag
+                                 , _mcsTaxTrade :: RuleType tag
                                  , _mcsPathSummary :: !PathSummary
                                  , _mcsHistory :: ![DatedSummary]
-                                 } -> MCState a
+                                 } -> MCState tag
   
 {-    
 data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
@@ -238,30 +238,30 @@ makeClassy ''FSSummary
 makeClassy ''DatedSummary
 makeClassy ''MCState
 
-class ReadsMCState s a fl le ru | s -> a, s -> fl, s -> le, s -> ru where
-  getMCState :: Getter s (MCState a fl le ru)
-  default getMCState :: HasMCState s a fl le ru => Getter s (MCState a fl le ru)
+class ReadsMCState s tag | s -> tag where
+  getMCState :: Getter s (MCState tag)
+  default getMCState :: HasMCState s tag => Getter s (MCState tag)
   getMCState = mCState
 
-instance HasBalanceSheet (MCState a fl le ru) a where
+instance (ComponentTypes tag, b ~ AssetType tag) => HasBalanceSheet (MCState tag) b where
   balanceSheet = mcsBalanceSheet
 
-instance HasCashFlows (MCState a fl le ru) fl where
+instance (ComponentTypes tag, b ~ FlowType tag) => HasCashFlows (MCState tag) b where
   cashFlows = mcsCashFlows
 
 class HasRules s ru | s -> ru where
   rules :: Lens' s [ru]
 
-instance HasRules (MCState a fl le ru) ru where
+instance (ComponentTypes tag, b ~ RuleType tag) => HasRules (MCState tag) b where
   rules = mcsRules
 
 class HasLifeEvents s le | s -> le where
   lifeEvents :: Lens' s [le]
 
-instance HasLifeEvents (MCState a fl le ru) le where
+instance (ComponentTypes tag, b ~ LifeEventType tag) => HasLifeEvents (MCState tag) b where
   lifeEvents = mcsLifeEvents
 
-instance (Evolvable a, Evolvable fl)=>Evolvable (MCState a fl le ru) where
+instance ComponentTypes tag => Evolvable (MCState tag) where
   evolve (MCState bs cfd les rs sr ttr ps hist) = do 
     newBS <- evolve bs
     newCFD <- evolve cfd
@@ -269,7 +269,7 @@ instance (Evolvable a, Evolvable fl)=>Evolvable (MCState a fl le ru) where
     return $ newMCS
   {-# INLINE evolve #-}
       
-instance (Show le,Show fl, Show ru, Show a)=>Show (MCState a fl le ru) where
+instance ShowableComponents tag => Show (MCState tag) where
   show (MCState bs cfd les rs sr ttr ps history) = 
     show bs ++ "\n" ++ show cfd ++ "\n" ++ 
     "LifeEvents:\n " ++ foldl (\s e->s++ show e ++ "\n") "" les ++ 
@@ -288,23 +288,31 @@ addLifeEvent :: (MonadState s m, HasLifeEvents s le) => le -> m ()
 addLifeEvent le = lifeEvents %= flip (++) [le]
 {-# INLINE addLifeEvent #-}
 
+
+data CombinedState tag where
+  CombinedState :: ComponentTypes tag => { _csFinancial:: !FinState,
+                                           _csMC:: !(MCState tag),
+                                           _csNeedHistory:: !Bool } -> CombinedState tag
+  
+{-                                
 data CombinedState a fl le ru = CombinedState { _csFinancial:: !FinState,
                                                 _csMC:: !(MCState a fl le ru),
-                                                _csNeedHistory:: !Bool } 
+                                                _csNeedHistory:: !Bool }
+-}
 makeClassy ''CombinedState
 
-class ReadsCombinedState s a fl le ru | s -> a, s -> fl, s -> le, s -> ru where
-  getCombinedState :: Getter s (CombinedState a fl le ru)
-  default getCombinedState :: HasCombinedState s a fl le ru => Getter s (CombinedState a fl le ru)
+class ComponentTypes tag => ReadsCombinedState s tag | s -> tag where
+  getCombinedState :: Getter s (CombinedState tag)
+  default getCombinedState :: HasCombinedState s tag => Getter s (CombinedState tag)
   getCombinedState = combinedState
   
-instance HasMCState (CombinedState a fl le ru) a fl le ru  where
+instance ComponentTypes tag => HasMCState (CombinedState tag) tag where
   mCState = csMC
 
-instance (Show a,Show fl,Show le, Show ru)=>Show (CombinedState a fl le ru) where
+instance ShowableComponents tag => Show (CombinedState tag) where
   show cs = "Financial:\n" ++ show (cs ^. csFinancial) ++ "\nMonteCarlo:\n" ++ show (cs ^. csMC)
 
-netWorth :: IsAsset a => CombinedState a fl le ru -> FinEnv rm -> MoneyValue
+netWorth :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> MoneyValue
 netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValueCV acct) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -315,7 +323,7 @@ byLT :: LiquidityType -> Account a -> Bool
 byLT lt acct = acctLT == lt where 
   acctLT = liquidityType (acct ^. acType)
 
-netWorthByLiquidityType :: IsAsset a => CombinedState a fl le ru -> FinEnv rm -> LiquidityType -> MoneyValue
+netWorthByLiquidityType :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> LiquidityType -> MoneyValue
 netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s CV.|+|  (value' acct)) initial' accts where 
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
@@ -325,7 +333,7 @@ netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s
   initial' = if lt == NearCash then (CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow) else z'
 
 
-netWorthBreakout :: IsAsset a => CombinedState a fl le ru -> FinEnv rm -> NetWorthMap
+netWorthBreakout :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> NetWorthMap
 netWorthBreakout cs fe = M.fromList (zip lts nws) where
   lts = [(minBound::LiquidityType) ..]
   nws = fmap (netWorthByLiquidityType cs fe) lts
@@ -346,19 +354,26 @@ grossFlows (CashFlows flows) fe = (CV.toMoneyValue ccy e inF,CV.toMoneyValue ccy
   FlowAccum' inF outF = F.foldr g (FlowAccum' z z) flows
 
 
-makeMCState :: BalanceSheet a -> CashFlows fl -> FinEnv rm -> [le] -> [ru] -> ru -> ru -> MCState a fl le ru
+makeMCState :: ComponentTypes tag
+  =>  BalanceSheet (AssetType tag)
+  -> CashFlows (FlowType tag)
+  -> FinEnv rm
+  -> [LifeEventType tag]
+  -> [RuleType tag]
+  -> RuleType tag
+  -> RuleType tag
+  -> MCState tag
 makeMCState bs cfd fe les rs sr ttr = MCState bs cfd les rs sr ttr (FinalNW z) [] where
   z = MV.zero  (fe ^. feDefaultCCY)
 
 --NB: this is where all the evolution flows and accums finally get applied
 -- ought to be able to replace the HasTaxData, HasCashFlow, HasAccumulators with HasFinState.  But how?
-evolveMCS :: ( Evolvable a
-             , Evolvable fl
+evolveMCS :: ( ComponentTypes tag
              , EvolveC s rm m
              , HasAccumulators s
              , HasCashFlow s
              , HasTaxData s
-             , HasMCState s a fl le ru) => m ()
+             , HasMCState s tag) => m ()
 evolveMCS = do -- mCState %= evolveAndApply
   mcs <- use mCState
   mcs' <- evolveAndApply mcs
@@ -377,10 +392,10 @@ addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day
 -- TODO: More specific constraints
 -- HasMCPathSummary
 -- ReadsCombinedState
-summarize :: ( IsAsset a
+summarize :: ( ComponentTypes tag
              , MonadError FMCException m
              , MonadState s m
-             , HasCombinedState s a fl le ru
+             , HasCombinedState s tag
              , ReadsFinEnv s rm)
   => MoneyValue
   -> MoneyValue
@@ -400,10 +415,10 @@ summarize  inF outF tax taxRate = do
   return ()
 {-# INLINE summarize #-}
 
-computeFlows :: ( IsFlow fl
+computeFlows :: ( ComponentTypes tag
                 , MonadError FMCException m
                 , MonadState s m
-                , ReadsMCState s a fl le ru
+                , ReadsMCState s tag
                 , ReadsFinEnv s rm) => m  (MoneyValue, MoneyValue)
 computeFlows = do
   cs <- use $ getMCState.mcsCashFlows
@@ -414,10 +429,10 @@ computeFlows = do
 -- TODO: More specific constraints
 -- ReadsCombinedstate
 -- HasMCHistory
-addHistory :: ( IsAsset a
+addHistory :: ( ComponentTypes tag
               , MonadError FMCException m
               , MonadState s m
-              , HasCombinedState s a fl le ru
+              , HasCombinedState s tag
               , ReadsFinEnv s rm)
   => MoneyValue
   -> MoneyValue
