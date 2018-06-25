@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, OverloadedStrings, UndecidableInstances #-}
 {-# LANGUAGE TemplateHaskell, ScopedTypeVariables, FunctionalDependencies, OverloadedStrings #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE GADTs #-}
 module FinancialMC.Parsers.Configuration
        (
          ParseException(..)
@@ -48,7 +50,7 @@ module FinancialMC.Parsers.Configuration
 
 import           FinancialMC.Core.MoneyValue (Currency,MoneyValue)
 import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..))
-import           FinancialMC.Core.MCState (BalanceSheet,CashFlows)
+import           FinancialMC.Core.MCState (BalanceSheet,CashFlows,ComponentTypes (..), ShowableComponents, ToJSONComponents, FromJSONComponents)
 --import           FinancialMC.Core.Rule (IsRule)
 --import           FinancialMC.Core.LifeEvent (IsLifeEvent)
 import           FinancialMC.Core.Utilities (Year,noteM,FMCException(..))
@@ -173,6 +175,17 @@ instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
+data FMCComponentConverters tagA tagB rm rmb where
+  FMCComponentConverters :: (ComponentTypes tagA, ComponentTypes tagB) =>
+    {
+      assetF :: (AssetType tagB -> AssetType tagA),
+      flowF :: (FlowType tagB -> FlowType tagA),
+      lifeEventF :: (LifeEventType tagB -> LifeEventType tagA),
+      ruleF :: (RuleType tagB -> RuleType tagA),
+      rateModelF :: (rmB -> rmA)
+    } -> FMCComponentConverters tagA tagB rmA rmB
+
+{-
 data FMCComponentConverters ab a flb fl leb le  rub ru rmb rm =
   FMCComponentConverters
   {
@@ -182,44 +195,66 @@ data FMCComponentConverters ab a flb fl leb le  rub ru rmb rm =
     ruleF::(rub->ru),
     rateModelF::(rmb->rm)
   }
-
+-}
 {-
 class FMCConvertible f where
   fmcMap::FMCComponentConverters ab a flb fl leb le rub ru rmb rm->f ab flb leb rub rmb->f a fl le ru rm
 -}
 
-data InitialFS a fl le ru = InitialFS { ifsBS :: BalanceSheet a
-                                      , ifsCF :: CashFlows fl 
-                                      , ifsLifeEvents::[le]
-                                      , ifsRules::[ru]
-                                      , ifsSweep::ru
-                                      , ifsTaxTrade::ru
-                                      } deriving (Show, Generic)
-                           
-convertComponentsInitialFS::FMCComponentConverters ab a flb fl leb le rub ru rmb rm->InitialFS ab flb leb rub->InitialFS a fl le ru
+data InitialFS tag where
+  InitialFS :: ShowableComponents tag => { ifsBS :: BalanceSheet (AssetType tag)
+                                         , ifsCF :: CashFlows (FlowType tag)
+                                         , ifsLifeEvents :: [LifeEventType tag]
+                                         , ifsRules :: [RuleType tag]
+                                         , ifsSweep :: RuleType tag
+                                         , ifsTaxTrade :: RuleType tag
+                                         } -> InitialFS tag
+               
+deriving instance Show (InitialFS tag)
+
+
+
+data InitialFS' a fl le ru = InitialFS' (BalanceSheet a) (CashFlows fl) [le] [ru] ru ru deriving (Generic)
+
+
+instance (ToJSON a, ToJSON fl, ToJSON le, ToJSON ru) => ToJSON (InitialFS' a fl le ru) where
+  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
+
+instance (FromJSON a, FromJSON fl, FromJSON le, FromJSON ru) => FromJSON (InitialFS' a fl le ru) where
+  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
+
+instance ToJSONComponents tag => ToJSON (InitialFS tag) where
+  toJSON (InitialFS bs cfs les rus sw tax) = toJSON (InitialFS' bs cfs les rus sw tax)
+
+initialFSFromInitialFS' :: (ComponentTypes tag
+                           ,a ~ AssetType tag
+                           ,fl ~ FlowType tag
+                           ,le ~ LifeEventType tag
+                           ,ru ~ RuleType tag) => InitialFS' a fl le ru -> InitialFS tag
+initialFSFromInitialFS' (InitialFS' bs cfs les rus sw tax) = InitialFS bs cfs les rus sw tax
+
+instance FromJSONComponents tag => FromJSON (InitialFS tag) where
+  parseJSON = initialFSFromInitialFS' . parseJSON 
+
+convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagA tagB rmb rm -> InitialFS tagB -> InitialFS tagA
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
   InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) (fRU <$> rs) (fRU sw) (fRU tax)
 
-instance (ToJSON a, ToJSON fl, ToJSON le, ToJSON ru)=>ToJSON (InitialFS a fl le ru) where
-  toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
-
-instance (FromJSON a, FromJSON fl, FromJSON le, FromJSON ru)=>FromJSON (InitialFS a fl le ru) where
-  parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
 
                  
-type IFSMap a fl le ru = M.Map String (InitialFS a fl le ru)
+type IFSMap tag = M.Map String (InitialFS tag)
 
-convertComponentsIFSMap::FMCComponentConverters ab a flb fl leb le rub ru rmb rm->IFSMap ab flb leb rub->IFSMap a fl le ru
+convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagA tagB rmb rm -> IFSMap tagB -> IFSMap tagA
 convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm 
 
-getFinancialState::IFSMap a fl le ru->String->Maybe (InitialFS a fl le ru)
+getFinancialState :: IFSMap tag -> String -> Maybe (InitialFS tag)
 getFinancialState ifsm name = M.lookup name ifsm
 
 type RateModels rm = M.Map String rm
 
 
-getRateModel::RateModels rm->String->Maybe rm
+getRateModel :: RateModels rm -> String -> Maybe rm
 getRateModel rms n = M.lookup n rms
 
 type MapByFS = EnumKeyMap FilingStatus
@@ -328,31 +363,32 @@ mergeTaxStructures (TaxStructure fedN stateN cityN) = do
 
   
 
-data LoadedModels a fl le ru rm = LoadedModels {  _lmFS::IFSMap a fl le ru, _lmRM::RateModels rm, _lmTax::TaxStructure }
+data LoadedModels tag rm = LoadedModels {  _lmFS :: IFSMap tag, _lmRM :: RateModels rm, _lmTax :: TaxStructure }
 
 Lens.makeClassy ''LoadedModels
 
 
-data ModelConfiguration a fl le ru rm = ModelConfiguration { _mcfgInitialFS::InitialFS a fl le ru,
-                                                             _mcfgStartingRM::rm,
-                                                             _mcfgRateModel::rm,
-                                                             _mcfgTaxRules::TaxRules,
-                                                             _mcfgYear::Year,
-                                                             _mcfgCCY::Currency } deriving (Show, Generic)
+data ModelConfiguration tag rm = ModelConfiguration { _mcfgInitialFS :: InitialFS tag,
+                                                      _mcfgStartingRM :: rm,
+                                                      _mcfgRateModel :: rm,
+                                                      _mcfgTaxRules :: TaxRules,
+                                                      _mcfgYear :: Year,
+                                                      _mcfgCCY :: Currency } deriving (Show, Generic)
 
 Lens.makeClassy ''ModelConfiguration
 
 
-convertComponentsModelConfiguration::FMCComponentConverters ab a flb fl leb le rub ru rmb rm->
-                                     ModelConfiguration ab flb leb rub rmb->ModelConfiguration a fl le ru rm
+convertComponentsModelConfiguration :: FMCComponentConverters tagA tagB rmb rm
+                                    -> ModelConfiguration tagB rmb
+                                    -> ModelConfiguration tagA rm
 convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (ModelConfiguration ifs srm rm tr y c) =
   ModelConfiguration (convertComponentsInitialFS ccs ifs) (rmF srm) (rmF rm) tr y c
                                    
   
-instance (ToJSON le, ToJSON fl, ToJSON a, ToJSON ru, ToJSON rm) => ToJSON (ModelConfiguration a fl le ru rm) where
+instance (ToJSON rm, ComponentTypes tag) => ToJSON (ModelConfiguration tag rm) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
-instance (FromJSON le, FromJSON fl, FromJSON a, FromJSON ru, FromJSON rm) => FromJSON (ModelConfiguration a fl le ru rm) where
+instance (ComponentTypes tag, FromJSON rm) => FromJSON (ModelConfiguration tag rm) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 5}
 
 data SimConfiguration = SimConfiguration { _scfgYears::Int

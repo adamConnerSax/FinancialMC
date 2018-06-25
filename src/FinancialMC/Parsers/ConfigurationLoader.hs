@@ -20,7 +20,9 @@ import           FinancialMC.Core.Asset                      (AccountName)
 import           FinancialMC.Core.FinancialStates            (FinEnv (..), exchangeRFFromRateTable,
                                                               zeroFinState)
 import           FinancialMC.Core.MCState                    (CombinedState (..),
+                                                              ComponentTypes (..),
                                                               MCState,
+                                                              ShowableComponents (..),
                                                               getAccountNames,
                                                               makeMCState)
 import qualified FinancialMC.Core.MoneyValue                 as MV

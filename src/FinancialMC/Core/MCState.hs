@@ -25,6 +25,8 @@ module FinancialMC.Core.MCState
        , addFlow
        , ComponentTypes (..)
        , ShowableComponents
+       , ToJSONComponents
+       , FromJSONComponents
        , MCState(MCState)
        , HasMCState(..)
        , ReadsMCState (..)
@@ -211,6 +213,8 @@ class ( IsAsset (AssetType tag)
     
 
 type ShowableComponents tag = (ComponentTypes tag, Show (AssetType tag), Show (FlowType tag), Show (RuleType tag), Show (LifeEventType tag))
+type ToJSONComponents tag = (ComponentTypes tag, ToJSON (AssetType tag), ToJSON (FlowType tag), ToJSON (RuleType tag), ToJSON (LifeEventType tag))
+type FromJSONComponents tag = (ComponentTypes tag, FromJSON (AssetType tag), FromJSON (FlowType tag), FromJSON (RuleType tag), FromJSON (LifeEventType tag))
     
 -- GADT here so that the various XXXType are in scope and constrained in the constructor
 data MCState tag where
