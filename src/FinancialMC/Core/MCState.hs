@@ -23,6 +23,8 @@ module FinancialMC.Core.MCState
        , HasCashFlows (..)
        , makeNewCashFlows
        , addFlow
+       , ComponentTypes (..)
+       , ShowableComponents
        , MCState(MCState)
        , HasMCState(..)
        , ReadsMCState (..)
@@ -136,11 +138,11 @@ makeNewBalanceSheet = BalanceSheet mEmpty
 makeNewCashFlows :: CashFlows fl
 makeNewCashFlows = CashFlows mEmpty
                       
-insertAccount :: (MonadState s m, HasBalanceSheet s a) => Account a -> m ()
+insertAccount :: (IsAsset a, MonadState s m,  HasBalanceSheet s a) => Account a -> m ()
 insertAccount acct@(Account name _ _ _) = balanceSheet.bsAccountMap %=  mInsert name acct
 {-# INLINE insertAccount #-}
   
-addFlow :: (MonadState s m, HasCashFlows s fl, IsFlow fl) => fl -> m ()
+addFlow :: (IsFlow fl, MonadState s m, HasCashFlows s fl) => fl -> m ()
 addFlow f = cashFlows.cfdFlowMap %= mInsert (flowName f) f
 {-# INLINE addFlow #-}
 
@@ -148,7 +150,7 @@ getAccount :: MonadError FMCException m => AccountName -> BalanceSheet a -> m (A
 getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" <> (T.pack $ show name) <> "\"")) $ mLookup name am 
 {-# INLINE getAccount #-}
 
-putAccount :: Account a->AccountName->BalanceSheet a->BalanceSheet a
+putAccount :: Account a -> AccountName -> BalanceSheet a -> BalanceSheet a
 putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am) 
 {-# INLINE putAccount #-}
 
@@ -198,10 +200,10 @@ instance Show FSSummary where
 data DatedSummary = DatedSummary { _dsYear :: !Year, _dsSummary :: !FSSummary } deriving (Show)
 
 
-class (IsAsset (AssetType tag)
-      ,IsFlow (FlowType tag)
-      ,IsLifeEvent (LifeEventType tag)
-      ,IsRule (RuleType tag)) => ComponentTypes tag where 
+class ( IsAsset (AssetType tag)
+      , IsFlow (FlowType tag)
+      , IsLifeEvent (LifeEventType tag)
+      , IsRule (RuleType tag)) => ComponentTypes tag where 
   type AssetType tag :: *
   type FlowType tag :: *
   type LifeEventType tag :: *
@@ -216,7 +218,7 @@ data MCState tag where
                                    , _mcsCashFlows :: !(CashFlows (FlowType tag))
                                    , _mcsLifeEvents :: [LifeEventType tag]
                                    , _mcsRules :: [RuleType tag]
-                                   , _mcsSWeep :: RuleType tag
+                                   , _mcsSweep :: RuleType tag
                                    , _mcsTaxTrade :: RuleType tag
                                    , _mcsPathSummary :: !PathSummary
                                    , _mcsHistory :: ![DatedSummary]

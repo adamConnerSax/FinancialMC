@@ -70,11 +70,11 @@ instance ToJSON LifeEventCore where
 instance FromJSON LifeEventCore where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2 }
 
-data LifeEventConverters a fl le = LEC (IsLifeEvent le=>AssetType le->a) (IsLifeEvent le=>FlowType le -> fl)
+data LifeEventConverters a fl le = LEC (IsLifeEvent le => LifeEventAssetType le -> a) (IsLifeEvent le => LifeEventFlowType le -> fl)
 
 class IsLifeEvent e where
-  type AssetType e :: *
-  type FlowType e :: *
+  type LifeEventAssetType e :: *
+  type LifeEventFlowType e :: *
   lifeEventCore::e->LifeEventCore
   -- do we need/want the constraints here
   doLifeEvent::(IsAsset a, IsFlow fl, IsRateModel rm, LifeEventAppC s a fl rm m) => e -> LifeEventConverters a fl e -> AccountGetter m a -> m ()

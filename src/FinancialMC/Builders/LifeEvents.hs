@@ -72,8 +72,8 @@ instance FromJSON PropertyPurchase where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 2}
 
 instance IsLifeEvent BaseLifeEvent where
-  type AssetType BaseLifeEvent = BaseAsset
-  type FlowType BaseLifeEvent = BaseFlow
+  type LifeEventAssetType BaseLifeEvent = BaseAsset
+  type LifeEventFlowType BaseLifeEvent = BaseFlow
   lifeEventCore (BaseLifeEvent lec _) = lec
   doLifeEvent = doBaseLifeEvent
 
