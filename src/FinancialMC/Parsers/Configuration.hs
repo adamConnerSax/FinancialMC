@@ -202,15 +202,15 @@ class FMCConvertible f where
 -}
 
 data InitialFS tag where
-  InitialFS :: ShowableComponents tag => { ifsBS :: BalanceSheet (AssetType tag)
-                                         , ifsCF :: CashFlows (FlowType tag)
-                                         , ifsLifeEvents :: [LifeEventType tag]
-                                         , ifsRules :: [RuleType tag]
-                                         , ifsSweep :: RuleType tag
-                                         , ifsTaxTrade :: RuleType tag
-                                         } -> InitialFS tag
+  InitialFS :: ComponentTypes tag => { ifsBS :: BalanceSheet (AssetType tag)
+                                     , ifsCF :: CashFlows (FlowType tag)
+                                     , ifsLifeEvents :: [LifeEventType tag]
+                                     , ifsRules :: [RuleType tag]
+                                     , ifsSweep :: RuleType tag
+                                     , ifsTaxTrade :: RuleType tag
+                                     } -> InitialFS tag
                
-deriving instance Show (InitialFS tag)
+deriving instance (ShowableComponents tag) => Show (InitialFS tag)
 
 
 
@@ -234,7 +234,8 @@ initialFSFromInitialFS' :: (ComponentTypes tag
 initialFSFromInitialFS' (InitialFS' bs cfs les rus sw tax) = InitialFS bs cfs les rus sw tax
 
 instance FromJSONComponents tag => FromJSON (InitialFS tag) where
-  parseJSON = initialFSFromInitialFS' . parseJSON 
+  parseJSON o = initialFSFromInitialFS' <$> parseJSON o --parsed' where
+--    parsed' :: InitialFS' (AssetType tag) (FlowType tag) (LifeEventType tag) (RuleType tag) = parseJSON o
 
 convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagA tagB rmb rm -> InitialFS tagB -> InitialFS tagA
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
@@ -373,22 +374,24 @@ data ModelConfiguration tag rm = ModelConfiguration { _mcfgInitialFS :: InitialF
                                                       _mcfgRateModel :: rm,
                                                       _mcfgTaxRules :: TaxRules,
                                                       _mcfgYear :: Year,
-                                                      _mcfgCCY :: Currency } deriving (Show, Generic)
+                                                      _mcfgCCY :: Currency } deriving (Generic)
+
+deriving instance (ShowableComponents tag, Show rm) => Show (ModelConfiguration tag rm)
 
 Lens.makeClassy ''ModelConfiguration
 
 
-convertComponentsModelConfiguration :: FMCComponentConverters tagA tagB rmb rm
-                                    -> ModelConfiguration tagB rmb
-                                    -> ModelConfiguration tagA rm
+convertComponentsModelConfiguration :: FMCComponentConverters tagA tagB rmA rmB
+                                    -> ModelConfiguration tagB rmB
+                                    -> ModelConfiguration tagA rmA
 convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (ModelConfiguration ifs srm rm tr y c) =
   ModelConfiguration (convertComponentsInitialFS ccs ifs) (rmF srm) (rmF rm) tr y c
                                    
   
-instance (ToJSON rm, ComponentTypes tag) => ToJSON (ModelConfiguration tag rm) where
+instance (ToJSON rm, ToJSONComponents tag) => ToJSON (ModelConfiguration tag rm) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
-instance (ComponentTypes tag, FromJSON rm) => FromJSON (ModelConfiguration tag rm) where
+instance (FromJSONComponents tag, FromJSON rm) => FromJSON (ModelConfiguration tag rm) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 5}
 
 data SimConfiguration = SimConfiguration { _scfgYears::Int
