@@ -1,8 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
+{-# LANGUAGE TypeFamilies      #-}
 module UnitTests (tests,mainTest) where
 
-import           FinancialMC.Base                        (CombinedState, FinEnv,
+import           FinancialMC.Base                        (CombinedState,
+                                                          ComponentTypes (..),
+                                                          FinEnv,
                                                           HasCombinedState (..),
                                                           HasFinEnv (..),
                                                           HasMCState (..),
@@ -28,7 +31,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           pattern PathState)
 
 import qualified FinancialMC.Parsers.Configuration       as C
-import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
+import           FinancialMC.Parsers.ConfigurationLoader (BaseTag, buildInitialStateFromConfig,
                                                           loadConfigurations)
 
 import           Control.Lens                            ((&), (.~), (^.))
@@ -46,13 +49,20 @@ type TestLifeEvent = BaseLifeEvent
 type TestRule = BaseRule
 type TestRateModel = BaseRateModelT
 
-leConverter::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
+data TestTag
+instance ComponentTypes TestTag where
+  type AssetType TestTag = TestAsset
+  type FlowType TestTag = TestFlow
+  type LifeEventType TestTag = TestLifeEvent
+  type RuleType TestTag = TestRule
+
+leConverter :: LifeEventConverters BaseAsset BaseFlow TestLifeEvent
 leConverter = LEC id id
 
-ccs::C.FMCComponentConverters BaseAsset TestAsset BaseFlow TestFlow BaseLifeEvent TestLifeEvent BaseRule TestRule BaseRateModelT TestRateModel
+ccs :: C.FMCComponentConverters BaseTag TestTag BaseRateModelT TestRateModel
 ccs = C.FMCComponentConverters id id id id id
 
-type UnitTestPathState = FMCPathState TestAsset TestFlow TestLifeEvent TestRule TestRateModel
+type UnitTestPathState = FMCPathState TestTag TestRateModel
 
 type FMCTestF = Int -> UnitTestPathState -> Bool
 data FMCTest = FMCTest String FMCTestF

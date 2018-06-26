@@ -41,6 +41,7 @@ import           FinancialMC.Core.FinApp          (LogLevel (..),
                                                    stepState)
 import           FinancialMC.Core.MapLike         (IndexedList (..), IsMap (..))
 import           FinancialMC.Core.MCState         (CombinedState (..),
+                                                   ComponentTypes (..),
                                                    DatedSummary (..),
                                                    FSSummary (..),
                                                    HasCombinedState (..),

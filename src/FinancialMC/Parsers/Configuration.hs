@@ -175,7 +175,7 @@ instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
-data FMCComponentConverters tagA tagB rm rmb where
+data FMCComponentConverters tagB tagA rmB rmA where
   FMCComponentConverters :: (ComponentTypes tagA, ComponentTypes tagB) =>
     {
       assetF :: (AssetType tagB -> AssetType tagA),
@@ -183,7 +183,7 @@ data FMCComponentConverters tagA tagB rm rmb where
       lifeEventF :: (LifeEventType tagB -> LifeEventType tagA),
       ruleF :: (RuleType tagB -> RuleType tagA),
       rateModelF :: (rmB -> rmA)
-    } -> FMCComponentConverters tagA tagB rmA rmB
+    } -> FMCComponentConverters tagB tagA rmB rmA
 
 {-
 data FMCComponentConverters ab a flb fl leb le  rub ru rmb rm =
@@ -237,7 +237,7 @@ instance FromJSONComponents tag => FromJSON (InitialFS tag) where
   parseJSON o = initialFSFromInitialFS' <$> parseJSON o --parsed' where
 --    parsed' :: InitialFS' (AssetType tag) (FlowType tag) (LifeEventType tag) (RuleType tag) = parseJSON o
 
-convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagA tagB rmb rm -> InitialFS tagB -> InitialFS tagA
+convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA rmB rmA -> InitialFS tagB -> InitialFS tagA
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
   InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) (fRU <$> rs) (fRU sw) (fRU tax)
 
@@ -246,7 +246,7 @@ convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS 
                  
 type IFSMap tag = M.Map String (InitialFS tag)
 
-convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagA tagB rmb rm -> IFSMap tagB -> IFSMap tagA
+convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA rmB rmA -> IFSMap tagB -> IFSMap tagA
 convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm 
 
 getFinancialState :: IFSMap tag -> String -> Maybe (InitialFS tag)
@@ -381,7 +381,7 @@ deriving instance (ShowableComponents tag, Show rm) => Show (ModelConfiguration 
 Lens.makeClassy ''ModelConfiguration
 
 
-convertComponentsModelConfiguration :: FMCComponentConverters tagA tagB rmA rmB
+convertComponentsModelConfiguration :: FMCComponentConverters tagB tagA rmB rmA
                                     -> ModelConfiguration tagB rmB
                                     -> ModelConfiguration tagA rmA
 convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (ModelConfiguration ifs srm rm tr y c) =

@@ -24,7 +24,7 @@ import           Text.Printf                             (printf)
 import           Text.RawString.QQ                       (r)
 
 import qualified FinancialMC.Parsers.Configuration       as C
-import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
+import           FinancialMC.Parsers.ConfigurationLoader (BaseTag, buildInitialStateFromConfig,
                                                           loadConfigurations)
 import           OptionParser                            (FinMCOptions (..),
                                                           finMCOptionParser)
@@ -64,13 +64,13 @@ import           FinancialMC.Core.LifeEvent              (LifeEventConverters (L
 import           FinancialMC.Core.MoneyValue             (MoneyValue (MoneyValue))
 import           FinancialMC.Core.Utilities              (Year, eitherToIO)
 
-ccs :: C.FMCComponentConverters BaseAsset BaseAsset BaseFlow BaseFlow BaseLifeEvent BaseLifeEvent BaseRule BaseRule BaseRateModelT BaseRateModelT
+ccs :: C.FMCComponentConverters BaseTag BaseTag BaseRateModelT BaseRateModelT
 ccs = C.FMCComponentConverters id id id id id
 
-lec::LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
+lec :: LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 lec = LEC id id
 
-type BasePathState = FMCPathState BaseAsset BaseFlow BaseLifeEvent BaseRule BaseRateModelT
+type BasePathState = FMCPathState BaseTag BaseRateModelT
 
 runWithOptions :: BasePathState -> FinMCOptions -> IO [PathSummaryAndSeed]
 runWithOptions ps0 options = do
@@ -87,10 +87,10 @@ runWithOptions ps0 options = do
     then putStrLn "Running IO (single-threaded) stack...\n" >> runW (doPathsIO lec logLevels showFS)
     else putStrLn ("Running pure (" ++ pureThreaded ++ "-threaded) stack...\n") >> (eitherToIO $ runW (doPaths lec))
 
-parseOptions::IO FinMCOptions
+parseOptions :: IO FinMCOptions
 parseOptions = execParser finMCOptionParser
 
-outputPath :: Maybe String->Maybe String->Maybe String
+outputPath :: Maybe String -> Maybe String -> Maybe String
 outputPath Nothing Nothing = Nothing
 outputPath (Just optPath) Nothing = Just optPath
 outputPath Nothing (Just confPrefix) = Just confPrefix
