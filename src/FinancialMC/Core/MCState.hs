@@ -205,16 +205,18 @@ data DatedSummary = DatedSummary { _dsYear :: !Year, _dsSummary :: !FSSummary } 
 class ( IsAsset (AssetType tag)
       , IsFlow (FlowType tag)
       , IsLifeEvent (LifeEventType tag)
-      , IsRule (RuleType tag)) => ComponentTypes tag where 
+      , IsRule (RuleType tag)
+      , IsRateModel (RateModelType tag)) => ComponentTypes tag where 
   type AssetType tag :: *
   type FlowType tag :: *
   type LifeEventType tag :: *
   type RuleType tag :: *
+  type RateModelType tag :: *                  
     
 
-type ShowableComponents tag = (ComponentTypes tag, Show (AssetType tag), Show (FlowType tag), Show (RuleType tag), Show (LifeEventType tag))
-type ToJSONComponents tag = (ComponentTypes tag, ToJSON (AssetType tag), ToJSON (FlowType tag), ToJSON (RuleType tag), ToJSON (LifeEventType tag))
-type FromJSONComponents tag = (ComponentTypes tag, FromJSON (AssetType tag), FromJSON (FlowType tag), FromJSON (RuleType tag), FromJSON (LifeEventType tag))
+type ShowableComponents tag = (ComponentTypes tag, Show (AssetType tag), Show (FlowType tag), Show (RuleType tag), Show (LifeEventType tag), Show (RateModelType tag))
+type ToJSONComponents tag = (ComponentTypes tag, ToJSON (AssetType tag), ToJSON (FlowType tag), ToJSON (RuleType tag), ToJSON (LifeEventType tag), ToJSON (RateModelType tag))
+type FromJSONComponents tag = (ComponentTypes tag, FromJSON (AssetType tag), FromJSON (FlowType tag), FromJSON (RuleType tag), FromJSON (LifeEventType tag), FromJSON (RateModelType tag))
     
 -- GADT here so that the various XXXType are in scope and constrained in the constructor
 data MCState tag where

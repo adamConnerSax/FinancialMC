@@ -14,7 +14,7 @@ module FinancialMC.Core.Engine
          RandomSeed
        , PathSummaryAndSeed (..)
        , HasPathSummaryAndSeed (..)
-       , FMCPathState
+       , FMCPathState (MkFMCPathState)
        , doOneYear
        , doPath
        , execOnePathIO
@@ -51,7 +51,8 @@ import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
                                                    RuleWhen (..))
 import           FinancialMC.Core.TradingTypes    (Transaction (..))
 
-import           FinancialMC.Core.FinApp          (LogLevel (..),
+import           FinancialMC.Core.FinApp          (HasPathState (..),
+                                                   LogLevel (..),
                                                    Loggable (log), PathStack,
                                                    PathStackable (..),
                                                    PathState (..),
@@ -105,10 +106,10 @@ import           Prelude                          hiding (log)
 import qualified Data.Text                        as T
 
 import           Control.DeepSeq                  (deepseq)
-import           Control.Lens                     (Lens', Zoom, Zoomed, magnify,
-                                                   makeClassy, use, view, zoom,
-                                                   (%=), (&), (+=), (.=), (.~),
-                                                   (^.), _2)
+import           Control.Lens                     (Lens', Zoom, Zoomed, lens,
+                                                   magnify, makeClassy, use,
+                                                   view, zoom, (%=), (&), (+=),
+                                                   (.=), (.~), (^.), _2)
 import           Control.Monad                    (foldM, unless, when)
 import           Control.Monad.Morph              (hoist, lift)
 import qualified Control.Monad.Parallel           as CMP
@@ -140,83 +141,93 @@ getNSeedsStrict pMT n = (head l)  `deepseq` l where
  l = getNSeeds pMT n
 -}
 
-type EngineC tag rm= (ShowableComponents tag, IsRateModel rm)
+type EngineC tag = ShowableComponents tag
 
-type FullPathC s tag rm m = ( EngineC tag rm
-                            , Loggable m
-                            , MonadError FMCException m
-                            , MonadState s m
-                            , ReadsFinState s
-                            , ReadsTaxData s
-                            , ReadsAccumulators s
-                            , HasFinEnv s rm
-                            , ReadsFinEnv s rm
-                            , ReadsExchangeRateFunction s
-                            , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
-                            , IsRateModel rm
-                            , HasAccumulators s
-                            , HasCashFlow s
-                            , HasBalanceSheet s (AssetType tag)
-                            , HasCashFlows s (FlowType tag)
-                            , HasTaxData s
-                            , HasCombinedState s tag
-                            , HasMCState s tag
-                            , ReadsMCState s tag)
+type FullPathC s tag m = ( EngineC tag
+                         , Loggable m
+                         , MonadError FMCException m
+                         , MonadState s m
+                         , ReadsFinState s
+                         , ReadsTaxData s
+                         , ReadsAccumulators s
+                         , HasFinEnv s (RateModelType tag)
+                         , ReadsFinEnv s (RateModelType tag)
+                         , ReadsExchangeRateFunction s
+                         , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
+                         , HasAccumulators s
+                         , HasCashFlow s
+                         , HasBalanceSheet s (AssetType tag)
+                         , HasCashFlows s (FlowType tag)
+                         , HasTaxData s
+                         , HasCombinedState s tag
+                         , HasMCState s tag
+                         , ReadsMCState s tag)
 
-type FMCPathState tag rm = PathState (CombinedState tag) (FinEnv rm)
+data FMCPathState tag where
+  MkFMCPathState :: (ComponentTypes tag, rm ~ RateModelType tag) => PathState (CombinedState tag) (FinEnv rm) -> FMCPathState tag
 
+
+instance (ComponentTypes tag, Show (PathState (CombinedState tag) (FinEnv (RateModelType tag)))) => Show (FMCPathState tag) where
+  show (MkFMCPathState ps) = show ps
+
+instance (ComponentTypes tag, rm ~ RateModelType tag) => HasPathState (FMCPathState tag) (CombinedState tag) (FinEnv rm) where
+  pathState = lens (\(MkFMCPathState ps) -> ps) (\_ ps -> MkFMCPathState ps)
+{-
+instance ReadsPathState (FMCPathState tag) where
+  getPathState = lens (\(MkFMCPathState ps) -> ps) (\_ ps -> MkFMCPathState ps)
+-}
 -- Make all the instances for PathState
-instance HasTaxData (FMCPathState tag rm) where
+instance (ComponentTypes tag) => HasTaxData (FMCPathState tag) where
   taxData = stepState . csFinancial . fsTaxData
 
-instance ReadsTaxData (FMCPathState tag rm)
+instance (ComponentTypes tag) => ReadsTaxData (FMCPathState tag)
 
-instance HasCashFlow (CombinedState tag) where
+instance (ComponentTypes tag) => HasCashFlow (CombinedState tag) where
   cashFlow = csFinancial . fsCashFlow
 
-instance HasCashFlow (FMCPathState tag rm) where
+instance (ComponentTypes tag) => HasCashFlow (FMCPathState tag) where
   cashFlow = stepState . csFinancial . fsCashFlow
 
-instance  HasAccumulators (FMCPathState tag rm) where
+instance  (ComponentTypes tag) => HasAccumulators (FMCPathState tag) where
   accumulators = stepState . csFinancial . fsAccumulators
 
-instance ReadsAccumulators (FMCPathState tag rm)
+instance (ComponentTypes tag) => ReadsAccumulators (FMCPathState tag)
 
-instance HasFinState (FMCPathState tag rm) where
+instance (ComponentTypes tag) => HasFinState (FMCPathState tag) where
   finState = stepState . csFinancial
 
-instance ReadsFinState (FMCPathState tag rm)
+instance (ComponentTypes tag) => ReadsFinState (FMCPathState tag)
 
 instance HasExchangeRateFunction (FinEnv rm) where
   exchangeRateFunction = feExchange
 
-instance HasExchangeRateFunction (FMCPathState tag rm) where
+instance (ComponentTypes tag) => HasExchangeRateFunction (FMCPathState tag) where
   exchangeRateFunction = stepEnv . feExchange
 
-instance ReadsExchangeRateFunction (FMCPathState tag rm)
+instance (ComponentTypes tag) => ReadsExchangeRateFunction (FMCPathState tag)
 
-instance HasRateTable (FMCPathState tag rm) Rate where
+instance (ComponentTypes tag) => HasRateTable (FMCPathState tag) Rate where
   rateTable = stepEnv . feRates
 
-instance ReadsRateTable (FMCPathState tag rm) Rate
+instance (ComponentTypes tag) => ReadsRateTable (FMCPathState tag) Rate
 
-instance HasFinEnv (FMCPathState tag rm) rm where
+instance (ComponentTypes tag, rm ~ RateModelType tag) =>  HasFinEnv (FMCPathState tag) rm where
   finEnv = stepEnv
 
-instance ReadsFinEnv (FMCPathState tag rm) rm
+instance (ComponentTypes tag, rm ~ RateModelType tag) => ReadsFinEnv (FMCPathState tag) rm
 
-instance (ComponentTypes tag, b ~ AssetType tag) => HasBalanceSheet (FMCPathState tag rm) b where
+instance (ComponentTypes tag, b ~ AssetType tag) => HasBalanceSheet (FMCPathState tag) b where
   balanceSheet = stepState . csMC . mcsBalanceSheet
 
-instance (ComponentTypes tag, b ~ FlowType tag) => HasCashFlows (FMCPathState tag rm) b where
+instance (ComponentTypes tag, b ~ FlowType tag) => HasCashFlows (FMCPathState tag) b where
   cashFlows = stepState . csMC . mcsCashFlows
 
-instance HasMCState (FMCPathState tag rm) tag where
+instance (ComponentTypes tag) => HasMCState (FMCPathState tag) tag where
   mCState = stepState . csMC
 
-instance ReadsMCState (FMCPathState tag rm) tag
+instance (ComponentTypes tag) => ReadsMCState (FMCPathState tag) tag
 
-instance HasCombinedState (FMCPathState tag rm) tag where
+instance (ComponentTypes tag) => HasCombinedState (FMCPathState tag) tag where
   combinedState = stepState
 
 -- special ones for zooming
@@ -228,22 +239,22 @@ instance HasCombinedState (FMCPathState tag rm) tag where
 -- If we only use IO for entropy, config loading and result reporting, we can use the pure stack.
 -- But to do realtime logging to stdout we need IO in the stack all the time.
 
-execOnePathIO :: EngineC tag rm
+execOnePathIO :: EngineC tag
   => LifeEventConverters (AssetType tag) (FlowType tag) (LifeEventType tag)
   -> [LogLevel]
-  -> FMCPathState tag rm
+  -> FMCPathState tag
   -> RandomSeed
   -> Int
-  -> IO (FMCPathState tag rm)
+  -> IO (FMCPathState tag)
 execOnePathIO convertLE logDetails ps0 seed years = do
   let newSource = pureMT seed
   execPPathStack (doPath convertLE newSource years) logDetails ps0
 
-doPathsIO :: EngineC tag rm
+doPathsIO :: EngineC tag
   => LifeEventConverters (AssetType tag) (FlowType tag) (LifeEventType tag)
   -> [LogLevel]
   -> Bool
-  -> FMCPathState tag rm
+  -> FMCPathState tag
   -> Bool
   -> PureMT
   -> Int
@@ -252,7 +263,7 @@ doPathsIO :: EngineC tag rm
 doPathsIO convertLE logDetails showFinalStates ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds = getNSeeds pMT paths
   let g seed = do
-        PathState cs' _  <- execOnePathIO convertLE logDetails ps0 seed yearsPerPath
+        MkFMCPathState (PathState cs' _)  <- execOnePathIO convertLE logDetails ps0 seed yearsPerPath
         when showFinalStates $ print cs'
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` (return $ PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
@@ -260,20 +271,20 @@ doPathsIO convertLE logDetails showFinalStates ps0 singleThreaded pMT yearsPerPa
     then mapM g seeds
     else CMP.mapM g seeds
 
-execOnePathPure :: EngineC tag rm
+execOnePathPure :: EngineC tag
   => LifeEventConverters (AssetType tag) (FlowType tag) (LifeEventType tag)
-  -> FMCPathState tag rm
+  -> FMCPathState tag
   -> RandomSeed
   -> Int
-  -> Either FMCException (FMCPathState tag rm)
+  -> Either FMCException (FMCPathState tag)
 execOnePathPure convertLE ps0 seed years = do
   let newSource = pureMT seed
   execPathStack (doPath convertLE newSource years) ps0
 {-# INLINEABLE execOnePathPure #-}
 
-doPaths :: EngineC tag rm
+doPaths :: EngineC tag
   => LifeEventConverters (AssetType tag) (FlowType tag) (LifeEventType tag)
-  -> FMCPathState tag rm
+  -> FMCPathState tag
   -> Bool
   -> PureMT
   -> Int
@@ -282,7 +293,7 @@ doPaths :: EngineC tag rm
 doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds =  getNSeeds pMT paths
       g seed = do
-        PathState cs' _ <-  execOnePathPure convertLE ps0 seed yearsPerPath
+        MkFMCPathState (PathState cs' _) <-  execOnePathPure convertLE ps0 seed yearsPerPath
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds
@@ -290,18 +301,17 @@ doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
   sequence eMap
 {-# INLINEABLE doPaths #-}
 
-doPath :: ( EngineC tag rm
+doPath :: ( EngineC tag
           , Loggable m
           , MonadError FMCException m
           , MonadState s m
           , ReadsFinState s
           , ReadsTaxData s
           , ReadsAccumulators s
-          , HasFinEnv s rm
-          , ReadsFinEnv s rm
+          , HasFinEnv s (RateModelType tag)
+          , ReadsFinEnv s (RateModelType tag)
           , ReadsExchangeRateFunction s
           , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
-          , IsRateModel rm
           , HasAccumulators s
           , HasCashFlow s
           , HasBalanceSheet s (AssetType tag)
@@ -317,18 +327,17 @@ doPath :: ( EngineC tag rm
 doPath convertLE pMT years = foldM (\a _ -> doOneStepOnPath convertLE a) pMT [1..years]
 {-# INLINEABLE doPath #-}
 
-doOneStepOnPath :: ( EngineC tag rm
+doOneStepOnPath :: ( EngineC tag
                    , Loggable m
                    , MonadError FMCException m
                    , MonadState s m
                    , ReadsFinState s
                    , ReadsTaxData s
                    , ReadsAccumulators s
-                   , HasFinEnv s rm
-                   , ReadsFinEnv s rm
+                   , HasFinEnv s (RateModelType tag)
+                   , ReadsFinEnv s (RateModelType tag)
                    , ReadsExchangeRateFunction s
                    , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
-                   , IsRateModel rm
                    , HasAccumulators s
                    , HasCashFlow s
                    , HasBalanceSheet s (AssetType tag)
@@ -379,17 +388,16 @@ updateTaxBrackets = do
   (finEnv.feTaxRules) %= flip updateTaxRules taxBracketInflationRate
 {-# INLINEABLE updateTaxBrackets #-}
 
-doOneYear :: ( EngineC tag rm
+doOneYear :: ( EngineC tag
              , Loggable m
              , MonadError FMCException m
              , MonadState s m
              , ReadsFinState s
              , ReadsTaxData s
              , ReadsAccumulators s
-             , ReadsFinEnv s rm
+             , ReadsFinEnv s (RateModelType tag)
              , ReadsExchangeRateFunction s
              , ReadsRateTable s Rate -- this ought to come for free from ReadsFinEnv.  How to do?
-             , IsRateModel rm
              , HasAccumulators s
              , HasCashFlow s
              , HasBalanceSheet s (AssetType tag)
@@ -461,12 +469,12 @@ doChecks = do
 {-# INLINEABLE doChecks #-}
 
 doRules :: ( Loggable m
-           , EngineC tag rm
+           , EngineC tag
            , MonadError FMCException m
            , MonadState s m
            , ReadsFinState s
            , ReadsAccumulators s
-           , ReadsFinEnv s rm
+           , ReadsFinEnv s (RateModelType tag)
            , ReadsExchangeRateFunction s
            , HasAccumulators s
            , HasTaxData s
@@ -505,14 +513,14 @@ doRuleResult (RuleOutput trades accs) = do
   doTransactions trades
 {-# INLINEABLE doRuleResult #-}
 
-doLifeEvents :: ( EngineC tag rm
+doLifeEvents :: ( EngineC tag
                 , Loggable m
                 , MonadError FMCException m
                 , MonadState s m
                 , HasBalanceSheet s (AssetType tag)
                 , HasCashFlows s (FlowType tag)
                 , ReadsFinState s
-                , ReadsFinEnv s rm
+                , ReadsFinEnv s (RateModelType tag)
                 , ReadsExchangeRateFunction s
                 , ReadsMCState s tag)
   => LifeEventConverters (AssetType tag) (FlowType tag) (LifeEventType tag) -> m ()
@@ -542,11 +550,11 @@ doLifeEventResult (LifeEventOutput newAccounts newFlows) = do
   mapM_ addFlow newFlows
 {-# INLINEABLE doLifeEventResult #-}
 
-doTax :: ( EngineC tag rm
+doTax :: ( EngineC tag
          , Loggable m
          , MonadError FMCException m
          , TaxDataAppC s m
-         , ReadsFinEnv s rm
+         , ReadsFinEnv s (RateModelType tag)
          , ReadsFinState s
          , ReadsTaxData s
          , ReadsAccumulators s
@@ -570,7 +578,7 @@ doTaxTrade :: ( ShowableComponents tag
               , MonadState s m
               , ReadsFinState s
               , ReadsExchangeRateFunction s
-              , ReadsFinEnv s rm
+              , ReadsFinEnv s (RateModelType tag)
               , ReadsAccumulators s
               , HasTaxData s
               , HasCashFlow s
@@ -610,7 +618,7 @@ doSweepTrades :: ( ShowableComponents tag
                  , HasAccumulators s
                  , ReadsAccumulators s
                  , ReadsFinState s
-                 , ReadsFinEnv s rm
+                 , ReadsFinEnv s (RateModelType tag)
                  , ReadsExchangeRateFunction s
                  , ReadsMCState s tag) => m ()
 doSweepTrades = do

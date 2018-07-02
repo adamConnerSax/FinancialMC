@@ -175,15 +175,15 @@ instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
   (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
 
-data FMCComponentConverters tagB tagA rmB rmA where
+data FMCComponentConverters tagB tagA where
   FMCComponentConverters :: (ComponentTypes tagA, ComponentTypes tagB) =>
     {
       assetF :: (AssetType tagB -> AssetType tagA),
       flowF :: (FlowType tagB -> FlowType tagA),
       lifeEventF :: (LifeEventType tagB -> LifeEventType tagA),
       ruleF :: (RuleType tagB -> RuleType tagA),
-      rateModelF :: (rmB -> rmA)
-    } -> FMCComponentConverters tagB tagA rmB rmA
+      rateModelF :: (RateModelType tagB -> RateModelType tagA)
+    } -> FMCComponentConverters tagB tagA
 
 {-
 data FMCComponentConverters ab a flb fl leb le  rub ru rmb rm =
@@ -212,10 +212,7 @@ data InitialFS tag where
                
 deriving instance (ShowableComponents tag) => Show (InitialFS tag)
 
-
-
 data InitialFS' a fl le ru = InitialFS' (BalanceSheet a) (CashFlows fl) [le] [ru] ru ru deriving (Generic)
-
 
 instance (ToJSON a, ToJSON fl, ToJSON le, ToJSON ru) => ToJSON (InitialFS' a fl le ru) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
@@ -237,23 +234,20 @@ instance FromJSONComponents tag => FromJSON (InitialFS tag) where
   parseJSON o = initialFSFromInitialFS' <$> parseJSON o --parsed' where
 --    parsed' :: InitialFS' (AssetType tag) (FlowType tag) (LifeEventType tag) (RuleType tag) = parseJSON o
 
-convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA rmB rmA -> InitialFS tagB -> InitialFS tagA
+convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA -> InitialFS tagB -> InitialFS tagA
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
   InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) (fRU <$> rs) (fRU sw) (fRU tax)
 
-
-
-                 
+                
 type IFSMap tag = M.Map String (InitialFS tag)
 
-convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA rmB rmA -> IFSMap tagB -> IFSMap tagA
+convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA -> IFSMap tagB -> IFSMap tagA
 convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm 
 
 getFinancialState :: IFSMap tag -> String -> Maybe (InitialFS tag)
 getFinancialState ifsm name = M.lookup name ifsm
 
 type RateModels rm = M.Map String rm
-
 
 getRateModel :: RateModels rm -> String -> Maybe rm
 getRateModel rms n = M.lookup n rms
@@ -271,11 +265,11 @@ instance FromJSON a=>FromJSON (MapByFS a) where
 -}
 
 data FederalTaxStructure = FederalTaxStructure {
-  _ftsIncome::MapByFS TaxBrackets,
-  _ftsPayroll::TaxBrackets,
-  _ftsEstate::TaxBrackets,
-  _ftsCapGainRateBands::FedCapitalGains,
-  _ftsMedicareSurtax::(Double,MapByFS MoneyValue)
+  _ftsIncome :: MapByFS TaxBrackets,
+  _ftsPayroll :: TaxBrackets,
+  _ftsEstate :: TaxBrackets,
+  _ftsCapGainRateBands :: FedCapitalGains,
+  _ftsMedicareSurtax :: (Double,MapByFS MoneyValue)
   } deriving (Generic,Show)
 
 Lens.makeClassy ''FederalTaxStructure
@@ -363,25 +357,36 @@ mergeTaxStructures (TaxStructure fedN stateN cityN) = do
   put $ TaxStructure (M.union fedN fedO) (M.union stateN stateO) (M.union cityN cityO)
 
   
-
-data LoadedModels tag rm = LoadedModels {  _lmFS :: IFSMap tag, _lmRM :: RateModels rm, _lmTax :: TaxStructure }
+data LoadedModels tag where
+  LoadedModels :: (ComponentTypes tag) =>
+                  { _lmFS :: IFSMap tag
+                  , _lmRM :: RateModels (RateModelType tag)
+                  , _lmTax :: TaxStructure
+                  } -> LoadedModels tag
 
 Lens.makeClassy ''LoadedModels
 
+-- NB: Not GADT and therefore not constrained by (rm ~ RateModelType tag) otherwise Generic can't be derived
+-- FIXME
+data ModelConfiguration tag rm = ModelConfiguration 
+                                 { _mcfgInitialFS :: InitialFS tag,
+                                   _mcfgStartingRM :: rm,
+                                   _mcfgRateModel :: rm,
+                                   _mcfgTaxRules :: TaxRules,
+                                   _mcfgYear :: Year,
+                                   _mcfgCCY :: Currency
+                                 } deriving (Generic)
 
-data ModelConfiguration tag rm = ModelConfiguration { _mcfgInitialFS :: InitialFS tag,
-                                                      _mcfgStartingRM :: rm,
-                                                      _mcfgRateModel :: rm,
-                                                      _mcfgTaxRules :: TaxRules,
-                                                      _mcfgYear :: Year,
-                                                      _mcfgCCY :: Currency } deriving (Generic)
-
-deriving instance (ShowableComponents tag, Show rm) => Show (ModelConfiguration tag rm)
+deriving instance (ShowableComponents tag, rm ~ RateModelType tag {-Show rm -}) => Show (ModelConfiguration tag rm)
 
 Lens.makeClassy ''ModelConfiguration
 
 
-convertComponentsModelConfiguration :: FMCComponentConverters tagB tagA rmB rmA
+convertComponentsModelConfiguration :: (ComponentTypes tagA
+                                       ,ComponentTypes tagB
+                                       ,rmA ~ RateModelType tagA
+                                       ,rmB ~ RateModelType tagB)
+                                    => FMCComponentConverters tagB tagA
                                     -> ModelConfiguration tagB rmB
                                     -> ModelConfiguration tagA rmA
 convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (ModelConfiguration ifs srm rm tr y c) =

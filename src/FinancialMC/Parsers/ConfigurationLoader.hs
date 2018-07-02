@@ -1,5 +1,6 @@
 {-# LANGUAGE ConstraintKinds       #-}
 {-# LANGUAGE FlexibleContexts      #-}
+{-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 module FinancialMC.Parsers.ConfigurationLoader
@@ -10,8 +11,7 @@ module FinancialMC.Parsers.ConfigurationLoader
          buildInitialState,
          makeStartingRates,
          validateFinancialState,
-         loadConfigurations,
-         BaseTag
+         loadConfigurations
        ) where
 
 
@@ -40,16 +40,10 @@ import           FinancialMC.Core.Utilities                  (AsFMCException (..
                                                               FMCException,
                                                               eitherToIO, noteM)
 import qualified FinancialMC.Parsers.Configuration           as C
-import           FinancialMC.Parsers.XML.ParseFinancialState (BaseTag, loadFinancialStatesFromString)
+import           FinancialMC.Parsers.XML.ParseFinancialState (loadFinancialStatesFromString)
 import qualified FinancialMC.Parsers.XML.ParseInput          as XML
 import           FinancialMC.Parsers.XML.ParseRateModel      (loadRateModelsFromString)
 import           FinancialMC.Parsers.XML.ParseTax            (loadTaxDataFromString)
-
-import           FinancialMC.Base                            (BaseAsset,
-                                                              BaseFlow,
-                                                              BaseLifeEvent,
-                                                              BaseRateModelT,
-                                                              BaseRule)
 
 import qualified Control.Exception                           as E
 import           Control.Exception.Lens                      (throwingM)
@@ -59,6 +53,12 @@ import           Control.Monad.State.Strict                  (StateT,
                                                               put)
 import qualified Data.Map                                    as M
 import           Data.Random.Source.PureMT                   (pureMT)
+import           FinancialMC.Base                            (BaseAsset,
+                                                              BaseFlow,
+                                                              BaseLifeEvent,
+                                                              BaseRateModelT,
+                                                              BaseRule)
+import           FinancialMC.BaseComponents                  (BaseComponents)
 
 import           Control.Lens                                (zoom, (%=), _1,
                                                               _2)
@@ -72,14 +72,14 @@ import           Data.Monoid                                 ((<>))
 import qualified Data.Text                                   as T
 import qualified Data.Yaml                                   as YAML
 
-type BaseFCC tag rm = C.FMCComponentConverters BaseTag tag BaseRateModelT rm
-type FJ tag rm = (FromJSONComponents tag, FromJSON rm)
+type BaseFCC tag = C.FMCComponentConverters BaseComponents tag
+type FJ tag = (FromJSONComponents tag)
 
-loadDataSource :: FJ tag rm
-               => BaseFCC tag rm
+loadDataSource :: FJ tag
+               => BaseFCC tag
                -> Maybe FilePath
                -> C.DataSource
-               -> StateT (C.LoadedModels tag rm) IO ()
+               -> StateT (C.LoadedModels tag) IO ()
 loadDataSource fcc mSchemaDir (C.DataSource (C.Parseable up C.XML) C.FinancialStateS) = do
   zoom C.lmFS $ do
     currentFS <- get
@@ -135,26 +135,26 @@ decodeUnparsed up C.YAML = do
 
 decodeUnparsed _ _ = throwingM _BadParse "Fallthrough case in decodeUnparsed."
 
-loadDataSources :: FJ tag rm =>
-  BaseFCC tag rm->Maybe FilePath->[C.DataSource]->StateT (C.LoadedModels tag rm) IO ()
+loadDataSources :: FJ tag =>
+  BaseFCC tag -> Maybe FilePath -> [C.DataSource] -> StateT (C.LoadedModels tag) IO ()
 loadDataSources fcc mSchemaDir = mapM_ (loadDataSource fcc mSchemaDir)
 
-loadXMLConfigs :: FJ tag rm
-  => BaseFCC tag rm
+loadXMLConfigs :: FJ tag
+  => BaseFCC tag
   -> Maybe FilePath
   -> C.Unparsed
-  -> StateT (C.LoadedModels tag rm, C.ModelDescriptionMap) IO ()
+  -> StateT (C.LoadedModels tag, C.ModelDescriptionMap) IO ()
 loadXMLConfigs fcc mSchema (C.UnparsedFile fp) = do
   (sources,configM) <- lift $ XML.loadConfigurations mSchema fp
   zoom _1 $ loadDataSources fcc mSchema sources
   hoist generalize $ _2 %= M.union configM
 loadXMLConfigs _ _ _ = lift . E.throwIO $ BadParse "loadXMLConfigs called with Unparsed of sort other than UnparsedFile"
 
-loadJSONConfigs:: FJ tag rm
-  => BaseFCC tag rm
+loadJSONConfigs:: FJ tag
+  => BaseFCC tag
   -> Maybe FilePath
   -> C.Unparsed
-  -> StateT (C.LoadedModels tag rm, C.ModelDescriptionMap) IO ()
+  -> StateT (C.LoadedModels tag, C.ModelDescriptionMap) IO ()
 loadJSONConfigs fcc mSchema up = do
   configLBS <- lift $ C.asIOLazyByteString up
   case eitherDecode configLBS of
@@ -163,11 +163,11 @@ loadJSONConfigs fcc mSchema up = do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
 
-loadYAMLConfigs :: FJ tag rm
-  => BaseFCC tag rm
+loadYAMLConfigs :: FJ tag
+  => BaseFCC tag
   -> Maybe FilePath
   -> C.Unparsed
-  -> StateT (C.LoadedModels tag rm, C.ModelDescriptionMap) IO ()
+  -> StateT (C.LoadedModels tag, C.ModelDescriptionMap) IO ()
 loadYAMLConfigs fcc mSchema up = do
   configBS <- lift $ C.asIOByteString up
   case YAML.decodeEither configBS of
@@ -176,11 +176,11 @@ loadYAMLConfigs fcc mSchema up = do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
 
-loadConfigurationsS :: FJ tag rm
-  => BaseFCC tag rm
+loadConfigurationsS :: FJ tag
+  => BaseFCC tag
   -> Maybe FilePath
   -> C.Unparsed
-  -> StateT (C.LoadedModels tag rm, C.ModelDescriptionMap) IO ()
+  -> StateT (C.LoadedModels tag, C.ModelDescriptionMap) IO ()
 loadConfigurationsS fcc mSchemaP up@(C.UnparsedFile configP) = loadC fcc mSchemaP up where
   loadC = case C.encodingFromSuffix configP of
     C.XML -> loadXMLConfigs
@@ -191,15 +191,15 @@ loadConfigurationsS fcc mSchemaP up@(C.UnparsedFile configP) = loadC fcc mSchema
 loadConfigurationsS _ _ _ = lift $ throwingM _BadParse "loadConfigurationS called with Unparsed of sort other than UnparsedFile"
 
 
-loadConfigurations :: FJ tag rm
-  => BaseFCC tag rm
+loadConfigurations :: FJ tag
+  => BaseFCC tag
   -> Maybe FilePath
   -> C.Unparsed
-  -> IO (C.LoadedModels tag rm, C.ModelDescriptionMap)
+  -> IO (C.LoadedModels tag, C.ModelDescriptionMap)
 loadConfigurations fcc mSchemaP up =
   execStateT (loadConfigurationsS fcc mSchemaP up) (C.LoadedModels M.empty M.empty C.emptyTaxStructure,M.empty)
 
-buildMCState::C.InitialFS tag -> FinEnv rm -> MCState tag
+buildMCState :: (ComponentTypes tag, rm ~ RateModelType tag) => C.InitialFS tag -> FinEnv rm -> MCState tag
 buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs cfs fe les rules sweepR taxTradeR
 
 makeStartingRates :: IsRateModel rm => rm -> RateTable Rate
@@ -207,7 +207,7 @@ makeStartingRates rateDefaultModel =
   let ((_, startingRates), _) = runModel defaultRateTable rateDefaultModel (pureMT 1) --ICK.  Hard wired pureMT.  Ick.
   in startingRates
 
-buildInitialState :: IsRateModel rm
+buildInitialState :: (ComponentTypes tag, rm ~ RateModelType tag)
   => C.InitialFS tag
   -> TaxRules
   -> RateTable Rate
@@ -222,8 +222,8 @@ buildInitialState ifs taxRules startingRates rModel date ccy =
       ics = CombinedState (zeroFinState ccy) mcs False
   in (fe, ics)
 
-getInitialStates :: IsRateModel rm
-  => C.LoadedModels tag rm
+getInitialStates :: (ComponentTypes tag, rm ~ RateModelType tag)
+  => C.LoadedModels tag
   -> FilingStatus
   -> (String,String,String,String,String,Maybe String)
   -> Year
@@ -239,8 +239,8 @@ getInitialStates (C.LoadedModels ifsM rmM ts) fstat (fsName,rdName,rmName,tfName
   return $ buildInitialState initialFS taxRules startingRates rateModel date ccy
 
 
-buildInitialStateFromConfig :: IsRateModel rm
-  => C.LoadedModels tag rm
+buildInitialStateFromConfig :: (ComponentTypes tag, rm ~ RateModelType tag)
+  => C.LoadedModels tag
   -> C.ModelDescriptionMap
   -> String
   -> Either FMCException (Maybe String, FinEnv rm, CombinedState tag)

@@ -11,8 +11,9 @@ import           FinancialMC.Core.MoneyValue                 (Currency (USD))
 
 import           FinancialMC.Core.Tax                        (FilingStatus (..))
 
+import           FinancialMC.BaseComponents                  (BaseComponents)
 import qualified FinancialMC.Parsers.Configuration           as C
-import           FinancialMC.Parsers.XML.ParseFinancialState (BaseTag, loadFinancialStatesFromFile)
+import           FinancialMC.Parsers.XML.ParseFinancialState (loadFinancialStatesFromFile)
 import           FinancialMC.Parsers.XML.ParseRateModel      (loadRateModelsFromFile)
 import           FinancialMC.Parsers.XML.ParseTax            (emptyTaxStructure, loadTaxDataFromFile)
 
@@ -21,8 +22,9 @@ import           FinancialMC.Builders.Assets                 (BaseAsset)
 import           FinancialMC.Builders.Flows                  (BaseFlow)
 import           FinancialMC.Builders.LifeEvents             (BaseLifeEvent)
 import           FinancialMC.Builders.Rules                  (BaseRule)
--}
 import           FinancialMC.Builders.RateModels             (BaseRateModelT)
+-}
+
 
 
 import           FinancialMC.Parsers.XML.Utilities           (FMCXmlArrow,
@@ -42,6 +44,9 @@ import           Text.XML.HXT.Core                           (XmlTree,
                                                               (>>>))
 
 import qualified Data.Map                                    as M
+
+
+
 
 getXMLDataSources::FMCXmlArrow XmlTree ([String],[String],[String])
 getXMLDataSources = atTag "DataSources" >>>
@@ -83,7 +88,7 @@ getConfigurations = atTag "Configurations" >>>
 
 --type FCC a fl le ru rm = C.FMCComponentConverters BaseAsset a BaseFlow fl BaseLifeEvent le BaseRule ru BaseRateModelT rm
 
-loadConfigurations'::Maybe String->FilePath->IO (C.LoadedModels BaseTag BaseRateModelT, C.ModelDescriptionMap)
+loadConfigurations'::Maybe String->FilePath->IO (C.LoadedModels BaseComponents, C.ModelDescriptionMap)
 loadConfigurations' mSchema path = do
   let configXML = parseXML path
   result <- runFMCX (configXML >>> getXMLDataSources)

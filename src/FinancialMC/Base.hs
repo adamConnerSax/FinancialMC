@@ -28,7 +28,7 @@ import           FinancialMC.Builders.RateModels  (BaseRateModel,
                                                    BaseRateModelT)
 import           FinancialMC.Builders.Rules       (BaseRule)
 import           FinancialMC.Core.Asset           (accountValue)
-import           FinancialMC.Core.Engine          (FMCPathState,
+import           FinancialMC.Core.Engine          (FMCPathState (MkFMCPathState),
                                                    HasPathSummaryAndSeed (..),
                                                    PathSummaryAndSeed (..),
                                                    RandomSeed, doPaths,

@@ -1,7 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms   #-}
 {-# LANGUAGE TypeFamilies      #-}
-module UnitTests (tests,mainTest) where
+module UnitTests (
+  tests
+  ,mainTest
+  ) where
 
 import           FinancialMC.Base                        (CombinedState,
                                                           ComponentTypes (..),
@@ -27,11 +30,12 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseLifeEvent,
                                                           BaseRateModelT,
                                                           BaseRule,
-                                                          FMCPathState,
+                                                          FMCPathState (MkFMCPathState),
                                                           pattern PathState)
 
+import           FinancialMC.BaseComponents              (BaseComponents)
 import qualified FinancialMC.Parsers.Configuration       as C
-import           FinancialMC.Parsers.ConfigurationLoader (BaseTag, buildInitialStateFromConfig,
+import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
                                                           loadConfigurations)
 
 import           Control.Lens                            ((&), (.~), (^.))
@@ -49,20 +53,21 @@ type TestLifeEvent = BaseLifeEvent
 type TestRule = BaseRule
 type TestRateModel = BaseRateModelT
 
-data TestTag
-instance ComponentTypes TestTag where
-  type AssetType TestTag = TestAsset
-  type FlowType TestTag = TestFlow
-  type LifeEventType TestTag = TestLifeEvent
-  type RuleType TestTag = TestRule
+data TestComponents
+instance ComponentTypes TestComponents where
+  type AssetType TestComponents = TestAsset
+  type FlowType TestComponents = TestFlow
+  type LifeEventType TestComponents = TestLifeEvent
+  type RuleType TestComponents = TestRule
+  type RateModelType TestComponents = TestRateModel
 
 leConverter :: LifeEventConverters BaseAsset BaseFlow TestLifeEvent
 leConverter = LEC id id
 
-ccs :: C.FMCComponentConverters BaseTag TestTag BaseRateModelT TestRateModel
+ccs :: C.FMCComponentConverters BaseComponents TestComponents
 ccs = C.FMCComponentConverters id id id id id
 
-type UnitTestPathState = FMCPathState TestTag TestRateModel
+type UnitTestPathState = FMCPathState TestComponents
 
 type FMCTestF = Int -> UnitTestPathState -> Bool
 data FMCTest = FMCTest String FMCTestF
@@ -88,7 +93,7 @@ almostEqualMV e (MoneyValue x ccy) mv2 = almostEqual 1.0 x y where
 
 
 isFinalNW :: MoneyValue -> FMCTestF
-isFinalNW nw _ (PathState cs fe) =
+isFinalNW nw _ (MkFMCPathState (PathState cs fe)) =
   let e = fe ^. feExchange
       ps = cs ^. csMC.mcsPathSummary
   in case ps of
@@ -97,7 +102,7 @@ isFinalNW nw _ (PathState cs fe) =
 
 
 isFinalAcctValue :: AccountName -> MoneyValue -> FMCTestF
-isFinalAcctValue acctName amt _ (PathState cs fe) = f where
+isFinalAcctValue acctName amt _ (MkFMCPathState (PathState cs fe)) = f where
   e = fe ^. feExchange
   acctE = getAccount acctName (cs ^. csMC.mcsBalanceSheet)
   f = case acctE of
@@ -105,7 +110,7 @@ isFinalAcctValue acctName amt _ (PathState cs fe) = f where
     Left _     -> False
 
 isBankruptBy :: Year -> FMCTestF
-isBankruptBy d _ (PathState cs _) =
+isBankruptBy d _ (MkFMCPathState (PathState cs _)) =
   let ps = cs ^. csMC.mcsPathSummary
   in case ps of
     ZeroNW day -> day <= d
@@ -286,18 +291,18 @@ evalTest (ConfigTests cFile testSets) = do
         let csHist = cs0 & (csNeedHistory .~ True)
             g (FMCTest testName testF) = do
               putStr ("Testing \"" ++ testName ++ "\" (" ++ show years ++ " yrs): ")
-              doTest testName (PathState csHist fe0) years testF
+              doTest testName (MkFMCPathState (PathState csHist fe0)) years testF
         mapM g testl
   x <- mapM f testSets
   return $ concat x
 
-evalTest (StateTests (PathState cs0 fe0) testSets) = do
+evalTest (StateTests (MkFMCPathState (PathState cs0 fe0)) testSets) = do
   putStrLn "\n Running tests from given config."
   let csHist = cs0 & (csNeedHistory .~ True)
       f (years,testl) = do
         let g (FMCTest testName testF) = do
               putStr ("Testing \"" ++ testName ++ "\" (" ++ show years ++ " yrs): ")
-              doTest testName (PathState csHist fe0) years testF
+              doTest testName (MkFMCPathState (PathState csHist fe0)) years testF
         mapM g testl
   x <- mapM f testSets
   return $ concat x

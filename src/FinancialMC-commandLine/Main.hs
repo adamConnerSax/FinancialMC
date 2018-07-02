@@ -24,7 +24,7 @@ import           Text.Printf                             (printf)
 import           Text.RawString.QQ                       (r)
 
 import qualified FinancialMC.Parsers.Configuration       as C
-import           FinancialMC.Parsers.ConfigurationLoader (BaseTag, buildInitialStateFromConfig,
+import           FinancialMC.Parsers.ConfigurationLoader (buildInitialStateFromConfig,
                                                           loadConfigurations)
 import           OptionParser                            (FinMCOptions (..),
                                                           finMCOptionParser)
@@ -35,7 +35,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           BaseRule,
                                                           CombinedState,
                                                           DatedSummary (..),
-                                                          FMCPathState,
+                                                          FMCPathState (..),
                                                           FSSummary (..),
                                                           FinEnv,
                                                           HasCombinedState (..),
@@ -51,6 +51,7 @@ import           FinancialMC.Base                        (BaseAsset, BaseFlow,
                                                           RandomSeed, doPaths,
                                                           doPathsIO, grossFlows,
                                                           isZeroNW, netWorth)
+import           FinancialMC.BaseComponents              (BaseComponents)
 
 import           FinancialMC.Core.Analysis               (DatedMoneyValue (..), DatedSummaryWithReturns (..),
                                                           HasDatedMoneyValue (..),
@@ -64,13 +65,13 @@ import           FinancialMC.Core.LifeEvent              (LifeEventConverters (L
 import           FinancialMC.Core.MoneyValue             (MoneyValue (MoneyValue))
 import           FinancialMC.Core.Utilities              (Year, eitherToIO)
 
-ccs :: C.FMCComponentConverters BaseTag BaseTag BaseRateModelT BaseRateModelT
+ccs :: C.FMCComponentConverters BaseComponents BaseComponents
 ccs = C.FMCComponentConverters id id id id id
 
 lec :: LifeEventConverters BaseAsset BaseFlow BaseLifeEvent
 lec = LEC id id
 
-type BasePathState = FMCPathState BaseTag BaseRateModelT
+type BasePathState = FMCPathState BaseComponents
 
 runWithOptions :: BasePathState -> FinMCOptions -> IO [PathSummaryAndSeed]
 runWithOptions ps0 options = do
@@ -117,7 +118,7 @@ runAndOutput doOutput options = do
         writeIf $ "Initial positive cashflow: " ++ show inFlow
         writeIf $ "Initial gross spending: " ++ show outFlow
 
-        summaries <- runWithOptions (PathState cs0 fe0) options
+        summaries <- runWithOptions (MkFMCPathState (PathState cs0 fe0)) options
         let histData = nwHistFromSummaries summaries (optBins options)
             bankruptcies = view psasSummary <$> filter (isZeroNW . view psasSummary) summaries
             (numB,medianB,modeB) = analyzeBankruptcies bankruptcies

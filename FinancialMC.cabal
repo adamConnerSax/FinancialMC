@@ -43,6 +43,8 @@ library
     FinancialMC.Parsers.XML.All            
     FinancialMC.Parsers.JSON.Utilities
     FinancialMC.PersistentTypes
+-- Base components: tag, builders, parsers                
+    FinancialMC.BaseComponents                              
 --    FinancialMC.Core.Probability              
   other-modules:
     FinancialMC.Core.CValued_Internal

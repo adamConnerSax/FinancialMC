@@ -18,6 +18,7 @@ module FinancialMC.Core.FinApp
        (
          LogLevel(..)
        , PathState (..)
+       , HasPathState(..)
        , pattern PathState
        , stepState
        , stepEnv
