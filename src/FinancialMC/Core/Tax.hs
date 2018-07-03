@@ -74,20 +74,20 @@ makeClassy ''TaxDetails
 instance Show TaxDetails where
   show (TaxDetails inflow deductions) = "in=" ++ show inflow ++ "; ded=" ++ show deductions
     
-zeroTaxDetails::Currency->TaxDetails  
+zeroTaxDetails :: Currency -> TaxDetails  
 zeroTaxDetails c = TaxDetails (MoneyValue 0 c) (MoneyValue 0 c)
 
-addTaxDetails::ExchangeRateFunction->TaxDetails->TaxDetails->TaxDetails
+addTaxDetails :: ExchangeRateFunction -> TaxDetails -> TaxDetails -> TaxDetails
 addTaxDetails e (TaxDetails inX dedX) (TaxDetails inY dedY) = TaxDetails x y where
   x = MV.inFirst e (+) inX inY
   y = MV.inFirst e (+) dedX dedY
 
 type TaxFlowFunction a = TaxType -> MoneyValue -> a
 
-taxInflow::TaxType->MoneyValue->TaxDetails 
+taxInflow :: TaxType -> MoneyValue -> TaxDetails 
 taxInflow _ mv = TaxDetails mv (MV.zero USD)
 
-taxDeduction::TaxType->MoneyValue->TaxDetails
+taxDeduction :: TaxType -> MoneyValue -> TaxDetails
 taxDeduction _ mv = TaxDetails (MV.zero USD) mv
 
 
@@ -116,20 +116,18 @@ defaultTaxMap c = M.fromList (defaultTaxList c)
 defaultTaxData :: Currency -> TaxData
 defaultTaxData c = TaxData (defaultTaxMap c) c
 
-throwableLookup :: (MonadError FMCException m, Show k, Ord k)=>T.Text -> M.Map k v -> k -> m v
+throwableLookup :: (MonadError FMCException m, Show k, Ord k) => T.Text -> M.Map k v -> k -> m v
 throwableLookup mapName m key = do
   let res = M.lookup key m
   case res of 
     Nothing -> throwing _FailedLookup ("lookup of " <> (T.pack $ show key) <> " in " <> mapName <> " failed!") 
     Just x -> return x
 
-
 --addTaxFlow::Monad m=>TaxFlowFunction TaxDetails->TaxFlowFunction (TaxDataApp m ())
 addTaxFlow :: TaxDataAppC s m => TaxFlowFunction TaxDetails -> TaxFlowFunction (m ())
 addTaxFlow mkDetails tt cf = do
   e <- use getExchangeRateFunction
   taxData.tdMap %= M.insertWith (addTaxDetails e) tt (mkDetails tt cf) 
-
   
 addTaxableFlow :: TaxDataAppC s m => TaxFlowFunction (m ())
 addTaxableFlow = addTaxFlow taxInflow
@@ -137,14 +135,12 @@ addTaxableFlow = addTaxFlow taxInflow
 addDeductibleFlow :: TaxDataAppC s m => TaxFlowFunction (m())  
 addDeductibleFlow = addTaxFlow taxDeduction
 
-
 carryForwardTaxDetails :: TaxDetails -> TaxDetails
 carryForwardTaxDetails (TaxDetails (MoneyValue t ccy) (MoneyValue d _)) =
   if t > d 
   then zeroTaxDetails ccy 
   else TaxDetails (MV.zero ccy) (MoneyValue (d-t) ccy)
                   
-
 carryForwardTaxData :: (MonadError FMCException m, TaxDataAppC s m) => m ()
 carryForwardTaxData = do
   (TaxData tm ccy) <- use taxData
@@ -159,10 +155,11 @@ carryForwardTaxData = do
   
   
 
-data FilingStatus = Single | MarriedFilingJointly deriving (Show,Read,Enum,Ord,Eq,Bounded,Generic,FromJSON,ToJSON)         
-data TaxBracket = Bracket !MoneyValue !MoneyValue !Double | TopBracket !MoneyValue !Double deriving (Show,Generic,FromJSON,ToJSON)
+data FilingStatus = Single | MarriedFilingJointly deriving (Show, Read, Enum, Ord, Eq, Bounded, Generic, FromJSON, ToJSON)         
 
-data TaxBrackets = TaxBrackets ![TaxBracket] deriving (Generic,FromJSON,ToJSON) -- we don't expose this constructor 
+data TaxBracket = Bracket !MoneyValue !MoneyValue !Double | TopBracket !MoneyValue !Double deriving (Show, Generic, FromJSON, ToJSON)
+
+data TaxBrackets = TaxBrackets ![TaxBracket] deriving (Generic, FromJSON, ToJSON) -- we don't expose this constructor 
 
 taxBrackets :: TaxBrackets -> [TaxBracket]
 taxBrackets (TaxBrackets x) = x
@@ -179,13 +176,11 @@ makeTaxBrackets tbs = TaxBrackets $ sortBy (comparing g) tbs where
   g (Bracket b _ _) = b ^. mAmount
   g (TopBracket b _) = b ^. mAmount
 
-
 buildTaxBracketsFromTops :: Currency -> [(Double,Double)] -> Double -> TaxBrackets
 buildTaxBracketsFromTops ccy bktTops tR = makeTaxBrackets $ regBrackets++[topBracket] where 
   f (t,r) (pT,bkts) = (t,bkts++[Bracket (MoneyValue pT ccy) (MoneyValue t ccy) r])
   (bottomTop, regBrackets)=  foldr f (0,[]) bktTops 
   topBracket = TopBracket (MoneyValue bottomTop ccy) tR
-
                                              
 -- CValued versions
 getTaxCV :: TaxBracket -> CV.CVD -> CV.CVD
@@ -208,7 +203,7 @@ getTaxCV' ccy e (Bracket b t r) taxable'  =
   let tax' = CV.unwrap ccy e  taxable' 
       MoneyValue b' _ = MV.convert b ccy e
       MoneyValue t' _ = MV.convert t ccy e
-  in CV.fromMoneyValue $ MoneyValue (r*min (t' - b') (max 0 (tax' - b'))) ccy
+  in CV.fromMoneyValue $ MoneyValue (r * min (t' - b') (max 0 (tax' - b'))) ccy
 
 getTaxCV' ccy e (TopBracket b r) taxable' =
   let tax' = CV.unwrap ccy e taxable'
@@ -251,21 +246,20 @@ trueMarginalRateCV mv@(MoneyValue _ c) tb =
   in (t2' |-| t1') |/| one'
 
 
-data CapGainBand = CapGainBand { marginalRate::Double, capGainRate::Double } deriving (Generic, Show,ToJSON,FromJSON)
+data CapGainBand = CapGainBand { marginalRate :: Double, capGainRate :: Double } deriving (Generic, Show,ToJSON,FromJSON)
 
-data FedCapitalGains = FedCapitalGains { topRate::Double, bands::[CapGainBand] } deriving (Generic, Show, ToJSON, FromJSON)
-data MedicareSurtax = MedicareSurtax { rate::Double, magiThreshold::MoneyValue } deriving (Generic, Show, ToJSON, FromJSON)
+data FedCapitalGains = FedCapitalGains { topRate :: Double, bands :: [CapGainBand] } deriving (Generic, Show, ToJSON, FromJSON)
+data MedicareSurtax = MedicareSurtax { rate :: Double, magiThreshold :: MoneyValue } deriving (Generic, Show, ToJSON, FromJSON)
 
-data TaxRules = TaxRules {_trFederal:: !TaxBrackets, 
-                          _trPayroll:: !TaxBrackets, 
-                          _trEstate:: !TaxBrackets,
-                          _trFCG:: !FedCapitalGains,
-                          _trMedTax:: !MedicareSurtax,
-                          _trState:: !TaxBrackets,
-                          _trStateCapGain:: !Double,
-                          _trCity:: !TaxBrackets } deriving (Show,Generic)
+data TaxRules = TaxRules {_trFederal :: !TaxBrackets, 
+                          _trPayroll :: !TaxBrackets, 
+                          _trEstate :: !TaxBrackets,
+                          _trFCG :: !FedCapitalGains,
+                          _trMedTax :: !MedicareSurtax,
+                          _trState :: !TaxBrackets,
+                          _trStateCapGain :: !Double,
+                          _trCity :: !TaxBrackets } deriving (Show, Generic)
 makeClassy ''TaxRules
-
 
 instance ToJSON TaxRules where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3 }
@@ -276,7 +270,7 @@ instance FromJSON TaxRules where
 safeCapGainRateCV :: TaxRules -> CV.SVD
 safeCapGainRateCV tr = (CV.toSVD (tr ^. trStateCapGain)) |+| maxFedCapGainCV
 
-fedCapitalGainRateCV::CV.SVD -> CV.SVD
+fedCapitalGainRateCV :: CV.SVD -> CV.SVD
 fedCapitalGainRateCV margRate'  = CV.cvCase [(margRate' |<| CV.toSVD 0.25, CV.toSVD 0),
                                              (margRate' |<| CV.toSVD 0.39, CV.toSVD 0.15)]
                                   (CV.toSVD 0.2)
