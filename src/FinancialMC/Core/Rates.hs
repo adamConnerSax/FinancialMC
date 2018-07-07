@@ -12,6 +12,7 @@
 {-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TypeFamilies           #-}
 {-# LANGUAGE UndecidableInstances   #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module FinancialMC.Core.Rates
        (
          RateType(..)
@@ -26,7 +27,8 @@ module FinancialMC.Core.Rates
        , RateUpdates
        , fromMap
        , setToDefaults
-       , defaultRateTable -- defaultRateTable is map based
+       , defaultMapBasedRateTable 
+       , defaultArrayBasedRateTable
        , rateRequest
        , RSource
        , Rate
@@ -50,6 +52,9 @@ import           Data.Maybe                  (fromJust)
 import qualified Data.Random as R
 import           Data.Random.Source.PureMT   (PureMT)
 import           Text.Printf                 (PrintfArg, printf)
+import Data.Array ((!),(//))
+import qualified Data.Array as A
+import qualified Data.Ix as Ix
 
 import           Data.Aeson                  (FromJSON (..), ToJSON (..))
 import           GHC.Generics                (Generic)
@@ -61,9 +66,9 @@ import qualified Data.Sequence               as Seq
 import qualified Data.Set                    as S
 import qualified Data.Text                   as T
 
-data InterestType = Savings | CreditCard deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,FromJSON,ToJSON)
-data ReturnType = Stock | Bond | RealEstate deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,FromJSON,ToJSON)
-data InflationType =  Price | Education | HealthCare | Wage | TaxBracket deriving (Enum,Bounded,Eq,Ord,Show,Read,Generic,FromJSON,ToJSON)
+data InterestType = Savings | CreditCard deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,A.Ix,FromJSON,ToJSON)
+data ReturnType = Stock | Bond | RealEstate deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,A.Ix,FromJSON,ToJSON)
+data InflationType =  Price | Education | HealthCare | Wage | TaxBracket deriving (Enum,Bounded,Eq,Ord,Show,Read,Generic,A.Ix,FromJSON,ToJSON)
 
 data RateTag = Interest !InterestType |
                Return !ReturnType |
@@ -76,6 +81,34 @@ allRateTags = [Interest x | x<-[(minBound::InterestType)..]] ++
               [Return x | x<-[(minBound::ReturnType)..]] ++
               [Inflation x | x<-[(minBound::InflationType)..]] ++
               [Exchange x | x<-[(minBound::Currency)..]]
+
+
+-- NB: These next two must be consistent or things will not go well...
+instance Enum RateTag where
+  fromEnum rt =
+    let nInterest = length [(minBound :: InterestType)..]
+        nReturn   = length [(minBound :: ReturnType)..]
+        nInflation = length [(minBound :: InflationType)..]
+    in case rt of
+      (Interest x) -> fromEnum x
+      (Return x) -> nInterest + fromEnum x
+      (Inflation x) -> nInterest + nReturn + fromEnum x
+      (Exchange x) -> nInterest + nReturn + nInflation + fromEnum x
+
+  toEnum n = allRateTags !! n
+
+instance Bounded RateTag where
+  minBound = Interest (minBound :: InterestType)
+  maxBound = Exchange (maxBound :: Currency) 
+
+--using the Int instance of Ix 
+instance A.Ix RateTag where
+  range (l,r) = toEnum <$> Ix.range (fromEnum l, fromEnum r)
+  index (l,r) i = Ix.index (fromEnum l, fromEnum r) (fromEnum i)
+  inRange (l,r) i = Ix.inRange (fromEnum l, fromEnum r) (fromEnum i)
+  rangeSize (l,r) = Ix.rangeSize (fromEnum l, fromEnum r)
+--  unsafeIndex (l,r) = Ix.unsafeIndex (fromEnum l, fromEnum r) (fromEnum i)
+
 
 data RateType = IsInterest | IsReturn | IsInflation | IsExchange  deriving (Enum,Eq,Ord,Show,Read,Generic,ToJSON,FromJSON)
 
@@ -127,11 +160,22 @@ instance (PrintfArg a, Num a) => Show (RateTable a) where
 fromMap :: M.Map RateTag a -> RateTable a
 fromMap m = RateTable (`M.lookup` m) (\t r->fromMap $ M.insert t r m) (fromMap . flip M.union m . M.fromList . F.toList) (M.toList m) (M.keys m)
 
+fromArray :: A.Array RateTag a -> RateTable a
+fromArray rates = RateTable
+  (\t -> pure $ rates ! t)
+  (\t r -> fromArray $ rates // [(t,r)])
+  (\upds -> fromArray $ rates // (F.toList upds))
+  (A.assocs rates)
+  (A.indices rates)
+
 setToDefaults :: RateTable Rate -> RateTable Rate
 setToDefaults t = foldl' (\tbl key-> (rSet tbl) key (defaultRates key)) t allRateTags
 
-defaultRateTable :: RateTable Double
-defaultRateTable = setToDefaults $ fromMap M.empty
+defaultMapBasedRateTable :: RateTable Double
+defaultMapBasedRateTable = setToDefaults $ fromMap M.empty
+
+defaultArrayBasedRateTable :: RateTable Double
+defaultArrayBasedRateTable = setToDefaults $ fromArray (A.listArray (minBound :: RateTag, maxBound :: RateTag) (repeat 0.0))
 
 throwingLookup :: MonadError FMCException m => RateTable a -> RateTag -> m a
 throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not found")) $ rLookup rt t

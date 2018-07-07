@@ -30,7 +30,8 @@ import           FinancialMC.Core.MCState                    (CombinedState (..)
 import qualified FinancialMC.Core.MoneyValue                 as MV
 import           FinancialMC.Core.Rates                      (IsRateModel, Rate,
                                                               RateTable,
-                                                              defaultRateTable,
+                                                              defaultArrayBasedRateTable,
+                                                              defaultMapBasedRateTable,
                                                               runModel)
 import           FinancialMC.Core.Rule                       (IsRule,
                                                               ruleAccounts)
@@ -204,7 +205,7 @@ buildMCState (C.InitialFS bs cfs les rules sweepR taxTradeR) fe = makeMCState bs
 
 makeStartingRates :: IsRateModel rm => rm -> RateTable Rate
 makeStartingRates rateDefaultModel =
-  let ((_, startingRates), _) = runModel defaultRateTable rateDefaultModel (pureMT 1) --ICK.  Hard wired pureMT.  Ick.
+  let ((_, startingRates), _) = runModel defaultArrayBasedRateTable rateDefaultModel (pureMT 1) --ICK.  Hard wired pureMT.  Ick.
   in startingRates
 
 buildInitialState :: (ComponentTypes tag, rm ~ RateModelType tag)

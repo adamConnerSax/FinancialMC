@@ -22,8 +22,8 @@ import           FinancialMC.Core.Rates     (IsRateModel (..), RSource, Rate,
                                              RateTable (..), RateTag (..),
                                              RateType (..), RateUpdates,
                                              ReturnType (Stock), allRateTags,
-                                             defaultRateTable, isRateType,
-                                             runModel, showRateAsPct)
+                                             isRateType, runModel,
+                                             showRateAsPct)
 import           FinancialMC.Core.Utilities (eitherToIO)
 
 
