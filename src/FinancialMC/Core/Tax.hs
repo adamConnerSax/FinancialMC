@@ -48,6 +48,7 @@ import qualified FinancialMC.Core.CValued as CV
 import           FinancialMC.Core.CValued ((|+|),(|-|),(|*|),(|/|),(|>|),(|<|),cvMin,cvMax)
 
 import Data.List (foldl',sortBy)
+import qualified Data.Array as A
 import Data.Ord (comparing)
 import qualified Data.Map.Lazy as M
 import Control.Lens (Getter, makeClassy,makeLenses,(%=),(^.), use, (.=))
@@ -67,7 +68,7 @@ import Data.Aeson.Types (Options(..),defaultOptions)
 import GHC.Generics (Generic)
 
 
-data TaxType = OrdinaryIncome | NonPayrollIncome | CapitalGain | Dividend | Inheritance deriving (Enum, Eq, Ord, Show)
+data TaxType = OrdinaryIncome | NonPayrollIncome | CapitalGain | Dividend | Inheritance deriving (Enum, Eq, Ord, Bounded, A.Ix, Show)
 data TaxDetails = TaxDetails { _tdInflow:: !MoneyValue, _tdDeductions:: !MoneyValue }
 makeClassy ''TaxDetails
 
@@ -91,8 +92,8 @@ taxDeduction :: TaxType -> MoneyValue -> TaxDetails
 taxDeduction _ mv = TaxDetails (MV.zero USD) mv
 
 
-type TaxMap = M.Map TaxType TaxDetails
-data TaxData = TaxData { _tdMap:: !TaxMap, _tdCcy:: !Currency } 
+type TaxArray = A.Array TaxType TaxDetails
+data TaxData = TaxData { _tdArray:: !TaxArray, _tdCcy:: !Currency } 
 makeClassy ''TaxData  
 
 class ReadsTaxData s where
@@ -105,16 +106,21 @@ class ReadsTaxData s where
 type TaxDataAppC s m = (HasTaxData s, ReadsExchangeRateFunction s, MonadState s m) --MonadState TaxData m, MonadReader ExchangeRateFunction m) 
 
 instance Show TaxData where
-  show (TaxData tm _) = "Tax Info:" ++ foldl' (\c (k,v) -> c++("\n\t"++show k ++ ": " ++ show v)) [] (M.assocs tm) 
+  show (TaxData ta _) = "Tax Info:" ++ foldl' (\c (k,v) -> c++("\n\t"++show k ++ ": " ++ show v)) [] (A.assocs ta) 
 
+{-
 defaultTaxList :: Currency -> [(TaxType,TaxDetails)]
 defaultTaxList c = fmap (\k->(k,zeroTaxDetails c)) [OrdinaryIncome,NonPayrollIncome,CapitalGain,Dividend,Inheritance]
 
 defaultTaxMap :: Currency -> M.Map TaxType TaxDetails
 defaultTaxMap c = M.fromList (defaultTaxList c)
+-}
+
+defaultTaxArray :: Currency -> TaxArray
+defaultTaxArray c = A.listArray (minBound, maxBound) (repeat $ zeroTaxDetails c)
 
 defaultTaxData :: Currency -> TaxData
-defaultTaxData c = TaxData (defaultTaxMap c) c
+defaultTaxData c = TaxData (defaultTaxArray c) c
 
 throwableLookup :: (MonadError FMCException m, Show k, Ord k) => T.Text -> M.Map k v -> k -> m v
 throwableLookup mapName m key = do
@@ -127,7 +133,7 @@ throwableLookup mapName m key = do
 addTaxFlow :: TaxDataAppC s m => TaxFlowFunction TaxDetails -> TaxFlowFunction (m ())
 addTaxFlow mkDetails tt cf = do
   e <- use getExchangeRateFunction
-  taxData.tdMap %= M.insertWith (addTaxDetails e) tt (mkDetails tt cf) 
+  taxData.tdArray %= (\ta -> let old = ta A.! tt in ta A.// [(tt,(addTaxDetails e (mkDetails tt cf) old))]) --M.insertWith (addTaxDetails e) tt (mkDetails tt cf) 
   
 addTaxableFlow :: TaxDataAppC s m => TaxFlowFunction (m ())
 addTaxableFlow = addTaxFlow taxInflow
@@ -143,16 +149,20 @@ carryForwardTaxDetails (TaxDetails (MoneyValue t ccy) (MoneyValue d _)) =
                   
 carryForwardTaxData :: (MonadError FMCException m, TaxDataAppC s m) => m ()
 carryForwardTaxData = do
-  (TaxData tm ccy) <- use taxData
-  let f = throwableLookup "TaxData" tm
-  cgd <- f CapitalGain
-  dd <-  f Dividend
-  let z = zeroTaxDetails ccy
+  (TaxData ta ccy) <- use taxData
+--  let f = throwableLookup "TaxData" tm
+--  cgd <- f CapitalGain
+--  dd <-  f Dividend
+  let cgd = ta A.! CapitalGain
+      dd = ta A.! Dividend
+      z = zeroTaxDetails ccy
+      newTaxArray = defaultTaxArray ccy A.// [(Dividend,carryForwardTaxDetails dd),(CapitalGain,carryForwardTaxDetails cgd)]
+  taxData .= TaxData newTaxArray ccy
+{-  
   taxData .= TaxData (M.fromList [(OrdinaryIncome,z),(NonPayrollIncome,z),(Inheritance,z),
                                   (Dividend,carryForwardTaxDetails dd),
-                                  (CapitalGain,carryForwardTaxDetails cgd)]) ccy
-    
-  
+                                  (CapitalGain,carryForwardTaxDetails cgd)]) ccy  
+-}  
   
 
 data FilingStatus = Single | MarriedFilingJointly deriving (Show, Read, Enum, Ord, Eq, Bounded, Generic, FromJSON, ToJSON)         
@@ -284,18 +294,18 @@ maxFedCapGainCV :: CV.SVD
 maxFedCapGainCV = fedCapitalGainRateCV (CV.toSVD 1)
 
 fullTaxCV :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s) => TaxRules -> TaxData -> m (MoneyValue,Double)
-fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData tm ccy) = do
+fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData ta ccy) = do
   e <- use getExchangeRateFunction
   let cTax = computeIncomeTaxCV'' ccy e
       net' (TaxDetails inFlow deds) = CV.fromMoneyValue inFlow |-| CV.fromMoneyValue deds
       gross (TaxDetails inFlow _) = inFlow
-      details tt = noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
-  
-  ordinaryD <- details OrdinaryIncome             
-  nonPayrollD <- details NonPayrollIncome
-  capGainD <- details CapitalGain
-  divD <- details Dividend
-  inheritanceD <- details Inheritance
+      --details tt = noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
+      
+      ordinaryD = ta A.! OrdinaryIncome
+      nonPayrollD = ta A.!  NonPayrollIncome
+      capGainD = ta A.! CapitalGain
+      divD = ta A.! Dividend
+      inheritanceD = ta A.! Inheritance
 
   let grossPayrollIncome' = CV.fromMoneyValue $ gross ordinaryD
       payrollTax' = cTax payroll grossPayrollIncome'

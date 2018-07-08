@@ -6,7 +6,8 @@ module BenchEngine
   ) where
 
 import           BenchTypes
-import           FinancialMC.Base           (PathState, pattern PathState,
+import           FinancialMC.Base           (PathState, FMCPathState (MkFMCPathState),
+                                             pattern PathState,
                                              PathSummary)
 import           FinancialMC.Core.Utilities (FMCException)
 import           FinancialMC.Internal       (PathStack, computeTax, doChecks,
@@ -16,8 +17,10 @@ import           Control.Monad              (replicateM_)
 import           Criterion
 import           Data.Maybe                 (fromJust)
 
-runEngineFunction :: BenchPathState -> PathStack FMCException (PathState BenchCS BenchFE) x -> PathSummary
+
+runEngineFunction :: BenchPathState -> PathStack FMCException BenchPathState {-(PathState BenchCS BenchFE)-} x -> PathSummary
 runEngineFunction ps0 ef = do
+  let (MkFMCPathState ps) = ps0
   fromJust . getSummaryS  $ execPathStack ef ps0
 
 benchDoChecks :: BenchPathState -> Int -> PathSummary

@@ -112,7 +112,7 @@ executable FinancialMC-cl
   other-modules:       OptionParser
   ghc-options:	       -Wall -O2 -rtsopts -threaded "-with-rtsopts=-N" -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches 
   ghc-prof-options:    -fprof-auto -auto-all -fprof-cafs 
-  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq, vector, exceptions,mtl	       
+  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq, vector, exceptions,mtl, array	       
   default-language:    Haskell2010
 
 executable FinancialMC-threadscope
@@ -121,7 +121,7 @@ executable FinancialMC-threadscope
   other-modules:       OptionParser
   ghc-options:    -O2 -threaded -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches
   ghc-prof-options: 
-  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq,vector,exceptions,mtl		       
+  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq,vector,exceptions,mtl, array		       
   default-language:    Haskell2010
 
 executable XmlToJSON
@@ -138,7 +138,7 @@ Test-suite UnitTests
   main-is:             Main.hs
   other-modules:       UnitTests
   other-extensions:    QuasiQuotes, TemplateHaskell, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances
-  build-depends:       FinancialMC, base, errors, lens,transformers,time,Cabal, exceptions, mtl
+  build-depends:       FinancialMC, base, errors, lens,transformers,time,Cabal, exceptions, mtl, array
   default-language:    Haskell2010
 
 benchmark bench-all
@@ -152,5 +152,5 @@ benchmark bench-all
                      , BenchEngine
   ghc-options:         -O2 -threaded "-with-rtsopts=-N" -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches
   main-is:             BenchAll.hs
-  build-depends:       FinancialMC, base, criterion, deepseq, lens, mersenne-random-pure64, unordered-containers, containers, text 
+  build-depends:       FinancialMC, base, criterion, deepseq, lens, mersenne-random-pure64, unordered-containers, containers, text, array
   default-language:    Haskell2010

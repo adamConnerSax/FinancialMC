@@ -14,6 +14,7 @@ import           Data.Random.Source.PureMT               (PureMT, newPureMT,
                                                           pureMT)
 
 import qualified Data.Map                                as M
+import           Data.Array ((!))
 import           Data.Maybe                              (fromJust)
 import qualified Data.Vector                             as V
 import           Data.Word                               (Word64)
@@ -208,7 +209,7 @@ formatMedianSummaryOutput medianHist = str where
   header = "Date\t\tNet Worth($)\tReturn($)\tReturn(%)\tNear Cash\tInflow($)\tOutflow($)\tTax($)\tTax Rate(%)\n"
   g = printf "%.2f"
   f (MoneyValue x _) = printf "%.0f" x
-  l lt nwm = f (fromJust $ M.lookup lt nwm)
+  l lt nwm = f $ nwm ! lt --f (fromJust $ M.lookup lt nwm)
   h (DatedSummaryWithReturns d (FSSummary nw nwbo i o t tr)  ret retR)  =
     show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t\t" ++ g (100*retR) ++ "%\t\t"
     ++ l NearCash nwbo ++ "\t\t"

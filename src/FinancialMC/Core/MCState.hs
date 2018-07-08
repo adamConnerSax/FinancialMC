@@ -45,7 +45,7 @@ module FinancialMC.Core.MCState
        , grossFlows
        , PathSummary(..)
        , isZeroNW
-       , NetWorthMap
+       , NetWorthArray
        , FSSummary (FSSummary)
        , HasFSSummary (..)
        , DatedSummary (DatedSummary)
@@ -72,6 +72,7 @@ import           FinancialMC.Core.TradingTypes (LiquidityType(NearCash),liquidit
 import           FinancialMC.Core.Utilities (noteM,FMCException(Other),Year)
 
 import qualified Data.Map as M
+import qualified Data.Array as A
 import qualified Data.Foldable as F
 import Data.Monoid ((<>))
 import qualified Data.Text as T
@@ -182,9 +183,9 @@ isZeroNW::PathSummary->Bool
 isZeroNW (FinalNW _) = False 
 isZeroNW (ZeroNW _) = True
 
-type NetWorthMap = M.Map LiquidityType MoneyValue
+type NetWorthArray = A.Array LiquidityType MoneyValue
 data FSSummary = FSSummary { _fssNW:: !MoneyValue,
-                             _fssNWBreakOut:: !NetWorthMap,
+                             _fssNWBreakOut:: !NetWorthArray,
                              _fssInflow:: !MoneyValue,
                              _fssOutFlow:: !MoneyValue,
                              _fssTax:: !MoneyValue,
@@ -347,8 +348,8 @@ netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s
   initial' = if lt == NearCash then (CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow) else z'
 
 
-netWorthBreakout :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> NetWorthMap
-netWorthBreakout cs fe = M.fromList (zip lts nws) where
+netWorthBreakout :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> NetWorthArray
+netWorthBreakout cs fe = A.listArray (minBound, maxBound) nws where
   lts = [(minBound::LiquidityType) ..]
   nws = fmap (netWorthByLiquidityType cs fe) lts
 

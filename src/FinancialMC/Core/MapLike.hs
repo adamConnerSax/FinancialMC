@@ -42,7 +42,7 @@ instance Ord k=>IsMap k v (M.Map k v) where
   mElems = M.elems
   mToList = M.toList
   mFromList = M.fromList
-  mShow = M.foldWithKey (\k v s-> s ++ "\n" ++ show k ++ ": " ++ show v) ""
+  mShow = M.foldrWithKey (\k v s-> s ++ "\n" ++ show k ++ ": " ++ show v) ""
 
 instance (Eq k,Hashable k)=>IsMap k v (HM.HashMap k v) where
   mEmpty = HM.empty

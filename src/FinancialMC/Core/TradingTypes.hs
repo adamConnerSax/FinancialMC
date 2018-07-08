@@ -22,6 +22,7 @@ import           Control.Monad.State            (MonadState)
 import           Data.Aeson                     (FromJSON, ToJSON)
 import qualified Data.Text                      as T
 import           GHC.Generics                   (Generic)
+import Data.Array (Ix)
 
 type TradeResult a = Result [FlowResult] a
 data TradeType = NormalTrade | OverFund | EarlyWithdrawal deriving (Eq,Show,Read,Generic,ToJSON,FromJSON)
@@ -44,10 +45,10 @@ data LiquidityType = NearCash |
                      RetirementSavings |
                      EducationSavings |
                      Property |
-                     Liability deriving (Eq,Ord,Show,Enum,Bounded)
+                     Liability deriving (Eq,Ord,Show,Enum,Bounded,Ix)
 
 
-liquidityType::AccountType->LiquidityType
+liquidityType :: AccountType->LiquidityType
 liquidityType aType
   | aType `elem` [Bank, Brokerage] = NearCash
   | aType `elem` [A401k, IRA, RothIRA] = RetirementSavings
