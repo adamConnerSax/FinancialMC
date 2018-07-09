@@ -18,7 +18,7 @@ module FinancialMC.Parsers.ConfigurationLoader
 
 import           FinancialMC.Base                            as Base
 import           FinancialMC.Core.Asset                      (AccountName)
-import           FinancialMC.Core.FinancialStates            (FinEnv (..), exchangeRFFromRateTable,
+import           FinancialMC.Core.FinancialStates            (FinEnv (..), exchangeMatrixFromRateTable,
                                                               zeroFinState)
 import           FinancialMC.Core.MCState                    (CombinedState (..),
                                                               ComponentTypes (..),
@@ -216,7 +216,7 @@ buildInitialState :: (ComponentTypes tag, rm ~ RateModelType tag)
   -> MV.Currency
   -> (FinEnv rm, CombinedState tag)
 buildInitialState ifs taxRules startingRates rModel date ccy =
-  let erF = exchangeRFFromRateTable startingRates
+  let erF = exchangeMatrixFromRateTable startingRates
       fe = FinEnv startingRates erF date ccy taxRules rModel
       mcs = buildMCState ifs fe
       ics = CombinedState (zeroFinState ccy) mcs False

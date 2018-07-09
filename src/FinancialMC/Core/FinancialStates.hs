@@ -21,7 +21,8 @@ module FinancialMC.Core.FinancialStates
        , currentDate
        , changeRate
        , changeCurrentDate
-       , exchangeRFFromRateTable
+       , exchangeMatrixFromRateTable
+--       , exchangeRFFromRateTable
        , updateExchangeRateFunction
        , AccumName
        , Accumulators(Accumulators)
@@ -61,7 +62,13 @@ import           Data.Maybe                     (fromJust)
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
 
-data FinEnv rm = FinEnv { _feRates::RateTable Double, _feExchange:: !ExchangeRateFunction , _feCurrentDate:: !Year, _feDefaultCCY:: !Currency, _feTaxRules:: !TaxRules, _feRateModel:: !rm}
+data FinEnv rm = FinEnv { _feRates       :: !(RateTable Double)
+                        , _feExchange    :: !ExchangeRateFunction
+                        , _feCurrentDate :: !Year
+                        , _feDefaultCCY  :: !Currency
+                        , _feTaxRules    :: !TaxRules
+                        , _feRateModel   :: !rm
+                        }
 makeClassy ''FinEnv
 
 class ReadsFinEnv s rm | s -> rm where
@@ -85,7 +92,6 @@ changeRate rateTag x = do
 changeCurrentDate :: Year -> State (FinEnv rm) ()
 changeCurrentDate d = feCurrentDate .= d
 
-
 exchangeMatrixFromRateTable :: RateTable Rate -> ExchangeRateFunction
 exchangeMatrixFromRateTable rateTable =
   let eRate c1 c2 = rLookup rateTable (Exchange c2) / rLookup rateTable (Exchange c1)
@@ -93,6 +99,7 @@ exchangeMatrixFromRateTable rateTable =
       exchMatrix = A.listArray ((minBound, minBound),(maxBound,maxBound)) [eRate i j | i <- ccys, j <- ccys]
   in (\c1 c2 -> if (c1 == c2) then 1 else exchMatrix A.! (c1,c2))
 
+{-
 exchangeRFFromRateTable :: RateTable Rate -> ExchangeRateFunction
 exchangeRFFromRateTable rateTable ca cb =
   let ccys = [(minBound::Currency)..]
@@ -100,6 +107,7 @@ exchangeRFFromRateTable rateTable ca cb =
       eRate (c1,c2) = rLookup rateTable (Exchange c2) / rLookup rateTable (Exchange c1)
       eRates = foldl (\m k->M.insert k (eRate k) m) M.empty pairs
   in fromJust (M.lookup (ca,cb) eRates)
+-}
 
 updateExchangeRateFunction :: (MonadState s m, HasFinEnv s rm) => m ()
 updateExchangeRateFunction = do
