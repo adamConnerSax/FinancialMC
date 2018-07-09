@@ -88,7 +88,7 @@ exchangeRFFromRateTable :: RateTable Rate -> ExchangeRateFunction
 exchangeRFFromRateTable rateTable ca cb =
   let ccys = [(minBound::Currency)..]
       pairs = [(x,y) | x<-ccys,y<-ccys]
-      eRate (c1,c2) = fromJust (rLookup rateTable (Exchange c2))/fromJust (rLookup rateTable (Exchange c1))
+      eRate (c1,c2) = rLookup rateTable (Exchange c2) / rLookup rateTable (Exchange c1)
       eRates = foldl (\m k->M.insert k (eRate k) m) M.empty pairs
   in fromJust (M.lookup (ca,cb) eRates)
 

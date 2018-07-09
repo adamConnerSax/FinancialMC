@@ -25,9 +25,9 @@ module FinancialMC.Core.Rates
        , HasRateTable (..)
        , ReadsRateTable (..)
        , RateUpdates
-       , fromMap
+--       , fromMap
        , setToDefaults
-       , defaultMapBasedRateTable 
+--       , defaultMapBasedRateTable 
        , defaultArrayBasedRateTable
        , rateRequest
        , RSource
@@ -137,7 +137,7 @@ updateRateTable :: RateUpdates a -> RateTable a -> RateTable a
 updateRateTable updates curRates = rBulkUpdate curRates updates 
 
 
-data RateTable a = RateTable { rLookup :: RateTag -> Maybe a
+data RateTable a = RateTable { rLookup :: RateTag -> a
                              , rSet :: RateTag -> a -> RateTable a
                              , rBulkUpdate :: RateUpdates a -> RateTable a
                              , rToList :: [(RateTag, a)]
@@ -155,14 +155,21 @@ class ReadsRateTable s a | s -> a where
 instance (PrintfArg a, Num a) => Show (RateTable a) where
   show rt = "[" ++ show (fmap f (rKeys rt)) ++ "]" where
     fmtRate x = printf "%.2f" (x*100)
-    f k = "(" ++ show k ++ "," ++ fmtRate (fromJust $ rLookup rt k) ++ "%)"
+    f k = "(" ++ show k ++ "," ++ fmtRate (rLookup rt k) ++ "%)"
 
+{-
+-- This used the different interface when lookup returned a (Maybe a)
 fromMap :: M.Map RateTag a -> RateTable a
 fromMap m = RateTable (`M.lookup` m) (\t r->fromMap $ M.insert t r m) (fromMap . flip M.union m . M.fromList . F.toList) (M.toList m) (M.keys m)
 
+
+defaultMapBasedRateTable :: RateTable Double
+defaultMapBasedRateTable = setToDefaults $ fromMap M.empty
+-}
+
 fromArray :: A.Array RateTag a -> RateTable a
 fromArray rates = RateTable
-  (\t -> pure $ rates ! t)
+  (\t -> rates ! t)
   (\t r -> fromArray $ rates // [(t,r)])
   (\upds -> fromArray $ rates // (F.toList upds))
   (A.assocs rates)
@@ -171,17 +178,16 @@ fromArray rates = RateTable
 setToDefaults :: RateTable Rate -> RateTable Rate
 setToDefaults t = foldl' (\tbl key-> (rSet tbl) key (defaultRates key)) t allRateTags
 
-defaultMapBasedRateTable :: RateTable Double
-defaultMapBasedRateTable = setToDefaults $ fromMap M.empty
-
 defaultArrayBasedRateTable :: RateTable Double
 defaultArrayBasedRateTable = setToDefaults $ fromArray (A.listArray (minBound :: RateTag, maxBound :: RateTag) (repeat 0.0))
 
+{-
 throwingLookup :: MonadError FMCException m => RateTable a -> RateTag -> m a
 throwingLookup rt t = noteM (FailedLookup ((T.pack $ show t) <> ": rate not found")) $ rLookup rt t
+-}
 
-rateRequest :: (MonadError FMCException m, MonadState s m, ReadsRateTable s a) => RateTag -> m a
-rateRequest rTag = use getRateTable >>= flip throwingLookup rTag
+rateRequest :: ({- MonadError FMCException m,-} MonadState s m, ReadsRateTable s a) => RateTag -> m a
+rateRequest rTag = use getRateTable >>= return . flip rLookup rTag {- flip throwingLookup rTag -}
 
 applyRateUpdates :: IsRateModel r  => RateTable Rate -> r -> R.RVar (r, RateTable Rate)
 applyRateUpdates curRates model = do
