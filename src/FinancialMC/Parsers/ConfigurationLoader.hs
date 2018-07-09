@@ -31,7 +31,6 @@ import qualified FinancialMC.Core.MoneyValue                 as MV
 import           FinancialMC.Core.Rates                      (IsRateModel, Rate,
                                                               RateTable,
                                                               defaultArrayBasedRateTable,
-                                                              defaultMapBasedRateTable,
                                                               runModel)
 import           FinancialMC.Core.Rule                       (IsRule,
                                                               ruleAccounts)

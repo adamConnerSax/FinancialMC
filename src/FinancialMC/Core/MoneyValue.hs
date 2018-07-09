@@ -12,6 +12,7 @@ import           Data.Char        (chr)
 import qualified Data.Text        as T
 import           Text.Printf      (printf)
 
+import qualified Data.Array       as A
 import           Data.List        (intercalate)
 import           Data.List.Split  (chunksOf, splitOn)
 
@@ -21,7 +22,7 @@ import           Data.Aeson.Types (Options (..), defaultOptions,
 import           GHC.Generics     (Generic)
 
 
-data Currency = USD | EUR deriving (Eq,Ord,Enum,Bounded,Show,Read,Generic,ToJSON,FromJSON)
+data Currency = USD | EUR deriving (Eq,Ord,Enum,Bounded,A.Ix,Show,Read,Generic,ToJSON,FromJSON)
 
 class HasCurrency s where
   currency :: Lens' s Currency

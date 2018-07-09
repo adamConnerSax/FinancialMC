@@ -55,6 +55,7 @@ import           Control.Monad.Except           (MonadError)
 import           Control.Monad.Reader           (MonadReader, Reader, ask,
                                                  reader)
 import           Control.Monad.State.Strict     (MonadState, State)
+import qualified Data.Array                     as A
 import qualified Data.Map.Strict                as M
 import           Data.Maybe                     (fromJust)
 import           Data.Monoid                    ((<>))
@@ -84,6 +85,14 @@ changeRate rateTag x = do
 changeCurrentDate :: Year -> State (FinEnv rm) ()
 changeCurrentDate d = feCurrentDate .= d
 
+
+exchangeMatrixFromRateTable :: RateTable Rate -> ExchangeRateFunction
+exchangeMatrixFromRateTable rateTable =
+  let eRate c1 c2 = rLookup rateTable (Exchange c2) / rLookup rateTable (Exchange c1)
+      ccys = [minBound..]
+      exchMatrix = A.listArray ((minBound, minBound),(maxBound,maxBound)) [eRate i j | i <- ccys, j <- ccys]
+  in (\c1 c2 -> exchMatrix A.! (c1,c2))
+
 exchangeRFFromRateTable :: RateTable Rate -> ExchangeRateFunction
 exchangeRFFromRateTable rateTable ca cb =
   let ccys = [(minBound::Currency)..]
@@ -95,7 +104,7 @@ exchangeRFFromRateTable rateTable ca cb =
 updateExchangeRateFunction :: (MonadState s m, HasFinEnv s rm) => m ()
 updateExchangeRateFunction = do
   rateTable <- use $ finEnv.feRates
-  (finEnv.feExchange) .= exchangeRFFromRateTable rateTable
+  (finEnv.feExchange) .= exchangeMatrixFromRateTable rateTable
 {-# INLINE updateExchangeRateFunction #-}
 
 -- state for accumulating tax data, cashflows, transactions, etc.  Changes during evolve
