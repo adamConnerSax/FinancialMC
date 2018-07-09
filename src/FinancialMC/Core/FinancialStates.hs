@@ -91,7 +91,7 @@ exchangeMatrixFromRateTable rateTable =
   let eRate c1 c2 = rLookup rateTable (Exchange c2) / rLookup rateTable (Exchange c1)
       ccys = [minBound..]
       exchMatrix = A.listArray ((minBound, minBound),(maxBound,maxBound)) [eRate i j | i <- ccys, j <- ccys]
-  in (\c1 c2 -> exchMatrix A.! (c1,c2))
+  in (\c1 c2 -> if (c1 == c2) then 1 else exchMatrix A.! (c1,c2))
 
 exchangeRFFromRateTable :: RateTable Rate -> ExchangeRateFunction
 exchangeRFFromRateTable rateTable ca cb =
