@@ -1,9 +1,8 @@
-.stack-work/*
-.hg/*
-.hg*
+.stack-work/
+dist/
+dist-newstyle/
 *~
 *#
-/dist
 *.aux
 *.csv
 *.prof
@@ -26,10 +25,8 @@
 .cabal-sandbox/
 cabal.sandbox.config
 *.prof
-*.aux
 *.hp
 *.eventlog
-.stack-work/
 cabal.project.local
 .HTF/
 dist
