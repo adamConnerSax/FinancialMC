@@ -22,6 +22,7 @@ module FinancialMC.Core.Tax
        , addDeductibleFlow
        , carryForwardTaxData
        , fullTaxCV
+       , fullTaxEDSL
        , TaxBracket(..)
        , TaxBrackets
        , taxBrackets
@@ -327,6 +328,21 @@ taxRulesToTaxRulesM erf c (TaxRules fed payroll estate fcg ms state scg city) =
       fcg' = fedCapitalGainsToFedCapitalGainsM fcg
       ms' = medicareSurtaxToMedicareSurtaxM erf c ms
   in TE.TaxRulesM brackets fcg' ms' scg
+
+
+fullTaxEDSL :: (MonadError FMCException m
+               , MonadState s m
+               , ReadsExchangeRateFunction s)
+            => TaxRules
+            -> TaxData
+            -> m (MoneyValue,Double)
+fullTaxEDSL tr (TaxData ta ccy) = do
+  e <- use getExchangeRateFunction
+  let trm = taxRulesToTaxRulesM e ccy tr
+      tfs = mvArrayToMoneyArray e ccy ta
+      (Money tax, rate) = TE.runTaxMonad (TE.taxReaderProgram $ basePolicy True) (TE.TaxEnv trm tfs)
+      taxMV = MoneyValue tax ccy
+  return (taxMV, rate)
 
 safeCapGainRateCV :: TaxRules -> CV.SVD
 safeCapGainRateCV tr = (CV.toSVD (tr ^. trStateCapGain)) |+| maxFedCapGainCV
