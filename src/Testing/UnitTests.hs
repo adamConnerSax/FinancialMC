@@ -173,11 +173,11 @@ taxTests = ConfigTests "Configs/Tests/TaxTestConfigurations.xml"
                                                  isFinalAcctValue "Bank" (MoneyValue 150000 USD),
                                                  isFinalAcctValue "Sweep" (MoneyValue 47750 USD)])]),
              ("CapitalGainFed+NYS+NYC",1,[FMCTest "Capital Gain (1MM income) Fed+NYS+NYC"
-                                      (andTests [isFinalNW (MoneyValue 818460 USD),
+                                      (andTests [isFinalNW (MoneyValue 819350 USD),
                                                  isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
                                                  isFinalAcctValue "Bank" (MoneyValue 150000 USD),
-                                                 isFinalAcctValue "Sweep" (MoneyValue 618460 USD)])]),
-             ("CapitalGain_FundEarnings",1,[FMCTest "Capital Gain (Fund Earnings) Fed+NYS+NYC" (isFinalNW (MoneyValue 675110 USD))]),
+                                                 isFinalAcctValue "Sweep" (MoneyValue 619350 USD)])]),
+             ("CapitalGain_FundEarnings",1,[FMCTest "Capital Gain (Fund Earnings) Fed+NYS+NYC" (isFinalNW (MoneyValue 675127 USD))]),
              ("Rental",1,[FMCTest "Rental" (isFinalNW (MoneyValue 124924 USD))]),
              ("MortgageDeduction",1,[FMCTest "Mortgage Deduction"
                                      (andTests [isFinalNW (MoneyValue 277360 USD),
