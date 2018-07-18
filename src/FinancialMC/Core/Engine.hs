@@ -680,7 +680,7 @@ computeTax :: ( MonadError FMCException m
 computeTax = do
   tr <- use $ getFinEnv.feTaxRules
   td <- use getTaxData
-  (total, rate) <- fullTaxCV tr td
+  (total, rate) <- fullTaxEDSL tr td
   log Debug ("Computed tax of "
              <> (T.pack $ show total)
              <> " (eff rate of "
