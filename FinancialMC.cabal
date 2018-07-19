@@ -103,6 +103,7 @@ library
                 , unordered-containers
                 , vector
                 , yaml
+                , TaxEDSL
   ghc-options: -O2 -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-matches -funbox-small-strict-fields
   ghc-prof-options: -fprof-auto -auto-all -fprof-cafs 
 
