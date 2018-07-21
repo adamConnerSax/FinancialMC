@@ -264,12 +264,15 @@ instance FromJSON a=>FromJSON (MapByFS a) where
   parseJSON v = MapByFS <$> fromJSONEnumMap v
 -}
 
-data FederalTaxStructure = FederalTaxStructure {
-  _ftsIncome :: MapByFS TaxBrackets,
-  _ftsPayroll :: TaxBrackets,
-  _ftsEstate :: TaxBrackets,
-  _ftsCapGainRateBands :: FedCapitalGains,
-  _ftsMedicareSurtax :: (Double, Double, MapByFS MoneyValue)
+data FederalTaxStructure = FederalTaxStructure
+  {
+    _ftsIncome :: MapByFS TaxBrackets
+  , _ftsPayroll :: TaxBrackets
+  , _ftsEstate :: TaxBrackets
+  , _ftsCapGainRateBands :: FedCapitalGains
+  , _ftsMedicareSurtax :: (Double, MapByFS MoneyValue)
+  , _ftsStandardDeduction :: MapByFS MoneyValue
+  , _ftsSALTCap :: Maybe MoneyValue
   } deriving (Generic,Show)
 
 Lens.makeClassy ''FederalTaxStructure
@@ -281,9 +284,12 @@ instance FromJSON FederalTaxStructure where
   
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 4} ''FederalTaxStructure) -}
 
-data StateTaxStructure = StateTaxStructure {
-  _stsIncome::MapByFS TaxBrackets,
-  _stsCapGainRate::Double } deriving (Generic,Show)
+data StateTaxStructure = StateTaxStructure
+  {
+    _stsIncome :: MapByFS TaxBrackets
+  , _stsCapGainRate :: Double
+  , _stsStandardDeduction :: MapByFS MoneyValue
+  } deriving (Generic,Show)
 
 Lens.makeClassy ''StateTaxStructure
 
@@ -305,10 +311,12 @@ instance FromJSON CityTaxStructure where
 
 {-  $(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''CityTaxStructure) -}
 
-data TaxStructure = TaxStructure {
-  _tsFederal :: M.Map String FederalTaxStructure,
-  _tsState :: M.Map String StateTaxStructure,
-  _tsCity :: M.Map String CityTaxStructure } deriving (Show,Generic)
+data TaxStructure = TaxStructure
+  {
+    _tsFederal :: M.Map String FederalTaxStructure
+  , _tsState :: M.Map String StateTaxStructure
+  , _tsCity :: M.Map String CityTaxStructure
+  } deriving (Show,Generic)
 
 Lens.makeClassy ''TaxStructure
 
@@ -337,7 +345,7 @@ lookupTB bracketMap filingStatus taxName =
 
 makeTaxRules :: TaxStructure -> FilingStatus -> String -> String -> Maybe String -> Either FMCException TaxRules
 makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateName mCityName = do
-  (FederalTaxStructure fedInc payroll estate cgrb (medSPayrollRate,medSNetInvRate,medSThresh)) <- lookupTS fedByName fedName "federal"
+  (FederalTaxStructure fedInc payroll estate cgrb (medSPayrollRate,medSNetInvRate,medSThresh) sd sc) <- lookupTS fedByName fedName "federal"
   fedT <- lookupTB (unEnumKeyMap fedInc) fs fedName
   msThresh <- noteM (FailedLookup ("Couldn't find " <> (T.pack $ show fs) <> " in Medicare Surtax MAGI thresholds.")) $ M.lookup fs (unEnumKeyMap medSThresh)
   (StateTaxStructure stateInc stateCG) <- lookupTS stateByName stateName "state"
@@ -345,7 +353,7 @@ makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateNam
   cityT <- case mCityName of
     Nothing -> return zeroTaxBrackets
     Just n -> lookupTS cityByName n "city" >>= (\(CityTaxStructure bktMap)->lookupTB (unEnumKeyMap bktMap) fs n)
-  return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSPayrollRate medSNetInvRate msThresh) stateT stateCG cityT
+  return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSNetInvRate msThresh) stateT cityT
 
 emptyTaxStructure :: TaxStructure
 emptyTaxStructure = TaxStructure M.empty M.empty M.empty

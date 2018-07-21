@@ -47,7 +47,7 @@ import           FinancialMC.Core.Rule            (IsRule (..), RuleAppC,
                                                    RuleOutput (RuleOutput),
                                                    RuleWhen (AfterSweep, BeforeTax, Special))
 
-import           FinancialMC.Core.Tax             (safeCapGainRateCV)
+import           FinancialMC.Core.Tax             (safeCapGainRate)
 
 import           Control.Lens                     (magnify, makeClassy, use,
                                                    view, (^.))
@@ -206,18 +206,18 @@ doBaseRule (SellAsNeeded as) getA = do -- Rule "EmergencySell" f (fst $ unzip ac
     if MV.isPositive cashPos  then return [] else mapMSl h (MV.negate cashPos) as
   appendAndReturn (RuleOutput trds []) ()
 
-
+-- could we enhance this rule to know how much of what we are selling is cap gain?
 doBaseRule (TaxTrade acctName) _ = do
   trades <- do
     tr <- use $ getFinEnv.feTaxRules
     cashOnHand <- use $ getFinState.fsCashFlow
     tax <- getAccumulatedValue (T.pack "TaxOwed")
-    let safeR' = safeCapGainRateCV tr
+    let safeR = safeCapGainRate tr
         ccy = cashOnHand ^. mCurrency
         tax' = CV.fromMoneyValue tax
         cashOnHand' = CV.fromMoneyValue cashOnHand
         needed' = CV.cvMin tax' (tax' |-| cashOnHand')
-        amt' = CV.cvNegate $ needed' |/| (CV.toSVD 1.0 |-| safeR')
+        amt' = CV.cvNegate $ needed' |/| (1.0 - safeR)
     amt <- CV.asERMV ccy amt'
     let trade = Transaction acctName NormalTrade amt
     CV.asERFReader $ cvIf (cvOr (tax' |<=| CV.mvZero ccy) (tax' |<| cashOnHand')) (CV.toSV []) (CV.toSV [trade])

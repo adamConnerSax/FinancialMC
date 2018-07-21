@@ -97,7 +97,7 @@ import           FinancialMC.Core.Tax             (HasTaxData (taxData),
                                                    ReadsTaxData (getTaxData),
                                                    TaxData, TaxDataAppC,
                                                    carryForwardTaxData,
-                                                   fullTaxCV, fullTaxEDSL,
+                                                   fullTaxEDSL,
                                                    updateTaxRules)
 import           FinancialMC.Core.Utilities       (AsFMCException (..),
                                                    FMCException (..), readOnly)

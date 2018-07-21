@@ -9,6 +9,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module FinancialMC.Core.Tax
        (
          TaxType(..)
@@ -33,9 +34,10 @@ module FinancialMC.Core.Tax
        , FilingStatus(..)
        , TaxRules(TaxRules)
        , HasTaxRules(..)
-       , safeCapGainRateCV
+--       , safeCapGainRateCV
+       , safeCapGainRate
        , updateTaxRules
-       , fullTaxCV
+--       , fullTaxCV
        ) where
 
 
@@ -57,7 +59,7 @@ import           Control.Lens                   (Getter, makeClassy, makeLenses,
 import qualified Data.Array                     as A
 import           Data.List                      (foldl', sortBy)
 import Data.Foldable (toList)
-import qualified Data.List.Safe as Safe
+import qualified Safe
 import qualified Data.Map.Lazy                  as M
 import           Data.Ord                       (comparing)
 
@@ -69,6 +71,7 @@ import           Control.Monad.Reader           (MonadReader, ReaderT, ask,
 import           Control.Monad.State.Strict     (MonadState, StateT, get, put)
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
+import Data.Maybe (fromMaybe)
 
 import           Data.Aeson                     (FromJSON (..), ToJSON (..),
                                                  genericParseJSON,
@@ -214,18 +217,19 @@ fedCapitalGainsToFedCapitalGainsM (FedCapitalGains tr bands) = TE.FedCapGainsM t
 medicareSurtaxToMedicareSurtaxM :: ExchangeRateFunction -> Currency -> MedicareSurtax -> TE.MedicareSurtaxM Double
 medicareSurtaxToMedicareSurtaxM erf c (MedicareSurtax nir mt) = TE.MedicareSurtaxM nir (moneyValueToMoney erf c mt)
 
-newtype StandardDeductions = StandardDeductions { deds :: (A.Array TE.Jurisdiction MoneyValue) }
+newtype StandardDeductions = StandardDeductions { deds :: (A.Array TE.Jurisdiction MoneyValue) } deriving (Show)
 
 instance ToJSON StandardDeductions where
-  toJSON = toJSON . assocs . deds 
+  toJSON = toJSON . A.assocs . deds 
 
 instance FromJSON StandardDeductions where
-  parseJSON =
+  parseJSON v =
     let f pairList = do
-          (minIndex, _) <- Safe.head pairList
-          (maxIndex, _) <- Safe.last pairList
-          A.array (minIndex, maxIndex) pairList
-    in StandardDeductions . (fromMaybe (A.listArray (minBound, maxBound) (repeat $ zero USD)) . f <$> parseJSON
+          (minIndex, _) <- Safe.headMay pairList
+          (maxIndex, _) <- Safe.lastMay pairList
+          return $ A.array (minIndex, maxIndex) pairList
+    in StandardDeductions . (fromMaybe (A.listArray (minBound, maxBound) (repeat $ MV.zero USD))) . f <$> parseJSON v
+
 
 data TaxRules = TaxRules
   {
@@ -262,9 +266,20 @@ updateTaxRules  (TaxRules fed payroll estate fcg medstax st city sdeds scap) tax
   estate' = inflateTaxBrackets taxBracketInflationRate estate
   st' = inflateTaxBrackets taxBracketInflationRate st
   city' = inflateTaxBrackets taxBracketInflationRate city
-  sdeds' = flip MV.multiply (1.0 + taxBracketInflationRate) <$> sdeds
+  sdeds' = StandardDeductions (flip MV.multiply (1.0 + taxBracketInflationRate) <$> deds sdeds)
   scap' = flip MV.multiply (1.0 + taxBracketInflationRate) <$> scap
   newRules = TaxRules fed' payroll' estate' fcg medstax st' city' sdeds' scap'
+
+topBracketRate :: TaxBrackets -> Double
+topBracketRate (TaxBrackets bs) =
+  let rate (Bracket _ _ r) = r
+      rate (TopBracket _ r) = r
+  in foldl' (\cr bkt -> max cr (rate bkt)) 0 bs
+
+-- required for tax trade rule.
+-- If we need $x and we are selling something with capital gains, we need to know how much extra to trade
+safeCapGainRate :: TaxRules -> Double
+safeCapGainRate (TaxRules _ _ _ (FedCapitalGains tr _) _ state city _ _) = tr + topBracketRate state + topBracketRate city
 
 taxRulesToTaxRulesM :: ExchangeRateFunction -> Currency -> TaxRules -> TE.TaxRulesM Double
 taxRulesToTaxRulesM erf c (TaxRules fed payroll estate fcg ms state city sd scap) =
@@ -279,7 +294,7 @@ taxRulesToTaxRulesM erf c (TaxRules fed payroll estate fcg ms state city sd scap
         , (TE.Payroll, f payroll)
         , (TE.Estate, f estate)
         ]
-      sd' = moneyValueToMoney erf c <$> sd
+      sd' = moneyValueToMoney erf c <$> deds sd
       ms' = medicareSurtaxToMedicareSurtaxM erf c ms
   in TE.TaxRulesM brackets sd' (moneyValueToMoney erf c <$> scap) ms'
 
