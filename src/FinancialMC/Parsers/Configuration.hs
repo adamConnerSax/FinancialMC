@@ -269,7 +269,7 @@ data FederalTaxStructure = FederalTaxStructure {
   _ftsPayroll :: TaxBrackets,
   _ftsEstate :: TaxBrackets,
   _ftsCapGainRateBands :: FedCapitalGains,
-  _ftsMedicareSurtax :: (Double,MapByFS MoneyValue)
+  _ftsMedicareSurtax :: (Double, Double, MapByFS MoneyValue)
   } deriving (Generic,Show)
 
 Lens.makeClassy ''FederalTaxStructure
@@ -337,7 +337,7 @@ lookupTB bracketMap filingStatus taxName =
 
 makeTaxRules :: TaxStructure -> FilingStatus -> String -> String -> Maybe String -> Either FMCException TaxRules
 makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateName mCityName = do
-  (FederalTaxStructure fedInc payroll estate cgrb (medSRate,medSThresh)) <- lookupTS fedByName fedName "federal"
+  (FederalTaxStructure fedInc payroll estate cgrb (medSPayrollRate,medSNetInvRate,medSThresh)) <- lookupTS fedByName fedName "federal"
   fedT <- lookupTB (unEnumKeyMap fedInc) fs fedName
   msThresh <- noteM (FailedLookup ("Couldn't find " <> (T.pack $ show fs) <> " in Medicare Surtax MAGI thresholds.")) $ M.lookup fs (unEnumKeyMap medSThresh)
   (StateTaxStructure stateInc stateCG) <- lookupTS stateByName stateName "state"
@@ -345,7 +345,7 @@ makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateNam
   cityT <- case mCityName of
     Nothing -> return zeroTaxBrackets
     Just n -> lookupTS cityByName n "city" >>= (\(CityTaxStructure bktMap)->lookupTB (unEnumKeyMap bktMap) fs n)
-  return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSRate msThresh) stateT stateCG cityT
+  return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSPayrollRate medSNetInvRate msThresh) stateT stateCG cityT
 
 emptyTaxStructure :: TaxStructure
 emptyTaxStructure = TaxStructure M.empty M.empty M.empty

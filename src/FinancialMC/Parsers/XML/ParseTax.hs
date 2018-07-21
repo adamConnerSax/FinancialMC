@@ -122,12 +122,12 @@ parseRateBand = atTag "Band" >>>
     rt <- readAttrValue "rate" -< l
     returnA -< CapGainBand (top/100) (rt/100)
 
-parseMedicareSurtax::ArrowXml a=>a XmlTree (Double,MapByFS MoneyValue)
+parseMedicareSurtax::ArrowXml a=>a XmlTree (Double, Double, MapByFS MoneyValue)
 parseMedicareSurtax = atTag "MedicareSurtax" >>>
   proc l -> do
-    rt <- readAttrValue "rate" -< l
+    nirt <- readAttrValue "rate" -< l
     thresholds <- listA parseThreshold -< l
-    returnA -< (rt/100, makeFSMap $ M.fromList thresholds)
+    returnA -< (nirt/100, makeFSMap $ M.fromList thresholds)
 
 parseThreshold::ArrowXml a=>a XmlTree (FilingStatus,MoneyValue)
 parseThreshold = atTag "Threshold" >>>
@@ -135,7 +135,6 @@ parseThreshold = atTag "Threshold" >>>
     fStatus <- readAttrValue "status" -< l
     amount <- readAttrValue "amount" -< l
     returnA -< (fStatus,amount)
-
 
 parseFederalTaxStructure::(ArrowXml a,ArrowChoice a)=>a XmlTree (String,FederalTaxStructure)
 parseFederalTaxStructure = atTag "FederalTaxStructure" >>>
@@ -148,19 +147,20 @@ parseFederalTaxStructure = atTag "FederalTaxStructure" >>>
     medSurtax <- parseMedicareSurtax -< l
     returnA -< (name,FederalTaxStructure (makeFSMap $ M.fromList incomeTaxL) payrollTax estateTax capitalGains medSurtax)
 
-
+{-
 parseStateCapitalGains::ArrowXml a=>a XmlTree Double
 parseStateCapitalGains = atTag "CapitalGains" >>>
   proc l -> do
     rt <- readAttrValue "rate" -< l
     returnA -< rt/100
+-}
 
 parseStateTaxStructure::ArrowXml a=>a XmlTree (String,String,StateTaxStructure)
 parseStateTaxStructure = atTag "StateTaxStructure" >>>
   proc l -> do
     state <- getAttrValue "state" -< l
     name <- getAttrValue "name" -< l
-    cgRate <- parseStateCapitalGains -< l
+--    cgRate <- parseStateCapitalGains -< l
     incomeTaxL <- listA parseIncomeTaxStructure -< l
     returnA -< (state,name,StateTaxStructure (makeFSMap $ M.fromList incomeTaxL) cgRate)
 

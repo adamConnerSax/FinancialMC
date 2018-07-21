@@ -42,7 +42,7 @@ import qualified FinancialMC.Core.MoneyValueOps as MV
 import           FinancialMC.Core.Rates         (Rate, RateTable (..),
                                                  RateTag (Exchange))
 import           FinancialMC.Core.Tax           (HasTaxData (..), TaxData,
-                                                 TaxRules, defaultTaxData)
+                                                 TaxRules, zeroTaxData)
 import           FinancialMC.Core.Utilities     (AsFMCException (..), FMCException (FailedLookup, Other),
                                                  Year, noteM)
 
@@ -169,11 +169,12 @@ instance Show FinState where
   show fs = "Net flow: " ++ show (fs ^. fsCashFlow) ++ "\n" ++ show (fs ^. fsTaxData) ++ "\n" ++ show (fs ^. fsAccumulators)
 
 zeroFinState :: Currency -> FinState
-zeroFinState c = FinState { _fsTaxData=defaultTaxData c,
-                            _fsCashFlow=MV.zero c,
-                            _fsAccumulators=newAccumulators }
-
-
+zeroFinState c = FinState
+  {
+    _fsTaxData      = zeroTaxData c
+  , _fsCashFlow     = MV.zero c
+  , _fsAccumulators = newAccumulators
+  }
 
 addToAccumulator :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s, HasAccumulators s) => AccumName -> MoneyValue -> m ()
 addToAccumulator name amount = do
