@@ -13,6 +13,7 @@
 module FinancialMC.Core.Tax
        (
          TaxType(..)
+       , TE.Jurisdiction(..)
        , TaxData
        , HasTaxData (..)
        , ReadsTaxData (..)
@@ -25,6 +26,7 @@ module FinancialMC.Core.Tax
        , TaxBracket(..)
        , TaxBrackets
        , taxBrackets
+       , StandardDeductions(..)
        , FedCapitalGains(..)
        , CapGainBand(..)
        , MedicareSurtax(..)

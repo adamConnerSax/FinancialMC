@@ -26,6 +26,7 @@ import           Data.List (sortBy)
 import           Data.Ord (comparing)
 -- import           Data.Maybe (fromMaybe)
 import qualified Data.Map as M
+import qualified Safe 
 import           Control.Monad.Trans (MonadTrans,lift)
 import           Control.Monad.State.Strict (MonadState,StateT,get,put,execState)
 
@@ -122,7 +123,7 @@ parseRateBand = atTag "Band" >>>
     rt <- readAttrValue "rate" -< l
     returnA -< CapGainBand (top/100) (rt/100)
 
-parseMedicareSurtax::ArrowXml a=>a XmlTree (Double, Double, MapByFS MoneyValue)
+parseMedicareSurtax::ArrowXml a=>a XmlTree (Double, MapByFS MoneyValue)
 parseMedicareSurtax = atTag "MedicareSurtax" >>>
   proc l -> do
     nirt <- readAttrValue "rate" -< l
@@ -136,6 +137,25 @@ parseThreshold = atTag "Threshold" >>>
     amount <- readAttrValue "amount" -< l
     returnA -< (fStatus,amount)
 
+parseStandardDeductions :: ArrowXml a => a XmlTree (MapByFS MoneyValue)
+parseStandardDeductions = atTag "StandardDeduction" >>>
+  proc l -> do
+    deductions <- listA parseStandardDeduction -< l
+    returnA -< makeFSMap $ M.fromList deductions
+
+parseStandardDeduction :: ArrowXml a => a XmlTree (FilingStatus, MoneyValue)
+parseStandardDeduction = atTag "SD" >>>
+  proc l -> do
+    fStatus <- readAttrValue "status" -< l
+    ded <- readAttrValue "deduction" -< l
+    returnA -< (fStatus, ded)
+
+parseSALTCap :: ArrowXml a => a XmlTree MoneyValue
+parseSALTCap = atTag "SALTCap" >>>
+  proc l -> do
+    sCap <- readAttrValue "SALT-cap" -< l 
+    returnA -< sCap
+
 parseFederalTaxStructure::(ArrowXml a,ArrowChoice a)=>a XmlTree (String,FederalTaxStructure)
 parseFederalTaxStructure = atTag "FederalTaxStructure" >>>
   proc l -> do
@@ -145,7 +165,10 @@ parseFederalTaxStructure = atTag "FederalTaxStructure" >>>
     estateTax <- parseEstateTaxStructure -< l
     capitalGains <- parseFedCapitalGains -< l
     medSurtax <- parseMedicareSurtax -< l
-    returnA -< (name,FederalTaxStructure (makeFSMap $ M.fromList incomeTaxL) payrollTax estateTax capitalGains medSurtax)
+    standardDeductionsByFS <- parseStandardDeductions -< l
+    saltCapL <- listA parseSALTCap -< l
+    let saltCapM = Safe.headMay saltCapL -- this is not an ideal solution to > 1
+    returnA -< (name,FederalTaxStructure (makeFSMap $ M.fromList incomeTaxL) payrollTax estateTax capitalGains medSurtax standardDeductionsByFS saltCapM)
 
 {-
 parseStateCapitalGains::ArrowXml a=>a XmlTree Double
@@ -155,14 +178,14 @@ parseStateCapitalGains = atTag "CapitalGains" >>>
     returnA -< rt/100
 -}
 
-parseStateTaxStructure::ArrowXml a=>a XmlTree (String,String,StateTaxStructure)
+parseStateTaxStructure :: ArrowXml a => a XmlTree (String, String, StateTaxStructure)
 parseStateTaxStructure = atTag "StateTaxStructure" >>>
   proc l -> do
     state <- getAttrValue "state" -< l
     name <- getAttrValue "name" -< l
---    cgRate <- parseStateCapitalGains -< l
     incomeTaxL <- listA parseIncomeTaxStructure -< l
-    returnA -< (state,name,StateTaxStructure (makeFSMap $ M.fromList incomeTaxL) cgRate)
+    standardDeductionsByFS <- parseStandardDeductions -< l
+    returnA -< (state,name, StateTaxStructure (makeFSMap $ M.fromList incomeTaxL) standardDeductionsByFS)
 
 parseCityTaxStructure::ArrowXml a=>a XmlTree (String,String,CityTaxStructure)
 parseCityTaxStructure = atTag "CityTaxStructure" >>>
