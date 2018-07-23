@@ -153,7 +153,7 @@ parseStandardDeduction = atTag "SD" >>>
 parseSALTCap :: ArrowXml a => a XmlTree MoneyValue
 parseSALTCap = atTag "SALTCap" >>>
   proc l -> do
-    sCap <- readAttrValue "SALT-cap" -< l 
+    sCap <- readAttrValue "SALT_cap" -< l 
     returnA -< sCap
 
 parseFederalTaxStructure::(ArrowXml a,ArrowChoice a)=>a XmlTree (String,FederalTaxStructure)

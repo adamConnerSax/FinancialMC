@@ -20,13 +20,19 @@
       <Threshold status="MarriedFilingJointly" amount="0 USD"/>
       <Threshold status="Single" amount="0 USD"/>
     </MedicareSurtax>
+
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
   </FederalTaxStructure>
   
   <StateTaxStructure state="Zero" name="Zero">
-    <CapitalGains rate="0"/>
-    <IncomeTaxStructure status="MarriedFilingJointly" cap_gain_rate="0">
+    <IncomeTaxStructure status="MarriedFilingJointly">
       <SimpleBrackets currency="USD" top_rate="0"/>
     </IncomeTaxStructure>
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
   </StateTaxStructure>
   
   <CityTaxStructure city="Zero" name="Zero">

@@ -151,6 +151,7 @@ taxTests = ConfigTests "Configs/Tests/TaxTestConfigurations.xml"
            [
              ("10kTest_FedOnly",1,[FMCTest "Fed Tax On 10k" (isFinalNW (MoneyValue 8235 USD))]),
              ("40kTest_FedOnly",1,[FMCTest "Fed Tax On 40k" (isFinalNW (MoneyValue 31832 USD))]),
+             ("440kTest_FedOnly",1,[FMCTest "Fed Tax On 440k" (isFinalNW (MoneyValue 305065 USD))]),
              ("1MMTest_FedOnly",1,[FMCTest "Fed Tax On 1MM" (isFinalNW (MoneyValue 638725 USD))]),
              ("10kTest_NYS",1,[FMCTest "Fed+NYS Tax On 10k" (isFinalNW (MoneyValue 7875 USD))]),
              ("40kTest_NYS",1,[FMCTest "Fed+NYS Tax On 40k" (isFinalNW (MoneyValue 30188 USD))]),
@@ -162,22 +163,37 @@ taxTests = ConfigTests "Configs/Tests/TaxTestConfigurations.xml"
              ("TaxTrade",1,[FMCTest "Tax Trade" (andTests [isFinalNW (MoneyValue 89149 USD),
                                                           isFinalAcctValue "Citibank" (MoneyValue 86436 USD),
                                                           isFinalAcctValue "Sweep" (MoneyValue 2713 USD)])]),
-             ("CapitalGainFedOnly",1,[FMCTest "Untaxed Capital Gain (Fed Only)"
-                                      (andTests [isFinalNW (MoneyValue 250000 USD),
+             ("CapitalGainFedOnly_25k",1,[FMCTest "25k Capital Gain (Fed Only)"
+                                          (andTests [isFinalNW (MoneyValue 250000 USD),
+                                                     isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
+                                                     isFinalAcctValue "Bank" (MoneyValue 150000 USD),
+                                                     isFinalAcctValue "Sweep" (MoneyValue 50000 USD)])]),
+             ("CapitalGainFedOnly_200k",1,[FMCTest "200k Capital Gain (Fed Only)"
+                                           (andTests [isFinalNW (MoneyValue 341960 USD),
+                                                      isFinalAcctValue "Vanguard" (MoneyValue 0 USD),
+                                                      isFinalAcctValue "Bank" (MoneyValue 300000 USD),
+                                                      isFinalAcctValue "Sweep" (MoneyValue 41960 USD)])]),
+             ("CapitalGainFed+NYS",1,[FMCTest "25k Capital Gain Fed+NYS"
+                                      (andTests [isFinalNW (MoneyValue 248939.25 USD),
                                                  isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
                                                  isFinalAcctValue "Bank" (MoneyValue 150000 USD),
-                                                 isFinalAcctValue "Sweep" (MoneyValue 50000 USD)])]),
-             ("CapitalGainFed+NYS",1,[FMCTest "Capital Gain Fed+NYS"
-                                      (andTests [isFinalNW (MoneyValue 247750 USD),
-                                                 isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
-                                                 isFinalAcctValue "Bank" (MoneyValue 150000 USD),
-                                                 isFinalAcctValue "Sweep" (MoneyValue 47750 USD)])]),
+                                                 isFinalAcctValue "Sweep" (MoneyValue 48939.25 USD)])]),
+             ("CapitalGainAndIncomeFedOnly1",1,[FMCTest "25k Capital Gain + 1MM income Fed Only"
+                                               (andTests [isFinalNW (MoneyValue 883725 USD),
+                                                          isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
+                                                          isFinalAcctValue "Bank" (MoneyValue 150000 USD),
+                                                          isFinalAcctValue "Sweep" (MoneyValue 683725 USD)])]),
+             ("CapitalGainAndIncomeFedOnly2",1,[FMCTest "25k Capital Gain + 440k income Fed Only"
+                                                (andTests [isFinalNW (MoneyValue 550565 USD),
+                                                           isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
+                                                           isFinalAcctValue "Bank" (MoneyValue 150000 USD),
+                                                           isFinalAcctValue "Sweep" (MoneyValue 350565 USD)])]),
              ("CapitalGainFed+NYS+NYC",1,[FMCTest "Capital Gain (1MM income) Fed+NYS+NYC"
-                                      (andTests [isFinalNW (MoneyValue 819350 USD),
+                                      (andTests [isFinalNW (MoneyValue 819090 USD),
                                                  isFinalAcctValue "Vanguard" (MoneyValue 50000 USD),
                                                  isFinalAcctValue "Bank" (MoneyValue 150000 USD),
-                                                 isFinalAcctValue "Sweep" (MoneyValue 619350 USD)])]),
-             ("CapitalGain_FundEarnings",1,[FMCTest "Capital Gain (Fund Earnings) Fed+NYS+NYC" (isFinalNW (MoneyValue 675127 USD))]),
+                                                 isFinalAcctValue "Sweep" (MoneyValue 619090 USD)])]),
+             ("CapitalGain_FundEarnings",1,[FMCTest "Capital Gain (Fund Earnings) Fed+NYS+NYC" (isFinalNW (MoneyValue 675122 USD))]),
              ("Rental",1,[FMCTest "Rental" (isFinalNW (MoneyValue 124924 USD))]),
              ("MortgageDeduction",1,[FMCTest "Mortgage Deduction"
                                      (andTests [isFinalNW (MoneyValue 277360 USD),

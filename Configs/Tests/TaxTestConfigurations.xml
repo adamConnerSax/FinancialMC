@@ -24,6 +24,11 @@
       <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
     </Configuration>
 
+    <Configuration name="440kTest_FedOnly" financial_state="Salary440k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+    
     <Configuration name="1MMTest_FedOnly" financial_state="Salary1MM"  current_date="2014" currency="USD">
       <RateSetup defaults="AllZero" model="AllZero"/>
       <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
@@ -69,17 +74,32 @@
       <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
     </Configuration>
 
-    <Configuration name="CapitalGainFedOnly" financial_state="CapitalGain"  current_date="2014" currency="USD">
+    <Configuration name="CapitalGainFedOnly_25k" financial_state="CapitalGainOnly_25k"  current_date="2014" currency="USD">
       <RateSetup defaults="AllZero" model="AllZero"/>
       <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
     </Configuration>
 
-    <Configuration name="CapitalGainFed+NYS" financial_state="CapitalGain"  current_date="2014" currency="USD">
+    <Configuration name="CapitalGainFedOnly_200k" financial_state="CapitalGainOnly_200k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="CapitalGainFed+NYS" financial_state="CapitalGainOnly_25k"  current_date="2014" currency="USD">
       <RateSetup defaults="AllZero" model="AllZero"/>
       <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="Zero: Zero"/>
     </Configuration>
 
-    <Configuration name="CapitalGainFed+NYS+NYC" financial_state="CapitalGain_1MM"  current_date="2014" currency="USD">
+    <Configuration name="CapitalGainAndIncomeFedOnly1" financial_state="Income1MM_CapitalGain25k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="CapitalGainAndIncomeFedOnly2" financial_state="Income440k_CapitalGain25k"  current_date="2014" currency="USD">
+      <RateSetup defaults="AllZero" model="AllZero"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="Zero: Zero" city="Zero: Zero"/>
+    </Configuration>
+
+    <Configuration name="CapitalGainFed+NYS+NYC" financial_state="Income1MM_CapitalGain25k"  current_date="2014" currency="USD">
       <RateSetup defaults="AllZero" model="AllZero"/>
       <TaxSetup filing_status="MarriedFilingJointly" federal="US Simple" state="New York: Simple" city="New York City: Simple"/>
     </Configuration>
