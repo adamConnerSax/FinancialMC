@@ -143,20 +143,23 @@ baseAssetEvolve ca@(BaseAsset _ CashAsset) = do
     return (interest,v)
   appendAndReturn (EvolveOutput [OnlyTaxed (TaxAmount NonPayrollIncome interest')] []) (revalueAsset ca (NewValueAndBasis v' v'))
 
+-- NB:  The return is a net return so divs/interest are part of that.  And yields are assumed to be annual, paid at beginning.
+-- Here we assume re-investment.  Should make an option.  Or a new asset type.
 baseAssetEvolve mf@(BaseAsset _ (MixedFund (MixedFundDetails fracStock stkYield bondInterest))) = do
   (flows', newA') <- do
     stockRet <- rateRequest (Return Stock)
     bondRet <- rateRequest (Return Bond)
     let ccy = assetCurrency mf
         oldV' = CV.fromMoneyValue (assetValue mf)
-        stockDivs' = oldV' |*| (fracStock*stkYield*(1+((stockRet-stkYield)/2.0)))
-        bondDivs'  = oldV' |*| ((1-fracStock)*bondInterest*(1+((bondRet-bondInterest)/2.0)))
+        -- commented adjustments were to make div/interest be mid-year
+        stockDivs' = oldV' |*| (fracStock * stkYield) -- * (1 + ((stockRet - stkYield) / 2.0)))
+        bondDivs'  = oldV' |*| ((1-fracStock) * bondInterest) -- * (1 + ((bondRet - bondInterest) / 2.0)))
     stockDivs <- CV.asERMV ccy stockDivs'
     bondDivs  <- CV.asERMV ccy bondDivs'
     let flows =  [OnlyTaxed (TaxAmount Dividend stockDivs), OnlyTaxed (TaxAmount NonPayrollIncome bondDivs)]
-        rate = fracStock*stockRet + (1.0-fracStock)*bondRet
+        rate = fracStock * stockRet + ((1.0-fracStock) * bondRet)
     newV <- assetCVMult mf (1.0 + rate)
-    newB <- CV.asERMV ccy $  CV.fromMoneyValue (assetCostBasis mf) |+| stockDivs' |+|  bondDivs'
+    newB <- CV.asERMV ccy $ CV.fromMoneyValue (assetCostBasis mf) |+| stockDivs' |+|  bondDivs'
     return (flows, revalueAsset mf (NewValueAndBasis newV newB))
   appendAndReturn (EvolveOutput flows' []) newA'
 
