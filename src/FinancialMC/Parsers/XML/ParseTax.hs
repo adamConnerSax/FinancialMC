@@ -13,8 +13,7 @@ module FinancialMC.Parsers.XML.ParseTax
 
 import           FinancialMC.Core.MoneyValue (MoneyValue)
 -- import           FinancialMC.Core.MoneyValueOps (zero)
-import           FinancialMC.Core.Tax (FilingStatus(..),TaxBrackets,buildTaxBracketsFromTops,TaxBracket(Bracket,TopBracket),makeTaxBrackets,
-                                      FedCapitalGains(..),CapGainBand(..))
+import           FinancialMC.Core.Tax (FilingStatus(..),TaxBrackets,buildTaxBracketsFromTops,TaxBracket(Bracket,TopBracket),makeTaxBrackets)
 
 import           FinancialMC.Parsers.XML.Utilities (atTag,readAttrValue,buildOpts,XmlParseInfos,runFMCX)
 import           FinancialMC.Parsers.Configuration (MapByFS,makeFSMap,FederalTaxStructure(..),StateTaxStructure(..),CityTaxStructure(..),TaxStructure(..),
@@ -98,13 +97,16 @@ parseIncomeTaxStructure = atTag "IncomeTaxStructure" >>>
     brackets <- parseSimpleBrackets -<< l
     returnA -< (fStatus,brackets)
     
-parsePayrollTaxStructure::(ArrowXml a,ArrowChoice a)=>a XmlTree TaxBrackets   
+parsePayrollTaxStructure :: (ArrowXml a,ArrowChoice a)=>a XmlTree TaxBrackets   
 parsePayrollTaxStructure = atTag "PayrollTaxStructure" >>> parseFullBrackets
 
+parseCapitalGainTaxStructure :: (ArrowXml a,ArrowChoice a)=>a XmlTree TaxBrackets
+parseCapitalGainTaxStructure = atTag "CapitalGainTaxStructure" >>> parseSimpleBrackets
 
 parseEstateTaxStructure::(ArrowXml a, ArrowChoice a)=>a XmlTree TaxBrackets   
 parseEstateTaxStructure = atTag "EstateTaxStructure" >>> parseFullBrackets
 
+{-
 --This only works this way bec FedCapitalGains is just rate bands.  If that changes...
 parseFedCapitalGains::(ArrowXml a)=>a XmlTree FedCapitalGains
 parseFedCapitalGains = atTag "CapitalGains" >>> parseRateBands
@@ -122,6 +124,7 @@ parseRateBand = atTag "Band" >>>
     top <- readAttrValue "top" -< l
     rt <- readAttrValue "rate" -< l
     returnA -< CapGainBand (top/100) (rt/100)
+-}
 
 parseMedicareSurtax::ArrowXml a=>a XmlTree (Double, MapByFS MoneyValue)
 parseMedicareSurtax = atTag "MedicareSurtax" >>>
@@ -163,7 +166,7 @@ parseFederalTaxStructure = atTag "FederalTaxStructure" >>>
     incomeTaxL <- listA parseIncomeTaxStructure -< l
     payrollTax <- parsePayrollTaxStructure -< l
     estateTax <- parseEstateTaxStructure -< l
-    capitalGains <- parseFedCapitalGains -< l
+    capitalGains <- parseCapitalGainTaxStructure -< l
     medSurtax <- parseMedicareSurtax -< l
     standardDeductionsByFS <- parseStandardDeductions -< l
     saltCapL <- listA parseSALTCap -< l

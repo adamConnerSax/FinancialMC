@@ -49,7 +49,7 @@ module FinancialMC.Parsers.Configuration
 
 
 import           FinancialMC.Core.MoneyValue (Currency,MoneyValue)
-import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..), Jurisdiction(..), StandardDeductions(..))
+import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..), Jurisdiction(..), StandardDeductions(..))
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows,ComponentTypes (..), ShowableComponents, ToJSONComponents, FromJSONComponents)
 --import           FinancialMC.Core.Rule (IsRule)
 --import           FinancialMC.Core.LifeEvent (IsLifeEvent)
@@ -270,7 +270,7 @@ data FederalTaxStructure = FederalTaxStructure
     _ftsIncome :: MapByFS TaxBrackets
   , _ftsPayroll :: TaxBrackets
   , _ftsEstate :: TaxBrackets
-  , _ftsCapGainRateBands :: FedCapitalGains
+  , _ftsCapGain :: TaxBrackets
   , _ftsMedicareSurtax :: (Double, MapByFS MoneyValue)
   , _ftsStandardDeduction :: MapByFS MoneyValue
   , _ftsSALTCap :: Maybe MoneyValue
@@ -345,7 +345,7 @@ byFilingStatus bracketMap filingStatus taxName =
 
 makeTaxRules :: TaxStructure -> FilingStatus -> String -> String -> Maybe String -> Either FMCException TaxRules
 makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateName mCityName = do
-  (FederalTaxStructure fedInc payroll estate cgrb (medSNetInvRate,medSThresh) sd sc) <- lookupTS fedByName fedName "federal"
+  (FederalTaxStructure fedInc payroll estate capGain (medSNetInvRate,medSThresh) sd sc) <- lookupTS fedByName fedName "federal"
   fedT <- byFilingStatus (unEnumKeyMap fedInc) fs fedName
   fedSD <- byFilingStatus (unEnumKeyMap sd) fs fedName
   msThresh <- noteM (FailedLookup ("Couldn't find " <> (T.pack $ show fs) <> " in Medicare Surtax MAGI thresholds.")) $ M.lookup fs (unEnumKeyMap medSThresh)
@@ -356,7 +356,7 @@ makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateNam
   cityT <- case mCityName of
     Nothing -> return zeroTaxBrackets
     Just n -> lookupTS cityByName n "city" >>= (\(CityTaxStructure bktMap)-> byFilingStatus (unEnumKeyMap bktMap) fs n)
-  return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSNetInvRate msThresh) stateT cityT standardDeductions sc
+  return $ TaxRules fedT payroll estate capGain (MedicareSurtax medSNetInvRate msThresh) stateT cityT standardDeductions sc
 
 emptyTaxStructure :: TaxStructure
 emptyTaxStructure = TaxStructure M.empty M.empty M.empty

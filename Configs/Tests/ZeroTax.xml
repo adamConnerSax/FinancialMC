@@ -12,10 +12,10 @@
       <SimpleBrackets currency="USD" top_rate="0"/>
     </IncomeTaxStructure>
 
-    <CapitalGains>
-      <RateBands topRate="0"/>
-    </CapitalGains>
-    
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="0"/>
+    </CapitalGainTaxStructure>
+
     <MedicareSurtax rate="0">
       <Threshold status="MarriedFilingJointly" amount="0 USD"/>
       <Threshold status="Single" amount="0 USD"/>

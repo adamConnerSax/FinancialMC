@@ -8,8 +8,8 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
-{-# LANGUAGE StandaloneDeriving #-}
 module FinancialMC.Core.Tax
        (
          TaxType(..)
@@ -27,8 +27,8 @@ module FinancialMC.Core.Tax
        , TaxBrackets
        , taxBrackets
        , StandardDeductions(..)
-       , FedCapitalGains(..)
-       , CapGainBand(..)
+--       , FedCapitalGains(..)
+--       , CapGainBand(..)
        , MedicareSurtax(..)
        , makeTaxBrackets
        , zeroTaxBrackets
@@ -59,11 +59,11 @@ import           FinancialMC.Core.Utilities     (AsFMCException (..),
 import           Control.Lens                   (Getter, makeClassy, makeLenses,
                                                  use, (%=), (.=), (^.))
 import qualified Data.Array                     as A
+import           Data.Foldable                  (toList)
 import           Data.List                      (foldl', sortBy)
-import Data.Foldable (toList)
-import qualified Safe
 import qualified Data.Map.Lazy                  as M
 import           Data.Ord                       (comparing)
+import qualified Safe
 
 import           Control.Monad                  (liftM2)
 import           Control.Monad.Error.Lens       (throwing)
@@ -71,9 +71,9 @@ import           Control.Monad.Except           (MonadError)
 import           Control.Monad.Reader           (MonadReader, ReaderT, ask,
                                                  lift)
 import           Control.Monad.State.Strict     (MonadState, StateT, get, put)
+import           Data.Maybe                     (fromMaybe)
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
-import Data.Maybe (fromMaybe)
 
 import           Data.Aeson                     (FromJSON (..), ToJSON (..),
                                                  genericParseJSON,
@@ -204,17 +204,19 @@ buildTaxBracketsFromTops ccy bktTops tR = makeTaxBrackets $ regBrackets++[topBra
   (bottomTop, regBrackets)=  foldr f (0,[]) bktTops
   topBracket = TopBracket (MoneyValue bottomTop ccy) tR
 
-
+{-
 data CapGainBand = CapGainBand { marginalRate :: Double, capGainRate :: Double } deriving (Generic, Show,ToJSON,FromJSON)
 
 capGainBandToCapGainBandM :: CapGainBand -> TE.CapGainBandM Double
 capGainBandToCapGainBandM (CapGainBand mr cgr) = TE.CapGainBandM mr cgr
 
 data FedCapitalGains = FedCapitalGains { topRate :: Double, bands :: [CapGainBand] } deriving (Generic, Show, ToJSON, FromJSON)
-data MedicareSurtax = MedicareSurtax { netInvRate :: Double, magiThreshold :: MoneyValue } deriving (Generic, Show, ToJSON, FromJSON)
+
 
 fedCapitalGainsToFedCapitalGainsM :: FedCapitalGains -> TE.FedCapGainsM Double
 fedCapitalGainsToFedCapitalGainsM (FedCapitalGains tr bands) = TE.FedCapGainsM tr (fmap capGainBandToCapGainBandM bands)
+-}
+data MedicareSurtax = MedicareSurtax { netInvRate :: Double, magiThreshold :: MoneyValue } deriving (Generic, Show, ToJSON, FromJSON)
 
 medicareSurtaxToMedicareSurtaxM :: ExchangeRateFunction -> Currency -> MedicareSurtax -> TE.MedicareSurtaxM Double
 medicareSurtaxToMedicareSurtaxM erf c (MedicareSurtax nir mt) = TE.MedicareSurtaxM nir (moneyValueToMoney erf c mt)
@@ -222,7 +224,7 @@ medicareSurtaxToMedicareSurtaxM erf c (MedicareSurtax nir mt) = TE.MedicareSurta
 newtype StandardDeductions = StandardDeductions { deds :: (A.Array TE.Jurisdiction MoneyValue) } deriving (Show)
 
 instance ToJSON StandardDeductions where
-  toJSON = toJSON . A.assocs . deds 
+  toJSON = toJSON . A.assocs . deds
 
 instance FromJSON StandardDeductions where
   parseJSON v =
@@ -238,7 +240,7 @@ data TaxRules = TaxRules
     _trFederal :: !TaxBrackets,
     _trPayroll :: !TaxBrackets,
     _trEstate  :: !TaxBrackets,
-    _trFCG     :: !FedCapitalGains,
+    _trFCG     :: !TaxBrackets,
     _trMedTax  :: !MedicareSurtax,
     _trState   :: !TaxBrackets,
     _trCity    :: !TaxBrackets,
@@ -264,6 +266,7 @@ inflateTaxBrackets rt (TaxBrackets tbs) = makeTaxBrackets tbs' where
 updateTaxRules :: TaxRules -> Double -> TaxRules
 updateTaxRules  (TaxRules fed payroll estate fcg medstax st city sdeds scap) taxBracketInflationRate = newRules where
   fed' = inflateTaxBrackets taxBracketInflationRate fed
+  fedCG' = inflateTaxBrackets taxBracketInflationRate fcg
   payroll' = inflateTaxBrackets taxBracketInflationRate payroll
   estate' = inflateTaxBrackets taxBracketInflationRate estate
   st' = inflateTaxBrackets taxBracketInflationRate st
@@ -274,23 +277,22 @@ updateTaxRules  (TaxRules fed payroll estate fcg medstax st city sdeds scap) tax
 
 topBracketRate :: TaxBrackets -> Double
 topBracketRate (TaxBrackets bs) =
-  let rate (Bracket _ _ r) = r
+  let rate (Bracket _ _ r)  = r
       rate (TopBracket _ r) = r
   in foldl' (\cr bkt -> max cr (rate bkt)) 0 bs
 
 -- required for tax trade rule.
 -- If we need $x and we are selling something with capital gains, we need to know how much extra to trade
 safeCapGainRate :: TaxRules -> Double
-safeCapGainRate (TaxRules _ _ _ (FedCapitalGains tr _) _ state city _ _) = tr + topBracketRate state + topBracketRate city
+safeCapGainRate (TaxRules _ _ _ fcg _ state city _ _) = topBracketRate fcg + topBracketRate state + topBracketRate city
 
 taxRulesToTaxRulesM :: ExchangeRateFunction -> Currency -> TaxRules -> TE.TaxRulesM Double
 taxRulesToTaxRulesM erf c (TaxRules fed payroll estate fcg ms state city sd scap) =
   let f = taxBracketsToTaxBracketsM erf c
-      fedCGBrackets = TE.capGainBandsToBrackets (fedCapitalGainsToFedCapitalGainsM fcg) (f fed)
       brackets = A.array (minBound,maxBound)
         [
           (TE.Federal,f fed)
-        , (TE.FedCG, fedCGBrackets)
+        , (TE.FedCG, f fcg)
         , (TE.State, f state)
         , (TE.Local, f city)
         , (TE.Payroll, f payroll)

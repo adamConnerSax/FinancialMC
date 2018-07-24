@@ -25,12 +25,12 @@
       </SimpleBrackets>
     </IncomeTaxStructure>
     
-    <CapitalGains>
-      <RateBands topRate="20">
-	<Band top="25" rate="0"/>
-	<Band top="39" rate="15"/>
-      </RateBands>
-    </CapitalGains>
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="20">
+	<BracketTop top="72500" rate="0"/>
+	<BracketTop top="450000" rate="15"/>
+      </SimpleBrackets>
+    </CapitalGainTaxStructure>
 
     <MedicareSurtax rate="3.8">
       <Threshold status="MarriedFilingJointly" amount="250000 USD"/>
@@ -75,6 +75,13 @@
       </RateBands>
     </CapitalGains>
 
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="20">
+	<BracketTop top="72500" rate="0"/>
+	<BracketTop top="450000" rate="15"/>
+      </SimpleBrackets>
+    </CapitalGainTaxStructure>
+    
     <MedicareSurtax rate="3.8">
       <Threshold status="MarriedFilingJointly" amount="250000 USD"/>
       <Threshold status="Single" amount="200000 USD"/>
@@ -118,6 +125,13 @@
       </RateBands>
     </CapitalGains>
 
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="20">
+	<BracketTop top="72500" rate="0"/>
+	<BracketTop top="450000" rate="15"/>
+      </SimpleBrackets>
+    </CapitalGainTaxStructure>
+    
     <MedicareSurtax rate="3.8">
       <Threshold status="MarriedFilingJointly" amount="250000 USD"/>
       <Threshold status="Single" amount="200000 USD"/>
@@ -129,7 +143,6 @@
     <SALTCap cap="10000 USD"/>
   </FederalTaxStructure>
 
-  
   <StateTaxStructure state="New York" name="Simple">
     <IncomeTaxStructure status="MarriedFilingJointly">
       <SimpleBrackets currency="USD" top_rate="8.82">
