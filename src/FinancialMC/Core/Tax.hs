@@ -221,7 +221,7 @@ data MedicareSurtax = MedicareSurtax { netInvRate :: Double, magiThreshold :: Mo
 medicareSurtaxToMedicareSurtaxM :: ExchangeRateFunction -> Currency -> MedicareSurtax -> TE.MedicareSurtaxM Double
 medicareSurtaxToMedicareSurtaxM erf c (MedicareSurtax nir mt) = TE.MedicareSurtaxM nir (moneyValueToMoney erf c mt)
 
-newtype StandardDeductions = StandardDeductions { deds :: (A.Array TE.Jurisdiction MoneyValue) } deriving (Show)
+newtype StandardDeductions = StandardDeductions { deds :: (A.Array TE.Jurisdiction MoneyValue) } deriving (Show, Generic)
 
 instance ToJSON StandardDeductions where
   toJSON = toJSON . A.assocs . deds
