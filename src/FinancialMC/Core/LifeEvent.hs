@@ -40,9 +40,12 @@ import qualified Data.Text                        as T
 import           GHC.Generics                     (Generic)
 
 data LifeEventOutput a fl = LifeEventOutput ![Account a] ![fl]
+instance Semigroup (LifeEventOutput a fl) where
+  (LifeEventOutput a1 f1) <> (LifeEventOutput a2 f2) = LifeEventOutput (a1<>a2) (f1<>f2)
+
 instance Monoid (LifeEventOutput a fl) where
   mempty = LifeEventOutput mempty mempty
-  mappend (LifeEventOutput a1 f1) (LifeEventOutput a2 f2) = LifeEventOutput (a1<>a2) (f1<>f2)
+  mappend = (<>)
 
 instance Bifunctor LifeEventOutput where
   first f (LifeEventOutput accts flows) = LifeEventOutput (fmap f <$> accts) flows
@@ -84,5 +87,3 @@ lifeEventName = leName . lifeEventCore
 
 lifeEventYear::IsLifeEvent e=>e->Year
 lifeEventYear = leYear . lifeEventCore
-
-

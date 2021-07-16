@@ -7,7 +7,7 @@ module FinancialMC.Parsers.Configuration
          ParseException(..)
        , ModelDescription(..)
        , ModelConfiguration(..)
-       , HasModelConfiguration(..) 
+       , HasModelConfiguration(..)
        , SimConfiguration(..)
        , HasSimConfiguration(..)
        , LoadedModels(LoadedModels)
@@ -68,7 +68,7 @@ import qualified Data.Map as M
 import           GHC.Generics (Generic)
 import qualified Data.Text as T
 import Data.Monoid ((<>))
-import qualified Data.Array as A 
+import qualified Data.Array as A
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
@@ -79,7 +79,7 @@ import qualified Control.Exception as E
 
 data ParseException = ParseException String deriving (Show)
 
-instance E.Exception ParseException  
+instance E.Exception ParseException
 
 data ModelDescription = ModelDescription { mdFinState::String,
                                            mdOutputPrefix::Maybe String,
@@ -110,16 +110,16 @@ instance ToJSON Unparsed where
   toJSON (UnparsedString s) = object ["string" .= s ]
   toJSON (UnparsedByteString bs) = object ["byteString" .= B.unpack bs ]
   toJSON (UnparsedLazyByteString lbs) = object ["lazyByteString" .= LB.unpack lbs]
-  
+
 
 instance FromJSON Unparsed where
   parseJSON (Object v) = parseF v <|> parseS v <|> parseBS v <|> parseLBS v where
     parseF v' = UnparsedFile <$> v' .: "filePath"
     parseS v' = UnparsedString <$> v' .: "string"
-    parseBS v' = UnparsedByteString . BC.pack <$> v' .: "byteString" 
+    parseBS v' = UnparsedByteString . BC.pack <$> v' .: "byteString"
     parseLBS v' = UnparsedLazyByteString . LBC.pack <$> v' .: "lazyByteString"
   parseJSON _ = fail "Non-object in parseJSON::Unparsed"
-    
+
 data SourceStructure = Parseable Unparsed Encoding | DBQuery  deriving (Generic,ToJSON,FromJSON)
 
 class AsIOString a where
@@ -156,7 +156,7 @@ data DataSource = DataSource { dsStructure::SourceStructure, dsContents::SourceC
 instance ToJSON DataSource where
   toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 2}
 instance FromJSON DataSource where
-  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2} 
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2}
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''DataSource) -}
 
@@ -172,9 +172,12 @@ instance FromJSON ConfigurationInputs where
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ConfigurationInputs) -}
 
 
+instance Semigroup ConfigurationInputs where
+  (ConfigurationInputs ds1 cm1) <> (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
+
 instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
-  (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
+  mappend = (<>)
 
 data FMCComponentConverters tagB tagA where
   FMCComponentConverters :: (ComponentTypes tagA, ComponentTypes tagB) =>
@@ -210,7 +213,7 @@ data InitialFS tag where
                                      , ifsSweep :: RuleType tag
                                      , ifsTaxTrade :: RuleType tag
                                      } -> InitialFS tag
-               
+
 deriving instance (ShowableComponents tag) => Show (InitialFS tag)
 
 data InitialFS' a fl le ru = InitialFS' (BalanceSheet a) (CashFlows fl) [le] [ru] ru ru deriving (Generic)
@@ -239,11 +242,11 @@ convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCC
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
   InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) (fRU <$> rs) (fRU sw) (fRU tax)
 
-                
+
 type IFSMap tag = M.Map String (InitialFS tag)
 
 convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA -> IFSMap tagB -> IFSMap tagA
-convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm 
+convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm
 
 getFinancialState :: IFSMap tag -> String -> Maybe (InitialFS tag)
 getFinancialState ifsm name = M.lookup name ifsm
@@ -282,7 +285,7 @@ instance ToJSON FederalTaxStructure where
   toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 4}
 instance FromJSON FederalTaxStructure where
   parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 4}
-  
+
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 4} ''FederalTaxStructure) -}
 
 data StateTaxStructure = StateTaxStructure
@@ -367,7 +370,7 @@ mergeTaxStructures (TaxStructure fedN stateN cityN) = do
   TaxStructure fedO stateO cityO <- get
   put $ TaxStructure (M.union fedN fedO) (M.union stateN stateO) (M.union cityN cityO)
 
-  
+
 data LoadedModels tag where
   LoadedModels :: (ComponentTypes tag) =>
                   { _lmFS :: IFSMap tag
@@ -379,7 +382,7 @@ Lens.makeClassy ''LoadedModels
 
 -- NB: Not GADT and therefore not constrained by (rm ~ RateModelType tag) otherwise Generic can't be derived
 -- FIXME
-data ModelConfiguration tag rm = ModelConfiguration 
+data ModelConfiguration tag rm = ModelConfiguration
                                  { _mcfgInitialFS :: InitialFS tag,
                                    _mcfgStartingRM :: rm,
                                    _mcfgRateModel :: rm,
@@ -402,8 +405,8 @@ convertComponentsModelConfiguration :: (ComponentTypes tagA
                                     -> ModelConfiguration tagA rmA
 convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (ModelConfiguration ifs srm rm tr y c) =
   ModelConfiguration (convertComponentsInitialFS ccs ifs) (rmF srm) (rmF rm) tr y c
-                                   
-  
+
+
 instance (ToJSON rm, ToJSONComponents tag) => ToJSON (ModelConfiguration tag rm) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
@@ -425,5 +428,3 @@ instance FromJSON SimConfiguration where
   parseJSON = genericParseJSON defaultOptions{fieldLabelModifier = drop 5}
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier = drop 5} ''SimConfiguration) -}
-
-

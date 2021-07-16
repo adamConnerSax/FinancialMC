@@ -294,7 +294,10 @@ doPaths :: EngineC tag
 doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds =  getNSeeds pMT paths
       g seed = do
-        MkFMCPathState (PathState cs' _) <-  execOnePathPure convertLE ps0 seed yearsPerPath
+        x <- execOnePathPure convertLE ps0 seed yearsPerPath
+        cs' <- case x of
+          MkFMCPathState (PathState cs' _) -> Right cs'
+          _ -> Left $ Other "Bad pattern match in doPaths"
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)
       eMap = seeds `deepseq` if singleThreaded then g <$> seeds
