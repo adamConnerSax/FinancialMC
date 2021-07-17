@@ -9,7 +9,7 @@
       </Account>
       <Account name="Vanguard" currency="USD" type="Brokerage">
 	<MixedFund name="Amalgam" pct_stock="50" stk_div_yield="1.8" bond_int="1.8" balance="100000 USD" paid="50000 USD"/>
-      </Account> 
+      </Account>
       <Account name="A Retirement" type="A401k" currency="USD">
 	<MixedFund name="Amalgam" pct_stock="75" balance="75000 USD" paid="50000 USD"/>
       </Account>
@@ -55,7 +55,7 @@
       <Expense name="Entertainment/Restaurants" amount="200 USD" frequency="Monthly" when="Always"/>
       <Expense name="Utilities" amount="500 USD" frequency="Monthly" when="Always"/>
       <Expense name="Travel" amount="2000 USD" frequency="Annually" when="Always"/>
-    </Flows> 
+    </Flows>
     <SweepAccount>Citibank_Sweep</SweepAccount>
     <TaxTradeAccount>Citibank_Sweep</TaxTradeAccount>
     <Rules>
@@ -87,7 +87,7 @@
       </Account>
       <Account name="Vanguard" currency="USD" type="Brokerage">
 	<MixedFund name="Amalgam" pct_stock="75" stk_div_yield="1.8" bond_int="1.8" balance="100000 USD" paid="50000 USD"/>
-      </Account> 
+      </Account>
       <Account name="A Retirement" type="A401k" currency="USD">
 	<MixedFund name="Amalgam" pct_stock="75" balance="75000 USD" paid="50000 USD"/>
       </Account>
@@ -138,7 +138,7 @@
       <Expense name="Entertainment/Restaurants" amount="200 USD" frequency="Monthly" when="Always"/>
       <Expense name="Utilities" amount="500 USD" frequency="Monthly" when="Always"/>
       <Expense name="Travel" amount="2000 USD" frequency="Annually" when="Always"/>
-    </Flows> 
+    </Flows>
     <SweepAccount>Citibank_Sweep</SweepAccount>
     <TaxTradeAccount>Citibank_Sweep</TaxTradeAccount>
     <Rules>
