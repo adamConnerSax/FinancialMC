@@ -195,7 +195,7 @@
       </SimpleBrackets>
     </IncomeTaxStructure>
     <StandardDeduction>
-      <SD status="MarriedFilingJointly" deduction="115400 USD"/>
+      <SD status="MarriedFilingJointly" deduction="15400 USD"/>
     </StandardDeduction>
   </StateTaxStructure>
 
@@ -208,4 +208,15 @@
       </SimpleBrackets>
     </IncomeTaxStructure>
   </CityTaxStructure>
+
+   <StateTaxStructure state="Massachusetts" name="2021">
+    <IncomeTaxStructure status="MarriedFilingJointly">
+      <SimpleBrackets currency="USD" top_rate="5">
+        <BracketTop top="100" rate="5"/>
+      </SimpleBrackets>
+    </IncomeTaxStructure>
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
+  </StateTaxStructure>
 </TaxStructures>

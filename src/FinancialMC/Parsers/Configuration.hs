@@ -332,19 +332,24 @@ instance FromJSON TaxStructure where
 
 lookupTS :: M.Map String a -> String -> String -> Either FMCException a
 lookupTS taxMap key taxLevelString =
-  noteM (FailedLookup ("Couldn't find "
-                       <> (T.pack $ show key)
-                       <> " in loaded "
-                       <> (T.pack taxLevelString)
-                       <> " tax structures.")) $ M.lookup key taxMap
+  let err = FailedLookup
+            $ "Couldn't find "
+            <> (T.pack $ show key)
+            <> " in loaded "
+            <> (T.pack taxLevelString)
+            <> " tax structures."
+            <> " Loaded: "
+            <> T.pack (show $ M.keys taxMap)
+  in noteM err $ M.lookup key taxMap
 
 byFilingStatus :: M.Map FilingStatus a -> FilingStatus -> String -> Either FMCException a
 byFilingStatus bracketMap filingStatus taxName =
-  noteM (FailedLookup ("Couldn't find "
-                       <> (T.pack $ show filingStatus)
-                       <> " in loaded "
-                       <> (T.pack taxName)
-                       <> " tax structures.")) $ M.lookup filingStatus bracketMap
+  let err = FailedLookup ("Couldn't find "
+                          <> (T.pack $ show filingStatus)
+                          <> " in loaded "
+                          <> (T.pack taxName)
+                          <> " tax structures.")
+  in noteM err $ M.lookup filingStatus bracketMap
 
 makeTaxRules :: TaxStructure -> FilingStatus -> String -> String -> Maybe String -> Either FMCException TaxRules
 makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateName mCityName = do

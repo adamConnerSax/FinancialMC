@@ -22,6 +22,11 @@
       <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="New York: 2021" city="New York City: 2021"/>
     </Configuration>
 
+    <Configuration name="Conservative_MA" financial_state="Scenario 1" output_prefix="S1_Conservative" current_date="2021" currency="USD">
+      <RateSetup defaults="Begin Simple" model="Evolve Moderate"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="Massachusetts: 2021"/>
+    </Configuration>
+
     <Configuration name="Optimistic"
 		   financial_state="Scenario 1" output_prefix="S1_Optimistic" current_date="2021" currency="USD">
       <RateSetup defaults="Begin Detailed" model="Evolve Optimistic"/>
