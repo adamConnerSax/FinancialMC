@@ -1,14 +1,17 @@
 <FinancialStates>
   <PersonalFinances name="Scenario 1">
     <BalanceSheet>
-      <Account name="Citibank_Sweep" currency="USD" type="Bank">
+      <Account name="Bank Checking" currency="USD" type="Bank">
 	<Cash name="Checking" balance="10000 USD"/>
       </Account>
-      <Account name="Citibank" currency="USD" type="Bank">
+      <Account name="Bank Savings" currency="USD" type="Bank">
 	<Cash name="Savings" balance="20000 USD"/>
       </Account>
-      <Account name="Vanguard" currency="USD" type="Brokerage">
+      <Account name="Taxable Investment" currency="USD" type="Brokerage">
 	<MixedFund name="Amalgam" pct_stock="50" stk_div_yield="1.8" bond_int="1.8" balance="100000 USD" paid="50000 USD"/>
+      </Account>
+      <Account name="RealEstate" currency="USD" type="PrimaryHome">
+	<ResidentialRealEstate name="Home" value="500000 USD" paid="400000 USD"/>
       </Account>
       <Account name="A Retirement" type="A401k" currency="USD">
 	<MixedFund name="Amalgam" pct_stock="75" balance="75000 USD" paid="50000 USD"/>
@@ -24,14 +27,14 @@
       </Account>
     </BalanceSheet>
     <Flows>
-      <Salary name="A Salary" amount="8000 USD" when="Ending 2051"/>
-      <Salary name="A SocSec" amount="2500 USD" when="Starting 2051"/>
-      <Salary name="B Salary" amount="10000 USD" when="Ending 2051"/>
-      <Salary name="B SocSec" amount="2500 USD" when="Starting 2051"/>
+      <Salary name="A Salary" amount="8000 USD" frequency="Monthly" when="Ending 2051"/>
+      <Salary name="A SocSec" amount="2500 USD" frequency="Monthly" when="Starting 2051"/>
+      <Salary name="B Salary" amount="10000 USD" frequency="Monthly" when="Ending 2051"/>
+      <Salary name="B SocSec" amount="2500 USD" frequency="Monthly" when="Starting 2051"/>
       <DeductibleExpense name="Property Taxes" amount="5000 USD" frequency="Annually" when="Always"/>
       <HealthCareExpense name="Insurance (ACA)" amount="8000 USD" deductible="False" frequency="Annually" when="Always"/>
-      <CollegeBill name="K1 College" amount="45000 USD" amount_to="K1529" when="Between 2030 2033"/>
-      <CollegeBill name="K2 College" amount="45000 USD" amount_to="K2529" when="Between 2032 2035"/>
+      <CollegeBill name="K1 College" amount="50000 USD" amount_to="K1 College amt" when="Between 2030 2033"/>
+      <CollegeBill name="K2 College" amount="50000 USD" amount_to="K2 College amt" when="Between 2032 2035"/>
       <Expense name="Rent" amount="2000 USD" frequency="Monthly" when="Always"/>
       <Expense name="Childcare (preschool)" amount="20000 USD" frequency="Annually" when="Ending 2020"/>
       <Expense name="Childcare (after-school)" amount="5000 USD" frequency="Annually" when="Between 2021 2028"/>
@@ -56,22 +59,22 @@
       <Expense name="Utilities" amount="500 USD" frequency="Monthly" when="Always"/>
       <Expense name="Travel" amount="2000 USD" frequency="Annually" when="Always"/>
     </Flows>
-    <SweepAccount>Citibank_Sweep</SweepAccount>
-    <TaxTradeAccount>Citibank_Sweep</TaxTradeAccount>
+    <SweepAccount>Bank Checking</SweepAccount>
+    <TaxTradeAccount>Bank Checking</TaxTradeAccount>
     <Rules>
-      <CashToInvestmentSweep cash_account="Citibank_Sweep" inv_account="Vanguard" min_cash="10000 USD" max_cash="30000 USD"/>
+      <CashToInvestmentSweep cash_account="Bank Checking" inv_account="Taxable Investment" min_cash="10000 USD" max_cash="30000 USD"/>
       <SellAsNeeded>
-	<SellFrom account="Vanguard" allowed="Always"/>
-	<SellFrom account="Citibank" allowed="Always"/>
+	<SellFrom account="Taxable Investment" allowed="Always"/>
+	<SellFrom account="Bank Savings" allowed="Always"/>
 	<SellFrom account="K1 529" allowed="Never"/>
 	<SellFrom account="A Retirement" allowed="Starting 2043"/>
       </SellAsNeeded>
-      <Transfer name="fund K1 529" from="Citibank_Sweep" to="K1 529" amount="2000 USD" when="Ending 2030"/>
-      <PayFrom account="K1 529" amount_from="K1529"/>
-      <Transfer name="fund K2 529" from="Citibank_Sweep" to="K2 529" amount="2000 USD" when="Between 2015 2033"/>
-      <PayFrom account="K2 529" amount_from="K2529"/>
-      <Transfer name="fund A 401k" from="Vanguard" to="A Retirement" amount="3000 USD" when="Ending 2051"/>
-      <Transfer name="fund B 401k" from="Vanguard" to="B Retirement" amount="3000 USD" when="Ending 2051"/>
+      <Transfer name="fund K1 529" from="Bank Checking" to="K1 529" amount="2000 USD" when="Ending 2030"/>
+      <PayFrom account="K1 529" amount_from="K1 College amt"/>
+      <Transfer name="fund K2 529" from="Bank Checking" to="K2 529" amount="2000 USD" when="Between 2015 2033"/>
+      <PayFrom account="K2 529" amount_from="K2 College amt"/>
+      <Transfer name="fund A 401k" from="Taxable Investment" to="A Retirement" amount="3000 USD" when="Ending 2051"/>
+      <Transfer name="fund B 401k" from="Taxable Investment" to="B Retirement" amount="3000 USD" when="Ending 2051"/>
       <RequiredDistribution name="From A 401k" account="A Retirement" year_turning_70="2056"/>
       <RequiredDistribution name="From B 401k" account="B Retirement" year_turning_70="2056"/>
     </Rules>
