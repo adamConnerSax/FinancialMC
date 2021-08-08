@@ -1,13 +1,13 @@
 <FinancialMC_Configuration>
   <DataSources>
     <TaxData>
-      <XML>/Users/Adam/Development/haskell/FinMC/FinancialMC/Configs/demos/DemoTax.xml</XML>
+      <XML>FinancialMC/Configs/demos/DemoTax.xml</XML>
     </TaxData>
     <RateModels>
-      <XML>/Users/Adam/Development/haskell/FinMC/FinancialMC/Configs/demos/DemoWorld.xml</XML>
+      <XML>FinancialMC/Configs/demos/DemoWorld.xml</XML>
     </RateModels>
     <FinancialStates>
-      <XML>/Users/Adam/Development/haskell/FinMC/FinancialMC/Configs/demos/DemoFS.xml</XML>
+      <XML>FinancialMC/Configs/demos/DemoFS.xml</XML>
     </FinancialStates>
   </DataSources>
 
