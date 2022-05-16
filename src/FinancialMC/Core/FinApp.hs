@@ -20,8 +20,8 @@ module FinancialMC.Core.FinApp
        , PathState (..)
        , HasPathState(..)
        , pattern PathState
-       , stepState
-       , stepEnv
+--       , stepState
+--       , stepEnv
        , zoomPathState
        , ReadOnly (..)
        , Loggable (log)

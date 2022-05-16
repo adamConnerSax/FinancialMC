@@ -1,47 +1,49 @@
 <FinancialMC_Configuration>
   <DataSources>
     <TaxData>
-      <XML>/Users/Adam/Documents/Planning/FMC/APTax.xml</XML>
-      <!--<XML>/Users/Adam/Development/haskell/FinancialMC/Configs/Tax.xml</XML>-->
+      <XML>FinancialMC/Configs/demos/DemoTax.xml</XML>
     </TaxData>
     <RateModels>
-      <XML>/Users/Adam/Documents/Planning/FMC/APRM.xml</XML>
-      <!--<XML>/Users/Adam/Development/haskell/FinancialMC/Configs/RateModels.xml</XML>-->
+      <XML>FinancialMC/Configs/demos/DemoWorld.xml</XML>
     </RateModels>
     <FinancialStates>
-      <XML>/Users/Adam/Documents/Planning/FMC/APFS.xml</XML>
+      <XML>FinancialMC/Configs/demos/DemoFS.xml</XML>
     </FinancialStates>
   </DataSources>
 
-  <Configurations>  
-    <Configuration name="AllZero" financial_state="AP" output_prefix="AP_All0" current_date="2015" currency="USD">
+  <Configurations>
+    <Configuration name="AllZero" financial_state="Scenario 1" output_prefix="Scenario1_AllZero" current_date="2021" currency="USD">
       <RateSetup defaults="Base" model="Base"/>
-      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
-    </Configuration> 
-   
-    <Configuration name="Conservative" 
-		   financial_state="AP" output_prefix="AP_Conservative" current_date="2015" currency="USD">
-      <RateSetup defaults="Base" model="Moderate"/>
-      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
-    </Configuration> 
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="New York: 2021" city="New York City: 2021"/>
+    </Configuration>
 
-    <Configuration name="Optimistic" 
-		   financial_state="AP" output_prefix="AP_Optimistic" current_date="2015" currency="USD">
-      <RateSetup defaults="Base" model="Optimistic"/>
-      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
-    </Configuration> 
+    <Configuration name="Conservative" financial_state="Scenario 1" output_prefix="S1_Conservative" current_date="2021" currency="USD">
+      <RateSetup defaults="Begin Simple" model="Evolve Moderate"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="New York: 2021" city="New York City: 2021"/>
+    </Configuration>
 
-    <Configuration name="Yikes!" 
-		   financial_state="AP" output_prefix="AP_Yikes" current_date="2015" currency="USD">
-      <RateSetup defaults="Base" model="Yikes!"/>
-      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
-    </Configuration> 
+    <Configuration name="Conservative_MA" financial_state="Scenario 1" output_prefix="S1_Conservative" current_date="2021" currency="USD">
+      <RateSetup defaults="Begin Simple" model="Evolve Moderate"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="Massachusetts: 2021"/>
+    </Configuration>
 
-    <Configuration name="Apocalypse" 
-		   financial_state="AP" output_prefix="AP_Apocalypse" current_date="2015" currency="USD">
-      <RateSetup defaults="Base" model="Apocalypse"/>
-      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2015" state="New York: 2015" city="New York City: 2015"/>
-    </Configuration> 
+    <Configuration name="Optimistic"
+		   financial_state="Scenario 1" output_prefix="S1_Optimistic" current_date="2021" currency="USD">
+      <RateSetup defaults="Begin Detailed" model="Evolve Optimistic"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="New York: 2021" city="New York City: 2021"/>
+    </Configuration>
+
+    <Configuration name="Yikes!"
+		   financial_state="Scenario 1" output_prefix="S1_Yikes" current_date="2021" currency="USD">
+      <RateSetup defaults="Begin Detailed" model="Evolve Yikes!"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="New York: 2021" city="New York City: 2021"/>
+    </Configuration>
+
+    <Configuration name="Apocalypse"
+		   financial_state="Scenario 1" output_prefix="S1_Apocalypse" current_date="2021" currency="USD">
+      <RateSetup defaults="Begin Detailed" model="Evolve Apocalypse"/>
+      <TaxSetup filing_status="MarriedFilingJointly" federal="US 2021" state="New York: 2021" city="New York City: 2021"/>
+    </Configuration>
 
   </Configurations>
 </FinancialMC_Configuration>

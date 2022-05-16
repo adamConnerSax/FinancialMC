@@ -8,10 +8,12 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE StandaloneDeriving    #-}
 {-# LANGUAGE TemplateHaskell       #-}
 module FinancialMC.Core.Tax
        (
          TaxType(..)
+       , TE.Jurisdiction(..)
        , TaxData
        , HasTaxData (..)
        , ReadsTaxData (..)
@@ -24,8 +26,9 @@ module FinancialMC.Core.Tax
        , TaxBracket(..)
        , TaxBrackets
        , taxBrackets
-       , FedCapitalGains(..)
-       , CapGainBand(..)
+       , StandardDeductions(..)
+--       , FedCapitalGains(..)
+--       , CapGainBand(..)
        , MedicareSurtax(..)
        , makeTaxBrackets
        , zeroTaxBrackets
@@ -33,9 +36,10 @@ module FinancialMC.Core.Tax
        , FilingStatus(..)
        , TaxRules(TaxRules)
        , HasTaxRules(..)
-       , safeCapGainRateCV
+--       , safeCapGainRateCV
+       , safeCapGainRate
        , updateTaxRules
-       , fullTaxCV
+--       , fullTaxCV
        ) where
 
 
@@ -55,9 +59,11 @@ import           FinancialMC.Core.Utilities     (AsFMCException (..),
 import           Control.Lens                   (Getter, makeClassy, makeLenses,
                                                  use, (%=), (.=), (^.))
 import qualified Data.Array                     as A
+import           Data.Foldable                  (toList)
 import           Data.List                      (foldl', sortBy)
 import qualified Data.Map.Lazy                  as M
 import           Data.Ord                       (comparing)
+import qualified Safe
 
 import           Control.Monad                  (liftM2)
 import           Control.Monad.Error.Lens       (throwing)
@@ -65,6 +71,7 @@ import           Control.Monad.Except           (MonadError)
 import           Control.Monad.Reader           (MonadReader, ReaderT, ask,
                                                  lift)
 import           Control.Monad.State.Strict     (MonadState, StateT, get, put)
+import           Data.Maybe                     (fromMaybe)
 import           Data.Monoid                    ((<>))
 import qualified Data.Text                      as T
 
@@ -197,29 +204,50 @@ buildTaxBracketsFromTops ccy bktTops tR = makeTaxBrackets $ regBrackets++[topBra
   (bottomTop, regBrackets)=  foldr f (0,[]) bktTops
   topBracket = TopBracket (MoneyValue bottomTop ccy) tR
 
-
+{-
 data CapGainBand = CapGainBand { marginalRate :: Double, capGainRate :: Double } deriving (Generic, Show,ToJSON,FromJSON)
 
 capGainBandToCapGainBandM :: CapGainBand -> TE.CapGainBandM Double
 capGainBandToCapGainBandM (CapGainBand mr cgr) = TE.CapGainBandM mr cgr
 
 data FedCapitalGains = FedCapitalGains { topRate :: Double, bands :: [CapGainBand] } deriving (Generic, Show, ToJSON, FromJSON)
-data MedicareSurtax = MedicareSurtax { payrollRate :: Double, netInvRate :: Double, magiThreshold :: MoneyValue } deriving (Generic, Show, ToJSON, FromJSON)
 
-fedCapitalGainsToFedCapitalGainsM :: FedCapitalGains -> TE.FedCapitalGainsM Double
-fedCapitalGainsToFedCapitalGainsM (FedCapitalGains tr bands) = TE.FedCapitalGainsM tr (fmap capGainBandToCapGainBandM bands)
+
+fedCapitalGainsToFedCapitalGainsM :: FedCapitalGains -> TE.FedCapGainsM Double
+fedCapitalGainsToFedCapitalGainsM (FedCapitalGains tr bands) = TE.FedCapGainsM tr (fmap capGainBandToCapGainBandM bands)
+-}
+data MedicareSurtax = MedicareSurtax { netInvRate :: Double, magiThreshold :: MoneyValue } deriving (Generic, Show, ToJSON, FromJSON)
 
 medicareSurtaxToMedicareSurtaxM :: ExchangeRateFunction -> Currency -> MedicareSurtax -> TE.MedicareSurtaxM Double
-medicareSurtaxToMedicareSurtaxM erf c (MedicareSurtax pr nir mt) = TE.MedicareSurtaxM pr nir (moneyValueToMoney erf c mt)
+medicareSurtaxToMedicareSurtaxM erf c (MedicareSurtax nir mt) = TE.MedicareSurtaxM nir (moneyValueToMoney erf c mt)
 
-data TaxRules = TaxRules {_trFederal      :: !TaxBrackets,
-                          _trPayroll      :: !TaxBrackets,
-                          _trEstate       :: !TaxBrackets,
-                          _trFCG          :: !FedCapitalGains,
-                          _trMedTax       :: !MedicareSurtax,
-                          _trState        :: !TaxBrackets,
-                          _trStateCapGain :: !Double,
-                          _trCity         :: !TaxBrackets } deriving (Show, Generic)
+newtype StandardDeductions = StandardDeductions { deds :: (A.Array TE.Jurisdiction MoneyValue) } deriving (Show, Generic)
+
+instance ToJSON StandardDeductions where
+  toJSON = toJSON . A.assocs . deds
+
+instance FromJSON StandardDeductions where
+  parseJSON v =
+    let f pairList = do
+          (minIndex, _) <- Safe.headMay pairList
+          (maxIndex, _) <- Safe.lastMay pairList
+          return $ A.array (minIndex, maxIndex) pairList
+    in StandardDeductions . (fromMaybe (A.listArray (minBound, maxBound) (repeat $ MV.zero USD))) . f <$> parseJSON v
+
+
+data TaxRules = TaxRules
+  {
+    _trFederal :: !TaxBrackets,
+    _trPayroll :: !TaxBrackets,
+    _trEstate  :: !TaxBrackets,
+    _trFCG     :: !TaxBrackets,
+    _trMedTax  :: !MedicareSurtax,
+    _trState   :: !TaxBrackets,
+    _trCity    :: !TaxBrackets,
+    _trSDeds   :: !StandardDeductions,
+    _trSALTCap :: Maybe MoneyValue
+  } deriving (Show, Generic)
+
 makeClassy ''TaxRules
 
 instance ToJSON TaxRules where
@@ -236,30 +264,43 @@ inflateTaxBrackets rt (TaxBrackets tbs) = makeTaxBrackets tbs' where
   tbs' = map inflateBracket tbs
 
 updateTaxRules :: TaxRules -> Double -> TaxRules
-updateTaxRules  (TaxRules fed payroll estate fcg medstax st sCG city) taxBracketInflationRate = newRules where
+updateTaxRules  (TaxRules fed payroll estate fcg medstax st city sdeds scap) taxBracketInflationRate = newRules where
   fed' = inflateTaxBrackets taxBracketInflationRate fed
+  fedCG' = inflateTaxBrackets taxBracketInflationRate fcg
   payroll' = inflateTaxBrackets taxBracketInflationRate payroll
   estate' = inflateTaxBrackets taxBracketInflationRate estate
   st' = inflateTaxBrackets taxBracketInflationRate st
   city' = inflateTaxBrackets taxBracketInflationRate city
-  newRules = TaxRules fed' payroll' estate' fcg medstax st' sCG city'
+  sdeds' = StandardDeductions (flip MV.multiply (1.0 + taxBracketInflationRate) <$> deds sdeds)
+  scap' = flip MV.multiply (1.0 + taxBracketInflationRate) <$> scap
+  newRules = TaxRules fed' payroll' estate' fcg medstax st' city' sdeds' scap'
 
+topBracketRate :: TaxBrackets -> Double
+topBracketRate (TaxBrackets bs) =
+  let rate (Bracket _ _ r)  = r
+      rate (TopBracket _ r) = r
+  in foldl' (\cr bkt -> max cr (rate bkt)) 0 bs
 
--- The rest is deprecated and has been replaced with TaxEDSL based computation
+-- required for tax trade rule.
+-- If we need $x and we are selling something with capital gains, we need to know how much extra to trade
+safeCapGainRate :: TaxRules -> Double
+safeCapGainRate (TaxRules _ _ _ fcg _ state city _ _) = topBracketRate fcg + topBracketRate state + topBracketRate city
+
 taxRulesToTaxRulesM :: ExchangeRateFunction -> Currency -> TaxRules -> TE.TaxRulesM Double
-taxRulesToTaxRulesM erf c (TaxRules fed payroll estate fcg ms state scg city) =
+taxRulesToTaxRulesM erf c (TaxRules fed payroll estate fcg ms state city sd scap) =
   let f = taxBracketsToTaxBracketsM erf c
       brackets = A.array (minBound,maxBound)
         [
           (TE.Federal,f fed)
+        , (TE.FedCG, f fcg)
         , (TE.State, f state)
         , (TE.Local, f city)
         , (TE.Payroll, f payroll)
         , (TE.Estate, f estate)
         ]
-      fcg' = fedCapitalGainsToFedCapitalGainsM fcg
+      sd' = moneyValueToMoney erf c <$> deds sd
       ms' = medicareSurtaxToMedicareSurtaxM erf c ms
-  in TE.TaxRulesM brackets fcg' ms' scg
+  in TE.TaxRulesM brackets sd' (moneyValueToMoney erf c <$> scap) ms'
 
 
 fullTaxEDSL :: (MonadError FMCException m
@@ -272,130 +313,7 @@ fullTaxEDSL tr (TaxData ta ccy) = do
   e <- use getExchangeRateFunction
   let trm = taxRulesToTaxRulesM e ccy tr
       tfs = mvArrayToMoneyArray e ccy ta
-      (Money tax, rate) = TE.runTaxMonad (TE.taxReaderProgram $ basePolicy True) (TE.TaxEnv trm tfs)
+      (Money tax, rate) = TE.runTaxMonad (TE.taxReaderProgram basePolicy) (TE.TaxEnv trm tfs)
       taxMV = MoneyValue tax ccy
   return (taxMV, rate)
-
-safeCapGainRateCV :: TaxRules -> CV.SVD
-safeCapGainRateCV tr = (CV.toSVD (tr ^. trStateCapGain)) |+| maxFedCapGainCV
-
-fedCapitalGainRateCV :: CV.SVD -> CV.SVD
-fedCapitalGainRateCV margRate'  = CV.cvCase [(margRate' |<| CV.toSVD 0.25, CV.toSVD 0),
-                                             (margRate' |<| CV.toSVD 0.39, CV.toSVD 0.15)]
-                                  (CV.toSVD 0.2)
-
-fedCapitalGainRateCV' :: FedCapitalGains -> CV.SVD -> CV.SVD
-fedCapitalGainRateCV' (FedCapitalGains tRate rateBands) margRate' =
-  let cases = (\(CapGainBand mr cgr)->(margRate' |<| CV.toSVD mr, CV.toSVD cgr)) <$> rateBands
-  in CV.cvCase cases (CV.toSVD tRate)
-
-maxFedCapGainCV :: CV.SVD
-maxFedCapGainCV = fedCapitalGainRateCV (CV.toSVD 1)
-
-fullTaxCV :: (MonadError FMCException m, MonadState s m, ReadsExchangeRateFunction s) => TaxRules -> TaxData -> m (MoneyValue,Double)
-fullTaxCV (TaxRules federal payroll estate fcg medstax st sCG city) (TaxData ta ccy) = do
-  e <- use getExchangeRateFunction
-  let cTax = computeIncomeTaxCV'' ccy e
-      net' (TaxDetails inFlow deds) = CV.fromMoneyValue inFlow |-| CV.fromMoneyValue deds
-      gross (TaxDetails inFlow _) = inFlow
-      --details tt = noteM (FailedLookup ("Failed to find " <> (T.pack $ show tt) <> " in TaxMap!")) (M.lookup tt tm)
-
-      ordinaryD = ta A.! OrdinaryIncome
-      nonPayrollD = ta A.!  NonPayrollIncome
-      capGainD = ta A.! CapitalGain
-      divD = ta A.! Dividend
-      inheritanceD = ta A.! Inheritance
-
-  let grossPayrollIncome' = CV.fromMoneyValue $ gross ordinaryD
-      payrollTax' = cTax payroll grossPayrollIncome'
-      netIncome'  = net' ordinaryD |+| net' nonPayrollD
-      netCapGain' =  net' capGainD |+| net' divD -- NB: right now tax policy on divs and cap gains is close enough
-      stateIncTax' = cTax st netIncome'
-      stateCapGainTax' = (CV.toSVD sCG) |*| netCapGain'
-      stateTax' = stateIncTax' |+| stateCapGainTax'
-      cityTax' = cTax city netIncome'
-      adjIncome' =  netIncome' |-| stateTax' |-| cityTax'
-      fedIncTax' = cTax federal adjIncome'
-      fedMarginalRate' = marginalRateCV adjIncome' federal
-      fedCgr = fedCapitalGainRateCV' fcg fedMarginalRate'
-      fedCapGainTax' = netCapGain' |*| fedCgr
-      federalTax' = fedIncTax' |+| fedCapGainTax'
-      netInherited' = net' inheritanceD
-      inheritanceTax' = cTax estate netInherited'
-      grossNonPayrollD' = CV.fromMoneyValue $ gross nonPayrollD
-      sum' = foldl (|+|) (CV.mvZero ccy)
-      totalNITax' = sum' [stateTax',cityTax',payrollTax',federalTax']
-      total' = sum' [totalNITax',inheritanceTax']
-      totalNITaxable' = sum' [grossPayrollIncome',grossNonPayrollD',netCapGain']
-      rate' = CV.cvIf (totalNITaxable' |>| (CV.mvZero ccy)) (totalNITax' |/| totalNITaxable') (CV.toSVD 0)
-      rateER = CV.asERFReader rate'
-      totalER = CV.asERMV ccy total'
-  liftM2 (,) totalER rateER
-{-# INLINE fullTaxCV #-}
-
-
--- CValued versions
-getTaxCV :: TaxBracket -> CV.CVD -> CV.CVD
-getTaxCV (Bracket b t r) taxable' =
-  let b' = CV.fromMoneyValue b
-      t' = CV.fromMoneyValue t
-  in r |*| cvMin (t' |-| b') (cvMax CV.cvZero (taxable' |-| b'))
-
-getTaxCV (TopBracket b r) taxable' =
-  let b' = CV.fromMoneyValue b
-  in r |*| cvMax CV.cvZero (taxable' |-| b')
-
-computeIncomeTaxCV :: TaxBrackets -> CV.CVD -> CV.CVD
-computeIncomeTaxCV (TaxBrackets bkts) income' = foldl f CV.cvZero bkts where
-  f taxSoFar bkt = taxSoFar |+| (getTaxCV bkt income')
-
--- Hand tuned CValued version since we call these a lot
-getTaxCV' :: Currency -> ExchangeRateFunction -> TaxBracket -> CV.CVD -> CV.CVD
-getTaxCV' ccy e (Bracket b t r) taxable'  =
-  let tax' = CV.unwrap ccy e  taxable'
-      MoneyValue b' _ = MV.convert b ccy e
-      MoneyValue t' _ = MV.convert t ccy e
-  in CV.fromMoneyValue $ MoneyValue (r * min (t' - b') (max 0 (tax' - b'))) ccy
-
-getTaxCV' ccy e (TopBracket b r) taxable' =
-  let tax' = CV.unwrap ccy e taxable'
-      MoneyValue b' _ = MV.convert b ccy e
-  in CV.toCV (r*max 0 (tax' - b')) ccy
-
-computeIncomeTaxCV' :: Currency -> ExchangeRateFunction -> TaxBrackets -> CV.CVD -> CV.CVD
-computeIncomeTaxCV' ccy e (TaxBrackets bkts) income' = foldl f (CV.mvZero ccy) bkts where
-  f taxSoFar bkt = taxSoFar |+| (getTaxCV' ccy e bkt income')
-
-
-getTaxCV'' :: Currency -> ExchangeRateFunction -> TaxBracket -> Double -> Double
-getTaxCV'' ccy e (Bracket b t r) taxable'  =
-  let MoneyValue b' _ = MV.convert b ccy e
-      MoneyValue t' _ = MV.convert t ccy e
-  in (r*min (t' - b') (max 0 (taxable' - b')))
-
-getTaxCV'' ccy e (TopBracket b r) taxable' =
-  let MoneyValue b' _ = MV.convert b ccy e
-  in (r*max 0 (taxable' - b'))
-
-computeIncomeTaxCV'' :: Currency -> ExchangeRateFunction -> TaxBrackets -> CV.CVD -> CV.CVD
-computeIncomeTaxCV'' ccy e (TaxBrackets bkts) incomeCV =
-  let income' = CV.unwrap ccy e incomeCV
-      f taxSoFar bkt = taxSoFar + (getTaxCV'' ccy e bkt income')
-      tax = foldl f 0 bkts
-  in CV.fromMoneyValue $ MoneyValue tax ccy
-
-marginalRateCV :: CV.CVD -> TaxBrackets -> CV.SVD
-marginalRateCV v' (TaxBrackets its) = foldl f (CV.toSVD 0) its where
-  f cmr (Bracket b _ r) = CV.cvIf (v' |>| CV.fromMoneyValue b) (CV.toSVD r) cmr
-  f cmr (TopBracket b r) = CV.cvIf (v' |>| CV.fromMoneyValue b) (CV.toSVD r) cmr
-
-trueMarginalRateCV :: MoneyValue -> TaxBrackets -> CV.SVD
-trueMarginalRateCV mv@(MoneyValue _ c) tb =
-  let one' = CV.toCV 1.0 c
-      base' = CV.fromMoneyValue mv
-      t1' = computeIncomeTaxCV tb base'
-      t2' = computeIncomeTaxCV tb (base' CV.|+| one')
-  in (t2' |-| t1') |/| one'
-
-
 

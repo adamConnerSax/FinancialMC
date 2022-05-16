@@ -35,9 +35,12 @@ import           Data.Monoid                      ((<>))
 import qualified Data.Text                        as T
 
 data RuleOutput = RuleOutput ![Transaction] ![AccumResult]
+instance Semigroup RuleOutput where
+  (RuleOutput x1 y1) <> (RuleOutput x2 y2) = RuleOutput (x1<>x2) (y1<>y2)
+
 instance Monoid RuleOutput where
   mempty = RuleOutput [] []
-  mappend (RuleOutput x1 y1) (RuleOutput x2 y2) = RuleOutput (x1<>x2) (y1<>y2)
+  mappend = (<>)
 
 --type RuleApp rm = ResultT RuleOutput (ReaderT FinState (ReaderT (FinEnv rm) (Either FMCException)))
 
@@ -89,5 +92,3 @@ instance ToJSON Rule where
 instance HasParsers e Rule => EnvFromJSON e Rule where
   envParseJSON = parseJSON_Existential
 -}
-
-

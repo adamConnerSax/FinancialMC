@@ -7,7 +7,7 @@ module FinancialMC.Parsers.Configuration
          ParseException(..)
        , ModelDescription(..)
        , ModelConfiguration(..)
-       , HasModelConfiguration(..) 
+       , HasModelConfiguration(..)
        , SimConfiguration(..)
        , HasSimConfiguration(..)
        , LoadedModels(LoadedModels)
@@ -49,7 +49,7 @@ module FinancialMC.Parsers.Configuration
 
 
 import           FinancialMC.Core.MoneyValue (Currency,MoneyValue)
-import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,FedCapitalGains,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..))
+import           FinancialMC.Core.Tax (FilingStatus,TaxBrackets,MedicareSurtax(..),zeroTaxBrackets,TaxRules(..), Jurisdiction(..), StandardDeductions(..))
 import           FinancialMC.Core.MCState (BalanceSheet,CashFlows,ComponentTypes (..), ShowableComponents, ToJSONComponents, FromJSONComponents)
 --import           FinancialMC.Core.Rule (IsRule)
 --import           FinancialMC.Core.LifeEvent (IsLifeEvent)
@@ -68,6 +68,7 @@ import qualified Data.Map as M
 import           GHC.Generics (Generic)
 import qualified Data.Text as T
 import Data.Monoid ((<>))
+import qualified Data.Array as A
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as LB
@@ -78,7 +79,7 @@ import qualified Control.Exception as E
 
 data ParseException = ParseException String deriving (Show)
 
-instance E.Exception ParseException  
+instance E.Exception ParseException
 
 data ModelDescription = ModelDescription { mdFinState::String,
                                            mdOutputPrefix::Maybe String,
@@ -109,16 +110,16 @@ instance ToJSON Unparsed where
   toJSON (UnparsedString s) = object ["string" .= s ]
   toJSON (UnparsedByteString bs) = object ["byteString" .= B.unpack bs ]
   toJSON (UnparsedLazyByteString lbs) = object ["lazyByteString" .= LB.unpack lbs]
-  
+
 
 instance FromJSON Unparsed where
   parseJSON (Object v) = parseF v <|> parseS v <|> parseBS v <|> parseLBS v where
     parseF v' = UnparsedFile <$> v' .: "filePath"
     parseS v' = UnparsedString <$> v' .: "string"
-    parseBS v' = UnparsedByteString . BC.pack <$> v' .: "byteString" 
+    parseBS v' = UnparsedByteString . BC.pack <$> v' .: "byteString"
     parseLBS v' = UnparsedLazyByteString . LBC.pack <$> v' .: "lazyByteString"
   parseJSON _ = fail "Non-object in parseJSON::Unparsed"
-    
+
 data SourceStructure = Parseable Unparsed Encoding | DBQuery  deriving (Generic,ToJSON,FromJSON)
 
 class AsIOString a where
@@ -155,7 +156,7 @@ data DataSource = DataSource { dsStructure::SourceStructure, dsContents::SourceC
 instance ToJSON DataSource where
   toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 2}
 instance FromJSON DataSource where
-  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2} 
+  parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 2}
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''DataSource) -}
 
@@ -171,9 +172,12 @@ instance FromJSON ConfigurationInputs where
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 2} ''ConfigurationInputs) -}
 
 
+instance Semigroup ConfigurationInputs where
+  (ConfigurationInputs ds1 cm1) <> (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
+
 instance Monoid ConfigurationInputs where
   mempty = ConfigurationInputs [] M.empty
-  (ConfigurationInputs ds1 cm1) `mappend` (ConfigurationInputs ds2 cm2) = ConfigurationInputs (ds1 ++ ds2) (M.union cm1 cm2)
+  mappend = (<>)
 
 data FMCComponentConverters tagB tagA where
   FMCComponentConverters :: (ComponentTypes tagA, ComponentTypes tagB) =>
@@ -209,7 +213,7 @@ data InitialFS tag where
                                      , ifsSweep :: RuleType tag
                                      , ifsTaxTrade :: RuleType tag
                                      } -> InitialFS tag
-               
+
 deriving instance (ShowableComponents tag) => Show (InitialFS tag)
 
 data InitialFS' a fl le ru = InitialFS' (BalanceSheet a) (CashFlows fl) [le] [ru] ru ru deriving (Generic)
@@ -238,11 +242,11 @@ convertComponentsInitialFS :: (ComponentTypes tagA, ComponentTypes tagB) => FMCC
 convertComponentsInitialFS (FMCComponentConverters fA fFL fLE fRU _) (InitialFS bs cfs les rs sw tax) =
   InitialFS (fA <$> bs) (fFL <$> cfs) (fLE <$> les) (fRU <$> rs) (fRU sw) (fRU tax)
 
-                
+
 type IFSMap tag = M.Map String (InitialFS tag)
 
 convertComponentsIFSMap :: (ComponentTypes tagA, ComponentTypes tagB) => FMCComponentConverters tagB tagA -> IFSMap tagB -> IFSMap tagA
-convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm 
+convertComponentsIFSMap ccs ifsm = convertComponentsInitialFS ccs <$> ifsm
 
 getFinancialState :: IFSMap tag -> String -> Maybe (InitialFS tag)
 getFinancialState ifsm name = M.lookup name ifsm
@@ -264,12 +268,15 @@ instance FromJSON a=>FromJSON (MapByFS a) where
   parseJSON v = MapByFS <$> fromJSONEnumMap v
 -}
 
-data FederalTaxStructure = FederalTaxStructure {
-  _ftsIncome :: MapByFS TaxBrackets,
-  _ftsPayroll :: TaxBrackets,
-  _ftsEstate :: TaxBrackets,
-  _ftsCapGainRateBands :: FedCapitalGains,
-  _ftsMedicareSurtax :: (Double,MapByFS MoneyValue)
+data FederalTaxStructure = FederalTaxStructure
+  {
+    _ftsIncome :: MapByFS TaxBrackets
+  , _ftsPayroll :: TaxBrackets
+  , _ftsEstate :: TaxBrackets
+  , _ftsCapGain :: TaxBrackets
+  , _ftsMedicareSurtax :: (Double, MapByFS MoneyValue)
+  , _ftsStandardDeduction :: MapByFS MoneyValue
+  , _ftsSALTCap :: Maybe MoneyValue
   } deriving (Generic,Show)
 
 Lens.makeClassy ''FederalTaxStructure
@@ -278,12 +285,14 @@ instance ToJSON FederalTaxStructure where
   toJSON = genericToJSON defaultOptions{fieldLabelModifier= drop 4}
 instance FromJSON FederalTaxStructure where
   parseJSON = genericParseJSON defaultOptions{fieldLabelModifier= drop 4}
-  
+
 {- $(deriveJSON defaultOptions{fieldLabelModifier= drop 4} ''FederalTaxStructure) -}
 
-data StateTaxStructure = StateTaxStructure {
-  _stsIncome::MapByFS TaxBrackets,
-  _stsCapGainRate::Double } deriving (Generic,Show)
+data StateTaxStructure = StateTaxStructure
+  {
+    _stsIncome :: MapByFS TaxBrackets
+  , _stsStandardDeduction :: MapByFS MoneyValue
+  } deriving (Generic,Show)
 
 Lens.makeClassy ''StateTaxStructure
 
@@ -305,10 +314,12 @@ instance FromJSON CityTaxStructure where
 
 {-  $(deriveJSON defaultOptions{fieldLabelModifier = drop 4} ''CityTaxStructure) -}
 
-data TaxStructure = TaxStructure {
-  _tsFederal :: M.Map String FederalTaxStructure,
-  _tsState :: M.Map String StateTaxStructure,
-  _tsCity :: M.Map String CityTaxStructure } deriving (Show,Generic)
+data TaxStructure = TaxStructure
+  {
+    _tsFederal :: M.Map String FederalTaxStructure
+  , _tsState :: M.Map String StateTaxStructure
+  , _tsCity :: M.Map String CityTaxStructure
+  } deriving (Show,Generic)
 
 Lens.makeClassy ''TaxStructure
 
@@ -321,31 +332,39 @@ instance FromJSON TaxStructure where
 
 lookupTS :: M.Map String a -> String -> String -> Either FMCException a
 lookupTS taxMap key taxLevelString =
-  noteM (FailedLookup ("Couldn't find "
-                       <> (T.pack $ show key)
-                       <> " in loaded "
-                       <> (T.pack taxLevelString)
-                       <> " tax structures.")) $ M.lookup key taxMap
+  let err = FailedLookup
+            $ "Couldn't find "
+            <> (T.pack $ show key)
+            <> " in loaded "
+            <> (T.pack taxLevelString)
+            <> " tax structures."
+            <> " Loaded: "
+            <> T.pack (show $ M.keys taxMap)
+  in noteM err $ M.lookup key taxMap
 
-lookupTB :: M.Map FilingStatus TaxBrackets -> FilingStatus -> String -> Either FMCException TaxBrackets
-lookupTB bracketMap filingStatus taxName =
-  noteM (FailedLookup ("Couldn't find "
-                       <> (T.pack $ show filingStatus)
-                       <> " in loaded "
-                       <> (T.pack taxName)
-                       <> " tax structures.")) $ M.lookup filingStatus bracketMap
+byFilingStatus :: M.Map FilingStatus a -> FilingStatus -> String -> Either FMCException a
+byFilingStatus bracketMap filingStatus taxName =
+  let err = FailedLookup ("Couldn't find "
+                          <> (T.pack $ show filingStatus)
+                          <> " in loaded "
+                          <> (T.pack taxName)
+                          <> " tax structures.")
+  in noteM err $ M.lookup filingStatus bracketMap
 
 makeTaxRules :: TaxStructure -> FilingStatus -> String -> String -> Maybe String -> Either FMCException TaxRules
 makeTaxRules (TaxStructure fedByName stateByName cityByName) fs fedName stateName mCityName = do
-  (FederalTaxStructure fedInc payroll estate cgrb (medSRate,medSThresh)) <- lookupTS fedByName fedName "federal"
-  fedT <- lookupTB (unEnumKeyMap fedInc) fs fedName
+  (FederalTaxStructure fedInc payroll estate capGain (medSNetInvRate,medSThresh) sd sc) <- lookupTS fedByName fedName "federal"
+  fedT <- byFilingStatus (unEnumKeyMap fedInc) fs fedName
+  fedSD <- byFilingStatus (unEnumKeyMap sd) fs fedName
   msThresh <- noteM (FailedLookup ("Couldn't find " <> (T.pack $ show fs) <> " in Medicare Surtax MAGI thresholds.")) $ M.lookup fs (unEnumKeyMap medSThresh)
-  (StateTaxStructure stateInc stateCG) <- lookupTS stateByName stateName "state"
-  stateT <- lookupTB (unEnumKeyMap stateInc) fs stateName
+  (StateTaxStructure stateInc stateSD) <- lookupTS stateByName stateName "state"
+  stateT <- byFilingStatus (unEnumKeyMap stateInc) fs stateName
+  stateSD <- byFilingStatus (unEnumKeyMap stateSD) fs stateName
+  let standardDeductions = StandardDeductions $ A.listArray (FederalJ, StateJ) [fedSD,stateSD]
   cityT <- case mCityName of
     Nothing -> return zeroTaxBrackets
-    Just n -> lookupTS cityByName n "city" >>= (\(CityTaxStructure bktMap)->lookupTB (unEnumKeyMap bktMap) fs n)
-  return $ TaxRules fedT payroll estate cgrb (MedicareSurtax medSRate msThresh) stateT stateCG cityT
+    Just n -> lookupTS cityByName n "city" >>= (\(CityTaxStructure bktMap)-> byFilingStatus (unEnumKeyMap bktMap) fs n)
+  return $ TaxRules fedT payroll estate capGain (MedicareSurtax medSNetInvRate msThresh) stateT cityT standardDeductions sc
 
 emptyTaxStructure :: TaxStructure
 emptyTaxStructure = TaxStructure M.empty M.empty M.empty
@@ -356,7 +375,7 @@ mergeTaxStructures (TaxStructure fedN stateN cityN) = do
   TaxStructure fedO stateO cityO <- get
   put $ TaxStructure (M.union fedN fedO) (M.union stateN stateO) (M.union cityN cityO)
 
-  
+
 data LoadedModels tag where
   LoadedModels :: (ComponentTypes tag) =>
                   { _lmFS :: IFSMap tag
@@ -368,7 +387,7 @@ Lens.makeClassy ''LoadedModels
 
 -- NB: Not GADT and therefore not constrained by (rm ~ RateModelType tag) otherwise Generic can't be derived
 -- FIXME
-data ModelConfiguration tag rm = ModelConfiguration 
+data ModelConfiguration tag rm = ModelConfiguration
                                  { _mcfgInitialFS :: InitialFS tag,
                                    _mcfgStartingRM :: rm,
                                    _mcfgRateModel :: rm,
@@ -391,8 +410,8 @@ convertComponentsModelConfiguration :: (ComponentTypes tagA
                                     -> ModelConfiguration tagA rmA
 convertComponentsModelConfiguration ccs@(FMCComponentConverters _ _ _ _ rmF) (ModelConfiguration ifs srm rm tr y c) =
   ModelConfiguration (convertComponentsInitialFS ccs ifs) (rmF srm) (rmF rm) tr y c
-                                   
-  
+
+
 instance (ToJSON rm, ToJSONComponents tag) => ToJSON (ModelConfiguration tag rm) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 5}
 
@@ -414,5 +433,3 @@ instance FromJSON SimConfiguration where
   parseJSON = genericParseJSON defaultOptions{fieldLabelModifier = drop 5}
 
 {- $(deriveJSON defaultOptions{fieldLabelModifier = drop 5} ''SimConfiguration) -}
-
-

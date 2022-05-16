@@ -79,9 +79,12 @@ data AccumResult = AddTo !AccumName !MoneyValue | Zero !AccumName deriving (Show
 
 data EvolveOutput = EvolveOutput ![FlowResult] ![AccumResult] deriving (Show)
 
+instance Semigroup EvolveOutput where
+  (EvolveOutput fAs aAs) <> (EvolveOutput fBs aBs) = EvolveOutput (fAs <> fBs) (aAs <> aBs)
+
 instance Monoid EvolveOutput where
   mempty = EvolveOutput [] []
-  mappend (EvolveOutput fAs aAs) (EvolveOutput fBs aBs) = EvolveOutput (fAs <> fBs) (aAs <> aBs)
+  mappend = (<>) --(EvolveOutput fAs aAs) (EvolveOutput fBs aBs) = EvolveOutput (fAs <> fBs) (aAs <> aBs)
 
 type EvolveResult a = Result EvolveOutput a
 

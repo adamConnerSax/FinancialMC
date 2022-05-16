@@ -21,7 +21,50 @@
 	<BracketTop top="146400" rate="25"/>
 	<BracketTop top="223050" rate="28"/>
 	<BracketTop top="398350" rate="33"/>
-      <BracketTop top="450000" rate="35"/>
+	<BracketTop top="450000" rate="35"/>
+      </SimpleBrackets>
+    </IncomeTaxStructure>
+    
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="20">
+	<BracketTop top="72500" rate="0"/>
+	<BracketTop top="450000" rate="15"/>
+      </SimpleBrackets>
+    </CapitalGainTaxStructure>
+
+    <MedicareSurtax rate="3.8">
+      <Threshold status="MarriedFilingJointly" amount="250000 USD"/>
+      <Threshold status="Single" amount="200000 USD"/>
+    </MedicareSurtax>
+
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
+  </FederalTaxStructure>
+
+  <FederalTaxStructure name="US SD">
+    <PayrollTaxStructure>
+      <Brackets>
+	<Bracket bottom="0 USD" top="117000 USD" rate="6.2"/>
+	<Bracket bottom="0 USD" top="250000 USD" rate="1.45"/>
+	<TopBracket bottom="250000 USD" rate="0.9"/>
+      </Brackets>
+    </PayrollTaxStructure>
+    
+    <EstateTaxStructure>
+      <Brackets>
+	<TopBracket bottom="5340000 USD" rate="40.0"/>
+      </Brackets>
+    </EstateTaxStructure>
+    
+    <IncomeTaxStructure status="MarriedFilingJointly">
+      <SimpleBrackets currency="USD" top_rate="39.6">
+	<BracketTop top="17850" rate="10"/>
+	<BracketTop top="72500" rate="15"/>
+	<BracketTop top="146400" rate="25"/>
+	<BracketTop top="223050" rate="28"/>
+	<BracketTop top="398350" rate="33"/>
+	<BracketTop top="450000" rate="35"/>
       </SimpleBrackets>
     </IncomeTaxStructure>
     
@@ -32,16 +75,76 @@
       </RateBands>
     </CapitalGains>
 
-    <MedicareSurtax rate="0">
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="20">
+	<BracketTop top="72500" rate="0"/>
+	<BracketTop top="450000" rate="15"/>
+      </SimpleBrackets>
+    </CapitalGainTaxStructure>
+    
+    <MedicareSurtax rate="3.8">
       <Threshold status="MarriedFilingJointly" amount="250000 USD"/>
       <Threshold status="Single" amount="200000 USD"/>
     </MedicareSurtax>
+
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="10000 USD"/>
+    </StandardDeduction>
+  </FederalTaxStructure>
+
+  <FederalTaxStructure name="US SC">
+    <PayrollTaxStructure>
+      <Brackets>
+	<Bracket bottom="0 USD" top="117000 USD" rate="6.2"/>
+	<Bracket bottom="0 USD" top="250000 USD" rate="1.45"/>
+	<TopBracket bottom="250000 USD" rate="0.9"/>
+      </Brackets>
+    </PayrollTaxStructure>
     
+    <EstateTaxStructure>
+      <Brackets>
+	<TopBracket bottom="5340000 USD" rate="40.0"/>
+      </Brackets>
+    </EstateTaxStructure>
+    
+    <IncomeTaxStructure status="MarriedFilingJointly">
+      <SimpleBrackets currency="USD" top_rate="39.6">
+	<BracketTop top="17850" rate="10"/>
+	<BracketTop top="72500" rate="15"/>
+	<BracketTop top="146400" rate="25"/>
+	<BracketTop top="223050" rate="28"/>
+	<BracketTop top="398350" rate="33"/>
+	<BracketTop top="450000" rate="35"/>
+      </SimpleBrackets>
+    </IncomeTaxStructure>
+    
+    <CapitalGains>
+      <RateBands topRate="20">
+	<Band top="25" rate="0"/>
+	<Band top="39" rate="15"/>
+      </RateBands>
+    </CapitalGains>
+
+    <CapitalGainTaxStructure>
+      <SimpleBrackets currency="USD" top_rate="20">
+	<BracketTop top="72500" rate="0"/>
+	<BracketTop top="450000" rate="15"/>
+      </SimpleBrackets>
+    </CapitalGainTaxStructure>
+    
+    <MedicareSurtax rate="3.8">
+      <Threshold status="MarriedFilingJointly" amount="250000 USD"/>
+      <Threshold status="Single" amount="200000 USD"/>
+    </MedicareSurtax>
+
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
+    <SALTCap cap="10000 USD"/>
   </FederalTaxStructure>
 
   <StateTaxStructure state="New York" name="Simple">
     <IncomeTaxStructure status="MarriedFilingJointly">
-      <CapitalGains rate="9"/>
       <SimpleBrackets currency="USD" top_rate="8.82">
 	<BracketTop top="16450" rate="4"/>
 	<BracketTop top="22600" rate="4.5"/>
@@ -52,13 +155,18 @@
 	<BracketTop top="20058550" rate="6.85"/>
       </SimpleBrackets>
     </IncomeTaxStructure>
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
   </StateTaxStructure>
 
   <StateTaxStructure state="Zero" name="Zero">
     <IncomeTaxStructure status="MarriedFilingJointly">
-      <CapitalGains rate="0"/>
       <SimpleBrackets currency="USD" top_rate="0"/>
     </IncomeTaxStructure>
+    <StandardDeduction>
+      <SD status="MarriedFilingJointly" deduction="0 USD"/>
+    </StandardDeduction>
   </StateTaxStructure>
 
   <CityTaxStructure city="New York City" name="Simple">

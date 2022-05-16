@@ -206,14 +206,14 @@ formatHistoryOutput hists = str where
 formatMedianSummaryOutput :: V.Vector DatedSummary -> String
 formatMedianSummaryOutput medianHist = str where
   wrs = addReturns medianHist
-  header = "Date\t\tNet Worth($)\tReturn($)\tReturn(%)\tNear Cash\tInflow($)\tOutflow($)\tTax($)\tTax Rate(%)\n"
+  header = "Date\tNet Worth($)\tReturn($)\tReturn(%)\tNear Cash\tInflow($)\tOutflow($)\tTax($)\tTax Rate(%)\n"
   g = printf "%.2f"
   f (MoneyValue x _) = printf "%.0f" x
   l lt nwm = f $ nwm ! lt --f (fromJust $ M.lookup lt nwm)
   h (DatedSummaryWithReturns d (FSSummary nw nwbo i o t tr)  ret retR)  =
-    show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t\t" ++ g (100*retR) ++ "%\t\t"
-    ++ l NearCash nwbo ++ "\t\t"
-    ++ f i ++ "\t\t" ++ f o ++ "\t\t" ++ f t ++ "\t" ++ g (100*tr) ++ "\n"
+    show d ++ "\t" ++ f nw ++ "\t" ++ f ret ++ "\t" ++ g (100*retR) ++ "%\t"
+    ++ l NearCash nwbo ++ "\t"
+    ++ f i ++ "\t" ++ f o ++ "\t" ++ f t ++ "\t" ++ g (100*tr) ++ "\n"
   str = V.foldl' (\s x -> s ++ h x) header wrs
 
 formatGnuplotOutput :: String -> Int -> Int -> String
@@ -237,4 +237,3 @@ set title "Sample history from each quantile"|] ++ "\n"
   qPct n q = printf "%.0f" (divFloat (100*(2*n - 1)) (2*q))
   historyPlot = "plot " ++ foldl (\s n -> s ++ " historyFile u 1:($" ++ show (n+1) ++ "/1000) with lines t \"" ++ qPct n quantiles ++ "%\",") "" [1..quantiles] ++ "\n"
   str =  f1 ++ f2 ++ mpLayout ++ histogramSetup ++ histogramPlot ++ historySetup ++ historyPlot
-
