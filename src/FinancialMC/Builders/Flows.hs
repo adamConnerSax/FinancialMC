@@ -53,6 +53,7 @@ flowF date flow = if flowingAt date flow then annualFlowAmount flow else MV.zero
 data BaseFlowDetails =
   Expense |
   DeductibleExpense |
+  StateAndLocalTax |
   EducationExpense !AccountName |
   HealthCareExpense !Bool | -- is it deductible?
   Payment !Double | -- growth rate
@@ -62,6 +63,7 @@ data BaseFlowDetails =
 baseFlowDirection :: BaseFlowDetails -> FlowDirection
 baseFlowDirection Expense               = OutFlow
 baseFlowDirection DeductibleExpense     = OutFlow
+baseFlowDirection StateAndLocalTax      = OutFlow
 baseFlowDirection (EducationExpense _)  = OutFlow
 baseFlowDirection (HealthCareExpense _) = OutFlow
 baseFlowDirection (Payment _)           = InFlow
@@ -71,6 +73,7 @@ baseFlowDirection (RentalIncome _)      = InFlow
 instance Show BaseFlowDetails where
   show fl@Expense = "Regular Expense [" ++ show (baseFlowDirection fl) ++ "]->"
   show fl@DeductibleExpense = "Deductible Expense-> [" ++ show (baseFlowDirection fl) ++ "]->"
+  show fl@StateAndLocalTax = "State and Local Tax-> [" ++ show (baseFlowDirection fl) ++ "]->"
   show fl@(EducationExpense an) = "Educational expense [" ++ show (baseFlowDirection fl) ++ ", (paid from " ++ show an ++ ")]->"
   show fl@(HealthCareExpense d) = "Healthcare expense [" ++ show (baseFlowDirection fl) ++ "; deductible=" ++ show d ++  "]->"
   show fl@(Payment gr) = "Payment [" ++ show (baseFlowDirection fl) ++ "; grows at " ++ show (100*gr) ++ "%]->"
@@ -89,24 +92,27 @@ instance IsFlow BaseFlow where
   flowDirection (BaseFlow _ det) = baseFlowDirection det
 
 instance Evolvable BaseFlow where
-  evolve fl@(BaseFlow _ Expense) = expenseWithInflation False T.empty Price fl
-  evolve fl@(BaseFlow _ DeductibleExpense) = expenseWithInflation True T.empty Price fl
-  evolve fl@(BaseFlow _ (EducationExpense fr)) = expenseWithInflation False fr Education fl
-  evolve fl@(BaseFlow _ (HealthCareExpense d)) = expenseWithInflation d T.empty HealthCare fl
+  evolve fl@(BaseFlow _ Expense) = expenseWithInflation Nothing T.empty Price fl
+  evolve fl@(BaseFlow _ DeductibleExpense) = expenseWithInflation (Just OrdinaryIncome) T.empty Price fl -- not sure Price inflation is right here...
+  evolve fl@(BaseFlow _ StateAndLocalTax) = expenseWithInflation (Just StateAndLocal) T.empty Price fl
+  evolve fl@(BaseFlow _ (EducationExpense fr)) = expenseWithInflation Nothing fr Education fl
+  evolve fl@(BaseFlow _ (HealthCareExpense d)) = let mTt = if d then (Just OrdinaryIncome) else Nothing in expenseWithInflation mTt T.empty HealthCare fl
   evolve fl@(BaseFlow _ (Payment _)) = paymentEvolve fl
   evolve fl@(BaseFlow _ SalaryPayment) = wageEvolve fl
   evolve fl@(BaseFlow _ (RentalIncome _)) = rentalIncomeEvolve fl
   {-# INLINE evolve #-}
 
-expenseWithInflation :: IsFlow f => Bool -> AccumName -> InflationType -> Evolver s rm m f
-expenseWithInflation deductible accumName iType f = do
+expenseWithInflation :: IsFlow f => Maybe TaxType -> AccumName -> InflationType -> Evolver s rm m f
+expenseWithInflation mDeductible accumName iType f = do
   infRate <- rateRequest (Inflation iType)
   curDate <- use $ getFinEnv.feCurrentDate
   let newA = MV.multiply (flowAmount f) (1.0 + infRate)
       expense = flowF curDate f
       cashFlow = MV.negate expense
       newExpense = revalueFlow f newA
-      flowResult = if deductible then AllDeductible (TaxAmount OrdinaryIncome expense) else UnTaxed cashFlow
+      flowResult = case mDeductible of
+        (Just tt) AllDeductible (TaxAmount tt expense)
+        Nothing -> else UnTaxed cashFlow
       accums = if T.null accumName then [] else [AddTo accumName cashFlow]
   appendAndReturn (EvolveOutput [flowResult] accums) newExpense
 {-# INLINE expenseWithInflation #-}
