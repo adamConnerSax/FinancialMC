@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell, ScopedTypeVariables, FunctionalDependencies, OverloadedStrings #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE TypeOperators         #-}
 module FinancialMC.Parsers.Configuration
        (
          ParseException(..)

@@ -8,6 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
+{-# LANGUAGE TypeOperators         #-}
 {-# LANGUAGE UndecidableInstances  #-}
 module FinancialMC.Core.Engine
        (
@@ -294,9 +295,9 @@ doPaths :: EngineC tag
 doPaths convertLE ps0 singleThreaded pMT yearsPerPath paths = do
   let seeds =  getNSeeds pMT paths
       g seed = do
-        x <- execOnePathPure convertLE ps0 seed yearsPerPath
-        cs' <- case x of
-          MkFMCPathState (PathState cs' _) -> Right cs'
+        x :: FMCPathState tag <- execOnePathPure convertLE ps0 seed yearsPerPath
+        cs' :: CombinedState tag <- case x of
+          MkFMCPathState (PathState y _) -> Right y
           _ -> Left $ Other "Bad pattern match in doPaths"
         let q = cs' ^. csMC.mcsPathSummary
         q `seq` Right (PathSummaryAndSeed (cs' ^. csMC.mcsPathSummary) seed)

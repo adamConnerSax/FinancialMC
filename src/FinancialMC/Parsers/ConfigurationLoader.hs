@@ -3,6 +3,7 @@
 {-# LANGUAGE GADTs                 #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE TypeOperators         #-}
 module FinancialMC.Parsers.ConfigurationLoader
        (
          loadDataSources,
@@ -52,7 +53,7 @@ import           Control.Monad.State.Strict                  (StateT,
                                                               execStateT, get,
                                                               put)
 import qualified Data.Map                                    as M
-import           Data.Random.Source.PureMT                   (pureMT)
+import           System.Random.Mersenne.Pure64  (pureMT)
 import           FinancialMC.Base                            (BaseAsset,
                                                               BaseFlow,
                                                               BaseLifeEvent,
@@ -116,7 +117,7 @@ loadDataSource _ _ (C.DataSource (C.Parseable up encoding) C.TaxStructureS) = do
 
 loadDataSource _ _ (C.DataSource C.DBQuery _) = lift $ throwingM _BadParse "DBQuery data source not yet implemented!"
 
-loadDataSource _ _ _ = lift . E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
+--loadDataSource _ _ _ = lift . E.throwIO $ BadParse "Reached fall-through case in loadDataSource!"
 
 decodeUnparsed::FromJSON a=>C.Unparsed->C.Encoding->IO a
 decodeUnparsed _ C.XML = E.throwIO $ BadParse "XML handled specifically! Should not get to decodeUnparsed with an XML source."
@@ -129,8 +130,8 @@ decodeUnparsed up C.JSON = do
 
 decodeUnparsed up C.YAML = do
   bs <- C.asIOByteString up
-  case YAML.decodeEither bs of
-    Left err -> throwingM _BadParse ("While decoding (as YAML)" <> (T.pack $ show up) <> ": " <> (T.pack err))
+  case YAML.decodeEither' bs of
+    Left err -> throwingM _BadParse ("While decoding (as YAML)" <> (T.pack $ show up) <> ": " <> (T.pack $ show err))
     Right x -> return x
 
 decodeUnparsed _ _ = throwingM _BadParse "Fallthrough case in decodeUnparsed."
@@ -170,8 +171,8 @@ loadYAMLConfigs :: FJ tag
   -> StateT (C.LoadedModels tag, C.ModelDescriptionMap) IO ()
 loadYAMLConfigs fcc mSchema up = do
   configBS <- lift $ C.asIOByteString up
-  case YAML.decodeEither configBS of
-    Left err -> lift $ throwingM _BadParse (T.pack err)
+  case YAML.decodeEither' configBS of
+    Left err -> lift $ throwingM _BadParse (T.pack $ show err)
     Right (C.ConfigurationInputs sources configM) -> do
       zoom _1 $ loadDataSources fcc mSchema sources
       hoist generalize $ _2 %= M.union configM
@@ -269,7 +270,3 @@ validateFinancialState (C.InitialFS bs _ _ rs sw tt) configName = do
       checkRule rule = foldM (\_ name-> checkName name) () (ruleAccounts rule)
       allRules = rs ++ [sw,tt]
   foldM (\_ r->checkRule r) () allRules
-
-
-
-

@@ -2,6 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators         #-}
 module FinancialMC.Core.CValued_Internal
        (
          SValued (..)
@@ -33,7 +34,7 @@ module FinancialMC.Core.CValued_Internal
        , HasIf(..)
        , cvCompare
        ) where
-       
+
 
 import Control.Monad.Reader (MonadReader,ask)
 import Control.Monad.State (MonadState)
@@ -42,16 +43,16 @@ import Control.DeepSeq (NFData(rnf))
 
 import FinancialMC.Core.MoneyValue (Currency(USD))
 
-{- 
+{-
 This is sort of icky but required in the cases where we need a ccy for evaluation though the answer doesn't depend on it
 I would like this to be unneccessary by construction somehow.
---} 
+--}
 class HasOneValue a where
   oneValue :: a
 
 instance HasOneValue Currency where
   oneValue = USD
-  
+
 type Conv c a = ERF c -> c -> c -> a -> a
 
 type ERF c = c -> c -> Double
@@ -91,7 +92,7 @@ cvZero = CVCV $ const (const 0)
 
 instance Functor (SValued c) where
   fmap h (CVS x) = CVS $ h x
-  fmap h (CVEV f) = CVEV $ h . f  
+  fmap h (CVEV f) = CVEV $ h . f
   {-# INLINABLE fmap #-}
 
 instance Functor (CValued c) where
@@ -100,18 +101,18 @@ instance Functor (CValued c) where
   {-# INLINABLE fmap #-}
 
 instance Applicative (SValued c) where
-  pure = CVS 
+  pure = CVS
   {-# INLINABLE pure #-}
   (CVS f) <*> (CVS a) = CVS (f a)
   (CVS f) <*> (CVEV fa) = CVEV $ \e -> f (fa e)
   (CVEV ff) <*> (CVS a) = CVEV $ \e -> ff e a
   (CVEV ff) <*> (CVEV fa) = CVEV $ \e -> ff e (fa e)
   {-# INLINABLE (<*>) #-}
-                      
+
 instance Applicative (CValued c) where
   pure x = CVCV (\_ _ -> x)
-  {-# INLINABLE pure #-}                                        
-  (CVCV gf) <*> (CVCV ga) = CVCV (\c e -> gf c e (ga c e)) 
+  {-# INLINABLE pure #-}
+  (CVCV gf) <*> (CVCV ga) = CVCV (\c e -> gf c e (ga c e))
   (CVCV gf) <*> (CVMV x c h) = CVCV (\c' e -> gf c' e (h e c' c x))
   (CVMV f c h) <*> (CVCV ga) = CVCV (\c' e -> h e c' c f (ga c' e))
   (CVMV f cf hf) <*> (CVMV a ca ha) = CVCV (\c' e -> (hf e c' cf f) (ha e c' ca a))
@@ -120,14 +121,14 @@ instance Applicative (CValued c) where
 instance Monad (SValued c) where
   return = pure
   {-# INLINABLE return #-}
-  CVS x >>= f = f x 
+  CVS x >>= f = f x
   (CVEV fa) >>= f = CVEV $ \e -> let CVEV q = f (fa e) in q e
   {-# INLINABLE (>>=) #-}
 
-                
+
 instance Monad (CValued c) where
   return = pure
-  {-# INLINABLE return #-}                                                   
+  {-# INLINABLE return #-}
   (CVCV ga) >>= f = CVCV $ \c' e -> case f (ga c' e) of
                                        CVCV q ->  q c' e
                                        CVMV x c h -> h e c' c x
@@ -135,15 +136,15 @@ instance Monad (CValued c) where
   (CVMV a c h) >>= f = CVCV $ \c' e -> case f (h e c' c a) of
                                       CVCV q -> q c' e
                                       CVMV a' c'' h' -> h' e c' c'' a'
-  {-# INLINABLE (>>=) #-}                    
+  {-# INLINABLE (>>=) #-}
 
 instance Show a => Show (SValued c a) where
   show (CVS x) = "scalar: " ++ show x
-  show (CVEV _) = "CValued (abstract scalar)"                 
+  show (CVEV _) = "CValued (abstract scalar)"
 
 instance (Show a, Show c) => Show (CValued c a) where
   show (CVCV _)  = "CValued (abstract currency valued)"
-  show (CVMV x c _) = show x ++ " " ++ show c 
+  show (CVMV x c _) = show x ++ " " ++ show c
 
 toCS :: a->SValued c a
 toCS = CVS
@@ -154,7 +155,7 @@ toCV x c = CVMV x c conv
 {-# INLINABLE toCV #-}
 
 asCVMV :: (RealFrac a, Eq c) => c -> ERF c -> CValued c a -> CValued c a
-asCVMV _ _ mv@(CVMV _ _ _) = mv 
+asCVMV _ _ mv@(CVMV _ _ _) = mv
 asCVMV c e (CVCV g) = CVMV (g c e) c conv
 {-# INLINABLE asCVMV #-}
 
@@ -166,12 +167,12 @@ asERFReader (CVEV f) = do
 {-# INLINABLE asERFReader #-}
 
 fixCCY :: Eq c => MonadReader (ERF c) m => c -> CValued c a -> m a
-fixCCY ccy  = asERFReader . atCCY ccy 
+fixCCY ccy  = asERFReader . atCCY ccy
 {-# INLINABLE fixCCY #-}
 
 atCCY :: Eq c => c -> CValued c a -> SValued c a
 atCCY c (CVCV f) = CVEV (f c)
-atCCY c' (CVMV x c f) 
+atCCY c' (CVMV x c f)
   | c == c' = CVS x
   | otherwise = CVEV (\e -> f e c' c x)
 {-# INLINABLE atCCY #-}
@@ -205,7 +206,7 @@ scRFBinOp  = scBinOp
 {-# INLINABLE scRFBinOp #-}
 
 cvRFBinOp :: (Eq c, RealFrac b) => (a -> a -> b)->CValued c a -> CValued c a -> CValued c b
-cvRFBinOp op a@(CVMV x1 c1 _) b@(CVMV x2 c2 _) 
+cvRFBinOp op a@(CVMV x1 c1 _) b@(CVMV x2 c2 _)
   | c1 == c2 = CVMV (op x1 x2) c1 conv
   | otherwise = cvBinOp op a b
 cvRFBinOp op a b = cvBinOp op a b
@@ -224,11 +225,11 @@ ciBinOp op (CVMV x cx hx) (CVMV y cy _)
 {-# SPECIALIZE ciBinOp::(Double->Double->Double)->CValued Currency Double->CValued Currency Double->SValued Currency Double #-}
 
 scNegate :: Num a => SValued c a -> SValued c a
-scNegate x = negate <$> x 
+scNegate x = negate <$> x
 {-# INLINABLE scNegate #-}
 
 cvNegate :: Num a => CValued c a -> CValued c a
-cvNegate x = negate <$> x 
+cvNegate x = negate <$> x
 {-# INLINABLE cvNegate #-}
 
 type family SumT (a :: *) (b :: *) :: * where
@@ -270,7 +271,7 @@ instance (Num a, q ~ SValued c a, SumT q a ~ q) => HasAddition (SValued c a) a (
   (CVEV f) |+| x = CVEV $ \e->f e + x
   {-# INLINABLE (|+|) #-}
   (CVS y) |-| x = CVS (x-y)
-  (CVEV f) |-| x = CVEV $ \e->x - f e 
+  (CVEV f) |-| x = CVEV $ \e->x - f e
   {-# INLINABLE (|-|) #-}
 
 
@@ -290,10 +291,10 @@ instance (RealFrac a, q ~ SValued c a, ProdT q q ~ q) => HasMultiplication (SVal
     {-# SPECIALIZE instance HasMultiplication (SValued Currency Double) (SValued Currency Double) (SValued Currency Double) #-}
     (|*|) = scRFBinOp (*)
     {-# INLINABLE (|*|) #-}
-                                                                                    
+
 instance (RealFrac a, q ~ CValued c a, ProdT (SValued c a) q ~ q) => HasMultiplication (SValued c a) (CValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasMultiplication (SValued Currency Double) (CValued Currency Double) (CValued Currency Double) #-}
-  (CVS y)  |*| (CVCV g) = CVCV $ \c e -> y * (g c e)                                                                         
+  (CVS y)  |*| (CVCV g) = CVCV $ \c e -> y * (g c e)
   (CVEV f) |*| (CVCV g) = CVCV $ \c e -> (f e) * (g c e)
   (CVS y)  |*| (CVMV x c h) = CVMV (y*x) c h
   (CVEV f) |*| (CVMV x c h) = CVCV $ \c' e -> (f e) * (h e c' c x)
@@ -301,19 +302,19 @@ instance (RealFrac a, q ~ CValued c a, ProdT (SValued c a) q ~ q) => HasMultipli
 
 instance (RealFrac a, q ~ CValued c a, ProdT q (SValued c a) ~ q) => HasMultiplication (CValued c a) (SValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasMultiplication (CValued Currency Double) (SValued Currency Double) (CValued Currency Double) #-}
-  cv |*| sc = sc |*| cv                                                                        
+  cv |*| sc = sc |*| cv
   {-# INLINABLE (|*|) #-}
 
 instance (RealFrac a, q ~ SValued c a, ProdT a q ~ q) => HasMultiplication  a (SValued c a) (SValued c a) where
   {-# SPECIALIZE instance HasMultiplication Double (SValued Currency Double) (SValued Currency Double) #-}
-  x |*| (CVS y)  = CVS (x*y) 
+  x |*| (CVS y)  = CVS (x*y)
   x |*| (CVEV f) = CVEV $ \e -> x * f e
   {-# INLINABLE (|*|) #-}
 
 instance (RealFrac a, q ~ CValued c a, ProdT a q ~ q) => HasMultiplication  a (CValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasMultiplication Double (CValued Currency Double) (CValued Currency Double) #-}
-  x |*| (CVCV g) = CVCV (\c' e -> x * g c' e) 
-  x |*| (CVMV y c f) = CVMV (x*y) c f 
+  x |*| (CVCV g) = CVCV (\c' e -> x * g c' e)
+  x |*| (CVMV y c f) = CVMV (x*y) c f
   {-# INLINABLE (|*|) #-}
 
 instance (RealFrac a, q ~ SValued c a, ProdT q a ~ q, ProdT a q ~ q) => HasMultiplication (SValued c a) a (SValued c a) where
@@ -323,7 +324,7 @@ instance (RealFrac a, q ~ SValued c a, ProdT q a ~ q, ProdT a q ~ q) => HasMulti
 
 instance (RealFrac a, q ~ CValued c a, ProdT q a ~ q, ProdT a q ~ q) => HasMultiplication (CValued c a) a (CValued c a) where
   {-# SPECIALIZE instance HasMultiplication (CValued Currency Double) Double (CValued Currency Double) #-}
-  a |*| x = x |*| a 
+  a |*| x = x |*| a
   {-# INLINABLE (|*|) #-}
 
 
@@ -387,22 +388,22 @@ instance (Eq a, Ord a) => HasEqOrdering (SValued c a) where
   {-# SPECIALIZE instance HasEqOrdering (SValued Currency Double) #-}
   type ReturnType (SValued c a) = SValued c Bool
   (|>|)  = scBinOp (>)
-  {-# INLINABLE (|>|) #-}                                                                            
+  {-# INLINABLE (|>|) #-}
   (|>=|) = scBinOp (>=)
-  {-# INLINABLE (|>=|) #-}                                                                            
+  {-# INLINABLE (|>=|) #-}
   (|<|)  = scBinOp (<)
-  {-# INLINABLE (|<|) #-}                                                                            
+  {-# INLINABLE (|<|) #-}
   (|<=|) = scBinOp (<=)
-  {-# INLINABLE (|<=|) #-}                                                                            
+  {-# INLINABLE (|<=|) #-}
   (|==|) = scBinOp (==)
-  {-# INLINABLE (|==|) #-}                                                                            
+  {-# INLINABLE (|==|) #-}
   (|/=|) = scBinOp (/=)
   {-# INLINABLE (|/=|) #-}
 
 instance Ord a => HasMinMax (SValued c a) where
   {-# SPECIALIZE instance HasMinMax (SValued Currency Double) #-}
   cvMin = scBinOp min
-  {-# INLINABLE cvMin #-}                                                                            
+  {-# INLINABLE cvMin #-}
   cvMax = scBinOp max
   {-# INLINABLE cvMax #-}
 
@@ -410,15 +411,15 @@ instance (Eq c,Eq a, Ord a,HasOneValue c) => HasEqOrdering (CValued c a) where
   {-# SPECIALIZE instance HasEqOrdering (CValued Currency Double) #-}
   type ReturnType (CValued c a) = SValued c Bool
   (|>|)  = ciBinOp (>)
-  {-# INLINABLE (|>|) #-}                                                                            
+  {-# INLINABLE (|>|) #-}
   (|>=|) = ciBinOp (>=)
-  {-# INLINABLE (|>=|) #-}                                                                            
+  {-# INLINABLE (|>=|) #-}
   (|<|)  = ciBinOp (<)
-  {-# INLINABLE (|<|) #-}                                                                            
+  {-# INLINABLE (|<|) #-}
   (|<=|) = ciBinOp (<=)
-  {-# INLINABLE (|<=|) #-}                                                                            
+  {-# INLINABLE (|<=|) #-}
   (|==|) = ciBinOp (==)
-  {-# INLINABLE (|==|) #-}                                                                            
+  {-# INLINABLE (|==|) #-}
   (|/=|) = ciBinOp (/=)
   {-# INLINABLE (|/=|) #-}
 
@@ -433,9 +434,9 @@ cvOrdOp ordOp a b = cvBinOp ordOp a b
 instance (Eq c, Ord a) =>HasMinMax (CValued c a) where
   {-# SPECIALIZE instance HasMinMax (CValued Currency Double) #-}
   cvMin = cvOrdOp min
-  {-# INLINABLE cvMin #-}                                                                            
+  {-# INLINABLE cvMin #-}
   cvMax = cvOrdOp max
-  {-# INLINABLE cvMax #-}                                                                            
+  {-# INLINABLE cvMax #-}
 
 
 scCompare :: Ord a => SValued c a -> SValued c a -> SValued c Ordering
@@ -462,41 +463,41 @@ instance (q x ~ SValued c x, IfT (q Bool) (q a) ~ (q a)) => HasIf (SValued c Boo
   {-# SPECIALIZE instance HasIf (SValued Currency Bool) (SValued Currency Double) (SValued Currency Double) #-}
   cvIf (CVS x) a b = if x then a else b
   cvIf (CVEV fx) a b = CVEV $ \e -> if fx e then atERF e a else atERF e b
-  {-# INLINABLE cvIf #-}                                                                            
+  {-# INLINABLE cvIf #-}
 
 instance (Eq c, q x ~ CValued c x, IfT (q Bool) (q a) ~ q a) => HasIf (CValued c Bool) (CValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasIf (CValued Currency Bool) (CValued Currency Double) (CValued Currency Double) #-}
   cvIf (CVCV gx) a b = CVCV $ \c e -> if gx c e then unwrap c e a else unwrap c e b
   cvIf (CVMV x cx hx) a b = CVCV $ \c e -> if hx e c cx x then unwrap c e a else unwrap c e b
-  {-# INLINABLE cvIf #-}                                                                            
+  {-# INLINABLE cvIf #-}
 
 instance (Eq c, q ~ CValued c a, IfT (SValued c Bool) q ~ q) => HasIf (SValued c Bool) (CValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasIf (SValued Currency Bool) (CValued Currency Double) (CValued Currency Double) #-}
   cvIf (CVS x) a b = if x then a else b
   cvIf (CVEV fx) a b = CVCV $ \c e -> if fx e then unwrap c e a else unwrap c e b
-  {-# INLINABLE cvIf #-}                                                                                                                                   
+  {-# INLINABLE cvIf #-}
 
 instance (q x ~ CValued c x, IfT (q Bool) (SValued c a) ~ q a) => HasIf (CValued c Bool) (SValued c a) (CValued c a) where
   {-# SPECIALIZE instance HasIf (CValued Currency Bool) (SValued Currency Double) (CValued Currency Double) #-}
   cvIf (CVCV gx) a b = CVCV $ \c e -> if gx c e then atERF e a else atERF e b
   cvIf (CVMV x cx hx) a b = CVCV $ \c e -> if hx e c cx x then atERF e a else atERF e b
-  {-# INLINABLE cvIf #-}                                                                                                                                   
+  {-# INLINABLE cvIf #-}
 
 instance (q x ~ SValued c x, IfT (q Bool) a ~ q a) => HasIf (SValued c Bool) a (SValued c a) where
   {-# SPECIALIZE instance HasIf (SValued Currency Bool) Double (SValued Currency Double) #-}
   cvIf (CVS cond) a b = if cond then CVS a else CVS b
   cvIf (CVEV f) a b = CVEV $ \e -> if f e then a else b
-  {-# INLINABLE cvIf #-}                                                                                                                                   
+  {-# INLINABLE cvIf #-}
 
 instance (q x ~ CValued c x, IfT (q Bool) a  ~ q a) => HasIf (CValued c Bool) a (CValued c a) where
   {-# SPECIALIZE instance HasIf (CValued Currency Bool) Double (CValued Currency Double) #-}
   cvIf (CVCV g) a b = CVCV (\c' e -> if g c' e then a else b)
   cvIf (CVMV x c h) a b = CVCV (\c' e -> if h e c' c x then a else b)
-  {-# INLINABLE cvIf #-}                                                                                                                                   
+  {-# INLINABLE cvIf #-}
 
 {-
 scChoose::SValued c Bool->a->a->SValued c a
-scChoose (CVS cond) a b = if cond then CVS a else CVS b 
+scChoose (CVS cond) a b = if cond then CVS a else CVS b
 scChoose (CVEV f) a b = CVEV $ \e -> if (f e) then a else b
 {-# INLINABLE scChoose #-}
 
@@ -537,14 +538,13 @@ class HasAndOr a where
 instance HasAndOr (SValued c Bool) where
   {-# SPECIALIZE instance HasAndOr (SValued Currency Bool) #-}
   cvAnd = scBinOp (&&)
-  {-# INLINABLE cvAnd #-}                                                                            
+  {-# INLINABLE cvAnd #-}
   cvOr = scBinOp (||)
-  {-# INLINABLE cvOr #-}                                                                            
+  {-# INLINABLE cvOr #-}
 
 instance HasAndOr (CValued c Bool) where
   {-# SPECIALIZE instance HasAndOr (CValued Currency Bool) #-}
   cvAnd = cvBinOp (&&)
-  {-# INLINABLE cvAnd #-}                                                                            
+  {-# INLINABLE cvAnd #-}
   cvOr = cvBinOp (||)
   {-# INLINABLE cvOr #-}
-  

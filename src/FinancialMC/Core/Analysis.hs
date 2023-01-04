@@ -6,6 +6,7 @@
 {-# LANGUAGE RankNTypes            #-}
 {-# LANGUAGE ScopedTypeVariables   #-}
 {-# LANGUAGE TemplateHaskell       #-}
+{-# LANGUAGE TypeOperators         #-}
 module FinancialMC.Core.Analysis
          (
            DatedMoneyValue (..)
@@ -192,4 +193,3 @@ analyzeBankruptcies bs = (num,median,mode) where
   (median,mode) = if num > 0
                   then medianMode sbs
                   else (Nothing,Nothing)
-

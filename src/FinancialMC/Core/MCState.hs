@@ -1,18 +1,20 @@
-{-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE GADTs #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE ConstraintKinds #-}
-module FinancialMC.Core.MCState 
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
+
+module FinancialMC.Core.MCState
        (
          BalanceSheet(BalanceSheet)
        , HasBalanceSheet (..)
@@ -99,11 +101,11 @@ instance Functor BalanceSheet where
   fmap f (BalanceSheet am) = BalanceSheet (fmap f <$> am)
 
 instance Evolvable a=>Evolvable (BalanceSheet a) where
-  evolve bs  = evolveWithin bs bsAccountMap    
+  evolve bs  = evolveWithin bs bsAccountMap
   {-# INLINE evolve #-}
-  
-instance Show a=>Show (BalanceSheet a) where    
-  show (BalanceSheet as) = "Balance Sheet:" ++ mShow as 
+
+instance Show a=>Show (BalanceSheet a) where
+  show (BalanceSheet as) = "Balance Sheet:" ++ mShow as
 
 instance ToJSON a=>ToJSON (BalanceSheet a) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 3}
@@ -111,50 +113,50 @@ instance ToJSON a=>ToJSON (BalanceSheet a) where
 instance FromJSON a=>FromJSON (BalanceSheet a) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 3}
 
-getAccountNames :: BalanceSheet a -> [AccountName]                           
+getAccountNames :: BalanceSheet a -> [AccountName]
 getAccountNames bs = mKeys (bs ^. bsAccountMap)
-                           
+
 data CashFlows fl = CashFlows { _cfdFlowMap :: !(FlowMap fl) } deriving (Generic)
 makeClassy ''CashFlows
 
 instance Functor CashFlows where
   fmap f (CashFlows cfm) = CashFlows (f <$> cfm)
-  
+
 instance Evolvable fl=>Evolvable (CashFlows fl) where
   evolve cfd = evolveWithin cfd cfdFlowMap
   {-# INLINE evolve #-}
-  
-instance Show fl=>Show (CashFlows fl) where    
+
+instance Show fl=>Show (CashFlows fl) where
   show (CashFlows ps) = "Payments:" ++ mShow ps
-   
+
 instance ToJSON fl=>ToJSON (CashFlows fl) where
   toJSON = genericToJSON defaultOptions {fieldLabelModifier = drop 4}
 
 instance FromJSON fl=>FromJSON (CashFlows fl) where
   parseJSON = genericParseJSON defaultOptions {fieldLabelModifier = drop 4}
 
--- NB: These are unsafe adds and could overwrite if the names are the same 
-    
+-- NB: These are unsafe adds and could overwrite if the names are the same
+
 makeNewBalanceSheet :: BalanceSheet a
 makeNewBalanceSheet = BalanceSheet mEmpty
 
 makeNewCashFlows :: CashFlows fl
 makeNewCashFlows = CashFlows mEmpty
-                      
+
 insertAccount :: (IsAsset a, MonadState s m,  HasBalanceSheet s a) => Account a -> m ()
 insertAccount acct@(Account name _ _ _) = balanceSheet.bsAccountMap %=  mInsert name acct
 {-# INLINE insertAccount #-}
-  
+
 addFlow :: (IsFlow fl, MonadState s m, HasCashFlows s fl) => fl -> m ()
 addFlow f = cashFlows.cfdFlowMap %= mInsert (flowName f) f
 {-# INLINE addFlow #-}
 
 getAccount :: MonadError FMCException m => AccountName -> BalanceSheet a -> m (Account a) --Either SomeException (Account a)
-getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" <> (T.pack $ show name) <> "\"")) $ mLookup name am 
+getAccount name (BalanceSheet am) = noteM (Other ("Failed to find account with name \"" <> (T.pack $ show name) <> "\"")) $ mLookup name am
 {-# INLINE getAccount #-}
 
 putAccount :: Account a -> AccountName -> BalanceSheet a -> BalanceSheet a
-putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am) 
+putAccount acct s (BalanceSheet am)  = BalanceSheet (mInsert s acct am)
 {-# INLINE putAccount #-}
 
 data PathSummary = FinalNW !MoneyValue | ZeroNW !Year
@@ -175,12 +177,12 @@ instance Eq PathSummary where
 
 instance Ord PathSummary where
   compare (FinalNW x) (FinalNW y) = compare (x ^. mAmount) (y ^. mAmount) -- NB: currency unsafe
-  compare (ZeroNW d1) (ZeroNW d2) = compare d1 d2 
+  compare (ZeroNW d1) (ZeroNW d2) = compare d1 d2
   compare (FinalNW _) (ZeroNW _) = LT
   compare (ZeroNW _) (FinalNW _) = GT
 
-isZeroNW::PathSummary->Bool 
-isZeroNW (FinalNW _) = False 
+isZeroNW::PathSummary->Bool
+isZeroNW (FinalNW _) = False
 isZeroNW (ZeroNW _) = True
 
 type NetWorthArray = A.Array LiquidityType MoneyValue
@@ -194,9 +196,9 @@ data FSSummary = FSSummary { _fssNW:: !MoneyValue,
 
 
 instance Show FSSummary where
-  show (FSSummary nw nwbo i o t tr) = "NW=" ++ show nw ++ " (" ++ show nwbo ++ "); in=" ++ show i 
-                                 ++ "; out=" ++ show o ++ "; tax=" ++ show t 
-                                 ++ "; tax rate=" ++ show (100*tr) ++ "%"  
+  show (FSSummary nw nwbo i o t tr) = "NW=" ++ show nw ++ " (" ++ show nwbo ++ "); in=" ++ show i
+                                 ++ "; out=" ++ show o ++ "; tax=" ++ show t
+                                 ++ "; tax rate=" ++ show (100*tr) ++ "%"
 
 
 
@@ -207,18 +209,18 @@ class ( IsAsset (AssetType tag)
       , IsFlow (FlowType tag)
       , IsLifeEvent (LifeEventType tag)
       , IsRule (RuleType tag)
-      , IsRateModel (RateModelType tag)) => ComponentTypes tag where 
+      , IsRateModel (RateModelType tag)) => ComponentTypes tag where
   type AssetType tag :: *
   type FlowType tag :: *
   type LifeEventType tag :: *
   type RuleType tag :: *
-  type RateModelType tag :: *                  
-    
+  type RateModelType tag :: *
+
 
 type ShowableComponents tag = (ComponentTypes tag, Show (AssetType tag), Show (FlowType tag), Show (RuleType tag), Show (LifeEventType tag), Show (RateModelType tag))
 type ToJSONComponents tag = (ComponentTypes tag, ToJSON (AssetType tag), ToJSON (FlowType tag), ToJSON (RuleType tag), ToJSON (LifeEventType tag), ToJSON (RateModelType tag))
 type FromJSONComponents tag = (ComponentTypes tag, FromJSON (AssetType tag), FromJSON (FlowType tag), FromJSON (RuleType tag), FromJSON (LifeEventType tag), FromJSON (RateModelType tag))
-    
+
 -- GADT here so that the various XXXType are in scope and constrained in the constructor
 data MCState tag where
   MCState :: ComponentTypes tag => { _mcsBalanceSheet :: !(BalanceSheet (AssetType tag))
@@ -230,8 +232,8 @@ data MCState tag where
                                    , _mcsPathSummary :: !PathSummary
                                    , _mcsHistory :: ![DatedSummary]
                                    } -> MCState tag
-  
-{-    
+
+{-
 data MCState a fl le ru = MCState { _mcsBalanceSheet:: !(BalanceSheet a)
                                   , _mcsCashFlows:: !(CashFlows fl)
                                   , _mcsLifeEvents:: [le]
@@ -271,34 +273,34 @@ instance (ComponentTypes tag, b ~ LifeEventType tag) => HasLifeEvents (MCState t
   lifeEvents = mcsLifeEvents
 
 instance ComponentTypes tag => Evolvable (MCState tag) where
-  evolve (MCState bs cfd les rs sr ttr ps hist) = do 
+  evolve (MCState bs cfd les rs sr ttr ps hist) = do
     newBS <- evolve bs
     newCFD <- evolve cfd
     let newMCS = MCState newBS newCFD les rs sr ttr ps hist
     return $ newMCS
   {-# INLINE evolve #-}
-      
+
 instance ShowableComponents tag => Show (MCState tag) where
-  show (MCState bs cfd les rs sr ttr ps history) = 
-    show bs ++ "\n" ++ show cfd ++ "\n" ++ 
-    "LifeEvents:\n " ++ foldl (\s e->s++ show e ++ "\n") "" les ++ 
-    "Rules:\n " ++ foldl (\s r->s++ show r ++ "\n") "" rs ++ 
+  show (MCState bs cfd les rs sr ttr ps history) =
+    show bs ++ "\n" ++ show cfd ++ "\n" ++
+    "LifeEvents:\n " ++ foldl (\s e->s++ show e ++ "\n") "" les ++
+    "Rules:\n " ++ foldl (\s r->s++ show r ++ "\n") "" rs ++
     "\nSweep Rule: " ++ show sr ++
     "\nTax Trade Rule:" ++ show ttr ++
     "\nSummary: " ++ show ps ++
     "\nHistory: " ++ show history
-                                                         
-    
+
+
 addRule :: (MonadState s m, HasRules s ru) => ru -> m ()
 addRule r = rules %= flip (++) [r]
 {-# INLINE addRule #-}
-  
+
 addLifeEvent :: (MonadState s m, HasLifeEvents s le) => le -> m ()
 addLifeEvent le = lifeEvents %= flip (++) [le]
 {-# INLINE addLifeEvent #-}
 
 {-
--- Could be GADT here so that the constructor witnesses the constraint.  Is this necessary here? 
+-- Could be GADT here so that the constructor witnesses the constraint.  Is this necessary here?
 data CombinedState tag where
   CombinedState :: ComponentTypes tag => { _csFinancial:: !FinState,
                                            _csMC:: !(MCState tag),
@@ -309,7 +311,7 @@ data CombinedState tag = CombinedState { _csFinancial:: !FinState,
                                          _csMC:: !(MCState tag),
                                          _csNeedHistory:: !Bool }
 
-{-                  
+{-
 data CombinedState a fl le ru = CombinedState { _csFinancial:: !FinState,
                                                 _csMC:: !(MCState a fl le ru),
                                                 _csNeedHistory:: !Bool }
@@ -320,7 +322,7 @@ class ComponentTypes tag => ReadsCombinedState s tag | s -> tag where
   getCombinedState :: Getter s (CombinedState tag)
   default getCombinedState :: HasCombinedState s tag => Getter s (CombinedState tag)
   getCombinedState = combinedState
-  
+
 instance ComponentTypes tag => HasMCState (CombinedState tag) tag where
   mCState = csMC
 
@@ -328,18 +330,18 @@ instance ShowableComponents tag => Show (CombinedState tag) where
   show cs = "Financial:\n" ++ show (cs ^. csFinancial) ++ "\nMonteCarlo:\n" ++ show (cs ^. csMC)
 
 netWorth :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> MoneyValue
-netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValueCV acct) initial' accts where 
+netWorth cs fe = CV.toMoneyValue ccy e $ foldr (\acct s -> s CV.|+| accountValueCV acct) initial' accts where
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
   BalanceSheet accts = cs ^. csMC.mcsBalanceSheet
   initial' = CV.fromMoneyValue $ cs ^. csFinancial.fsCashFlow
 
 byLT :: LiquidityType -> Account a -> Bool
-byLT lt acct = acctLT == lt where 
+byLT lt acct = acctLT == lt where
   acctLT = liquidityType (acct ^. acType)
 
 netWorthByLiquidityType :: ComponentTypes tag => CombinedState tag -> FinEnv rm -> LiquidityType -> MoneyValue
-netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s CV.|+|  (value' acct)) initial' accts where 
+netWorthByLiquidityType cs fe lt = CV.toMoneyValue ccy e $ F.foldr (\acct s -> s CV.|+|  (value' acct)) initial' accts where
   e = fe ^. feExchange
   ccy = fe ^. feDefaultCCY
   z' =  CV.mvZero ccy
@@ -402,7 +404,7 @@ netWorth2PathSummary mv@(MoneyValue x _) y = ps where
 addPathSummary :: PathSummary -> PathSummary -> PathSummary
 addPathSummary (ZeroNW day) _ = ZeroNW day
 addPathSummary (FinalNW _) (FinalNW y) = FinalNW y
-addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day 
+addPathSummary (FinalNW _) (ZeroNW day) = ZeroNW day
 
 -- TODO: More specific constraints
 -- HasMCPathSummary
@@ -437,7 +439,7 @@ computeFlows :: ( ComponentTypes tag
                 , ReadsFinEnv s rm) => m  (MoneyValue, MoneyValue)
 computeFlows = do
   cs <- use $ getMCState.mcsCashFlows
-  fe <- use getFinEnv  
+  fe <- use getFinEnv
   return $ grossFlows cs fe
 {-# INLINE computeFlows #-}
 
@@ -461,4 +463,4 @@ addHistory inF outF tax effRate  = do
       nwbo = netWorthBreakout cs fe
       endDate = (fe ^. feCurrentDate) + 1
   combinedState.csMC.mcsHistory <>= [DatedSummary endDate (FSSummary nw nwbo inF outF tax effRate)]
-{-# INLINE addHistory #-}  
+{-# INLINE addHistory #-}

@@ -10,7 +10,7 @@ import           Control.Monad                           (when)
 import           Options.Applicative                     (execParser)
 
 import           Data.List                               (elemIndex, transpose)
-import           Data.Random.Source.PureMT               (PureMT, newPureMT,
+import           System.Random.Mersenne.Pure64           (PureMT, newPureMT,
                                                           pureMT)
 
 import qualified Data.Map                                as M

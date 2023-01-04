@@ -27,7 +27,7 @@ module FinancialMC.Core.Rates
        , RateUpdates
 --       , fromMap
        , setToDefaults
---       , defaultMapBasedRateTable 
+--       , defaultMapBasedRateTable
        , defaultArrayBasedRateTable
        , rateRequest
        , RSource
@@ -50,7 +50,10 @@ import           Data.Foldable               (foldl')
 import qualified Data.Map.Lazy               as M
 import           Data.Maybe                  (fromJust)
 import qualified Data.Random as R
-import           Data.Random.Source.PureMT   (PureMT)
+import           System.Random.Mersenne.Pure64 (PureMT)
+import System.Random.Stateful (StateGenM(..))
+
+--import           Data.Random.Source.PureMT   (PureMT)
 import           Text.Printf                 (PrintfArg, printf)
 import Data.Array ((!),(//))
 import qualified Data.Array as A
@@ -65,6 +68,7 @@ import           Data.Monoid                 ((<>))
 import qualified Data.Sequence               as Seq
 import qualified Data.Set                    as S
 import qualified Data.Text                   as T
+import Control.Monad.State (runState)
 
 data InterestType = Savings | CreditCard deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,A.Ix,FromJSON,ToJSON)
 data ReturnType = Stock | Bond | RealEstate deriving (Enum,Eq,Ord,Bounded,Show,Read,Generic,A.Ix,FromJSON,ToJSON)
@@ -99,9 +103,9 @@ instance Enum RateTag where
 
 instance Bounded RateTag where
   minBound = Interest (minBound :: InterestType)
-  maxBound = Exchange (maxBound :: Currency) 
+  maxBound = Exchange (maxBound :: Currency)
 
---using the Int instance of Ix 
+--using the Int instance of Ix
 instance A.Ix RateTag where
   range (l,r) = toEnum <$> Ix.range (fromEnum l, fromEnum r)
   index (l,r) i = Ix.index (fromEnum l, fromEnum r) (fromEnum i)
@@ -134,7 +138,7 @@ showRateAsPct r = (printf "%.2f" (r*100)) ++ "%"
 type RateUpdates a = Seq.Seq (RateTag, a)
 
 updateRateTable :: RateUpdates a -> RateTable a -> RateTable a
-updateRateTable updates curRates = rBulkUpdate curRates updates 
+updateRateTable updates curRates = rBulkUpdate curRates updates
 
 
 data RateTable a = RateTable { rLookup :: RateTag -> a
@@ -195,7 +199,7 @@ applyRateUpdates curRates model = do
   return $ (newModel, rBulkUpdate curRates updates)
 
 runModel :: IsRateModel r  => RateTable Rate -> r -> RSource -> ((r, RateTable Rate), RSource)
-runModel curRates model = R.sampleState (applyRateUpdates curRates model)
+runModel curRates model g = flip runState g $ R.runRVar (applyRateUpdates curRates model) StateGenM
 
 -- models will absorb sub-models.  So if you model stock returns as a function of bond returns, you will make a model for both.  And if a third thing depends on either you will include it as well.  So that the final set of models will be non-overlapping in affected rates.
 -- models which include other models can verify this at runtime, using the updatedRates typeclass function.
@@ -204,4 +208,3 @@ runModel curRates model = R.sampleState (applyRateUpdates curRates model)
 class IsRateModel r where
   updatedRates :: r -> S.Set RateTag
   rateModelF :: RateTable Rate -> r -> R.RVar (r, RateUpdates Rate)
-
