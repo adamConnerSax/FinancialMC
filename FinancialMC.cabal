@@ -91,8 +91,9 @@ library
                 , persistent
                 , persistent-template
                 , pipes
+                , random
                 , random-fu
-                , random-source
+--                , random-source
                 , safe
                 , split
                 , statistics
@@ -104,6 +105,7 @@ library
                 , vector
                 , yaml
                 , TaxEDSL
+                , flexible-defaults >= 0.0.3
   ghc-options: -O2 -fno-warn-orphans -fno-warn-unused-binds -fno-warn-unused-matches -funbox-small-strict-fields
   ghc-prof-options: -fprof-auto -auto-all -fprof-cafs
 
@@ -113,7 +115,7 @@ executable FinancialMC-cl
   other-modules:       OptionParser
   ghc-options:	       -Wall -O2 -static -rtsopts -threaded "-with-rtsopts=-N" -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches
   ghc-prof-options:    -fprof-auto -auto-all -fprof-cafs
-  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq, vector, exceptions,mtl, array
+  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, mersenne-random-pure64, transformers, time, containers, split, raw-strings-qq, vector, exceptions,mtl, array
   default-language:    Haskell2010
 
 executable FinancialMC-threadscope
@@ -122,7 +124,7 @@ executable FinancialMC-threadscope
   other-modules:       OptionParser
   ghc-options:    -O2 -threaded -funbox-strict-fields -fno-warn-unused-binds -fno-warn-unused-matches
   ghc-prof-options:
-  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, transformers, random-source, time, containers, split, raw-strings-qq,vector,exceptions,mtl, array
+  build-depends:       FinancialMC, base, lens, errors, optparse-applicative, monad-parallel, mersenne-random-pure64, transformers, time, containers, split, raw-strings-qq,vector,exceptions,mtl, array
   default-language:    Haskell2010
 
 executable XmlToJSON

@@ -43,7 +43,7 @@ instance Monoid o => Monad (Result o) where
         ot = o `mappend` o'
     in ot `seq` Result b ot
   {-# INLINE (>>=) #-}
-  
+
 -- NB: fundep below (m->o) required for returnOnly to work since nothing of type o is an arg.  This is confusing.
 class (Monoid o, Monad m) => MonadResult o m | m -> o where
   returnOnly :: a -> m a
@@ -59,7 +59,7 @@ instance Monoid o => MonadResult o (Result o) where
     o' <- f o
     Result a o'
   {-# INLINE adjust #-}
-  
+
 newtype ResultT o m a = ResultT { unResultT :: o -> m (Result o a) }
 
 runResultT :: Monoid o => ResultT o m a -> m (Result o a)
@@ -69,7 +69,7 @@ runResultT m = unResultT m mempty
 instance Functor m => Functor (ResultT o m) where
   fmap f r = ResultT $ \o -> fmap (fmap f) $ unResultT r o
   {-# INLINE fmap #-}
-  
+
 instance Monad m => Applicative (ResultT o m) where
   pure x = ResultT $ \o -> pure (Result x o)
   {-# INLINE pure #-}
@@ -78,24 +78,24 @@ instance Monad m => Applicative (ResultT o m) where
     Result a o'' <- unResultT ra o'
     return $ Result (f a)  o''
   {-# INLINE (<*>) #-}
-  
+
 instance Monad m => Monad (ResultT o m) where
-  return x = ResultT $ \o -> return (Result x o)
-  {-# INLINE return #-}
-  ma >>= f = ResultT $ \o -> do    
+--  return x = ResultT $ \o -> return (Result x o)
+--  {-# INLINE return #-}
+  ma >>= f = ResultT $ \o -> do
     Result a oA <- unResultT ma o
     unResultT (f a) oA
   {-# INLINE (>>=) #-}
-  
+
 instance (Monad m, Monoid o) => MonadResult o (ResultT o m) where
   returnOnly = return
   {-# INLINE returnOnly #-}
-  
+
   appendAndReturn o a = ResultT $ \x->
     let ox = o `mappend` x
      in ox `seq` unResultT (return a) ox
   {-# INLINE appendAndReturn #-}
-  
+
   adjust f rt = ResultT $ \x -> do
     Result a o <- unResultT rt x
     Result o' _ <- unResultT (f o) o
@@ -107,27 +107,27 @@ instance MonadTrans (ResultT o) where
     a <- m
     return $ Result a o
   {-# INLINE lift #-}
-  
+
 instance MFunctor (ResultT o) where
     hoist m2n rtm = ResultT (m2n . unResultT rtm)
     {-# INLINE hoist #-}
-    
+
 instance (Monoid o, MonadReader r m) => MonadReader r (ResultT o m) where
   ask = lift ask
   {-# INLINE ask #-}
   local f x = ResultT (local f . unResultT x)
   {-# INLINE local #-}
-  
+
 instance (Monoid o, MonadState s m) => MonadState s (ResultT o m) where
   get = lift get
   {-# INLINE get #-}
   put k = lift $ put k
   {-# INLINE put #-}
-  
+
 instance (Monoid o, MonadThrow m) => MonadThrow (ResultT o m) where
   throwM = lift . throwM
   {-# INLINE throwM #-}
-  
+
 instance (MonadError e m, Monoid o) => MonadError e (ResultT o m) where
   throwError = lift . throwError
   {-# INLINE throwError #-}

@@ -31,7 +31,7 @@ import           Control.Monad              (foldM, join)
 import           Control.Monad.State.Strict (MonadState, State, get, put,
                                              runState)
 import qualified Data.Random                as Rand
-import           Data.Random.Source.PureMT  (newPureMT)
+import           System.Random.Mersenne.Pure64  (newPureMT)
 import           GHC.Generics               (Generic)
 
 import           Data.Aeson                 (FromJSON (parseJSON),
